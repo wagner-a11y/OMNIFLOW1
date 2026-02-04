@@ -942,9 +942,15 @@ Disponibilidade: ${disponibilidade}`;
 
                             {/* Extrato Detalhado da Cotação */}
                             <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-xl text-white">
-                                <div className="flex items-center gap-3 mb-8">
-                                    <FileText className="w-5 h-5 text-blue-400" />
-                                    <h3 className="font-black uppercase text-[11px] tracking-widest text-slate-400">Extrato Detalhado da Operação</h3>
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                                    <div className="flex items-center gap-3">
+                                        <FileText className="w-5 h-5 text-blue-400" />
+                                        <h3 className="font-black uppercase text-[11px] tracking-widest text-slate-400">Extrato Detalhado da Operação</h3>
+                                    </div>
+                                    <div className="px-5 py-2 bg-blue-500/20 rounded-xl border border-blue-500/30">
+                                        <p className="text-[8px] font-black uppercase text-blue-300 leading-none mb-1">Faturamento Bruto (All In)</p>
+                                        <p className="text-sm font-black text-blue-100">R$ {formatCur(calcData.finalFreight)}</p>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
                                     <div className="space-y-4">
@@ -981,10 +987,6 @@ Disponibilidade: ${disponibilidade}`;
                                         <div className="px-5 py-2 bg-white/10 rounded-xl border border-white/10">
                                             <p className="text-[8px] font-black uppercase opacity-40 leading-none mb-1">Custo Direto Total</p>
                                             <p className="text-sm font-black text-white">R$ {formatCur(calcData.realDirectCosts)}</p>
-                                        </div>
-                                        <div className="px-5 py-2 bg-blue-500/20 rounded-xl border border-blue-500/30">
-                                            <p className="text-[8px] font-black uppercase text-blue-300 leading-none mb-1">Faturamento Bruto (All In)</p>
-                                            <p className="text-sm font-black text-blue-100">R$ {formatCur(calcData.finalFreight)}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
