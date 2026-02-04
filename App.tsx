@@ -940,17 +940,45 @@ Disponibilidade: ${disponibilidade}`;
                                 </div>
                             </div>
 
+
+                            <div className={`p-12 rounded-[4rem] shadow-2xl text-white flex flex-col lg:flex-row items-center gap-12 relative overflow-hidden transition-all duration-500 border-8 border-white/5 ${activeTab === 'reverse' ? 'bg-[#344a5e]' : 'bg-[#005a9c]'}`}>
+                                <div className="lg:w-48 text-center p-6 bg-white/10 rounded-[2.5rem] border border-white/20">
+                                    <TrendingUp className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
+                                    <p className="text-4xl font-black">{calcData.realMarginPercent.toFixed(1)}%</p>
+                                    <p className="text-[9px] font-bold opacity-40 uppercase">Margem Real</p>
+                                </div>
+                                <div className="flex-1 text-center">
+                                    <p className="text-[11px] font-black opacity-50 uppercase tracking-[0.4em] mb-4">
+                                        {activeTab === 'reverse' ? 'PODER DE COMPRA (FRETE BASE)' : 'FRETE FINAL AO CLIENTE'}
+                                    </p>
+                                    <p className="text-9xl font-black tracking-tighter drop-shadow-2xl">
+                                        R$ {formatCur(activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight)}
+                                    </p>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full mt-8">
+                                        <button onClick={() => saveQuote('won')} className="bg-emerald-500 py-6 rounded-[2rem] font-black uppercase text-[10px] flex items-center justify-center gap-2 hover:bg-emerald-600 shadow-lg transition-transform hover:scale-105">
+                                            <ThumbsUp className="w-4 h-4" /> Fechado
+                                        </button>
+                                        <button onClick={() => saveQuote('lost')} className="bg-red-500 py-6 rounded-[2rem] font-black uppercase text-[10px] flex items-center justify-center gap-2 hover:bg-red-600 shadow-lg transition-transform hover:scale-105">
+                                            <ThumbsDown className="w-4 h-4" /> Perdido
+                                        </button>
+                                        <button onClick={() => saveQuote('pending')} className="bg-white/10 py-6 rounded-[2rem] font-black uppercase text-[10px] hover:bg-white/20 border border-white/20 flex items-center justify-center gap-2">
+                                            <Save className="w-4 h-4" /> Salvar
+                                        </button>
+                                        <button onClick={handleCopyQuoteText} className="bg-white py-6 rounded-[2rem] font-black uppercase text-[10px] text-[#005a9c] hover:bg-slate-100 flex items-center justify-center gap-2 shadow-lg">
+                                            <ClipboardCopy className="w-4 h-4" /> Copiar
+                                        </button>
+                                        <button onClick={generatePDF} className="col-span-2 md:col-span-4 bg-slate-800 text-white py-4 rounded-[2rem] font-black uppercase text-[10px] hover:bg-slate-900 border border-slate-700 flex items-center justify-center gap-2 shadow-lg mt-2">
+                                            <FileDown className="w-4 h-4 text-emerald-400" /> Gerar Proposta Comercial (PDF)
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Extrato Detalhado da Cotação */}
                             <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-xl text-white">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                                    <div className="flex items-center gap-3">
-                                        <FileText className="w-5 h-5 text-blue-400" />
-                                        <h3 className="font-black uppercase text-[11px] tracking-widest text-slate-400">Extrato Detalhado da Operação</h3>
-                                    </div>
-                                    <div className="px-5 py-2 bg-blue-500/20 rounded-xl border border-blue-500/30">
-                                        <p className="text-[8px] font-black uppercase text-blue-300 leading-none mb-1">Faturamento Bruto (All In)</p>
-                                        <p className="text-sm font-black text-blue-100">R$ {formatCur(calcData.finalFreight)}</p>
-                                    </div>
+                                <div className="flex items-center gap-3 mb-8">
+                                    <FileText className="w-5 h-5 text-blue-400" />
+                                    <h3 className="font-black uppercase text-[11px] tracking-widest text-slate-400">Extrato Detalhado da Operação</h3>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
                                     <div className="space-y-4">
@@ -1001,38 +1029,6 @@ Disponibilidade: ${disponibilidade}`;
                                 </div>
                             </div>
 
-                            <div className={`p-12 rounded-[4rem] shadow-2xl text-white flex flex-col lg:flex-row items-center gap-12 relative overflow-hidden transition-all duration-500 border-8 border-white/5 ${activeTab === 'reverse' ? 'bg-[#344a5e]' : 'bg-[#005a9c]'}`}>
-                                <div className="lg:w-48 text-center p-6 bg-white/10 rounded-[2.5rem] border border-white/20">
-                                    <TrendingUp className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
-                                    <p className="text-4xl font-black">{calcData.realMarginPercent.toFixed(1)}%</p>
-                                    <p className="text-[9px] font-bold opacity-40 uppercase">Margem Real</p>
-                                </div>
-                                <div className="flex-1 text-center">
-                                    <p className="text-[11px] font-black opacity-50 uppercase tracking-[0.4em] mb-4">
-                                        {activeTab === 'reverse' ? 'PODER DE COMPRA (FRETE BASE)' : 'FRETE FINAL AO CLIENTE'}
-                                    </p>
-                                    <p className="text-9xl font-black tracking-tighter drop-shadow-2xl">
-                                        R$ {formatCur(activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight)}
-                                    </p>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full mt-8">
-                                        <button onClick={() => saveQuote('won')} className="bg-emerald-500 py-6 rounded-[2rem] font-black uppercase text-[10px] flex items-center justify-center gap-2 hover:bg-emerald-600 shadow-lg transition-transform hover:scale-105">
-                                            <ThumbsUp className="w-4 h-4" /> Fechado
-                                        </button>
-                                        <button onClick={() => saveQuote('lost')} className="bg-red-500 py-6 rounded-[2rem] font-black uppercase text-[10px] flex items-center justify-center gap-2 hover:bg-red-600 shadow-lg transition-transform hover:scale-105">
-                                            <ThumbsDown className="w-4 h-4" /> Perdido
-                                        </button>
-                                        <button onClick={() => saveQuote('pending')} className="bg-white/10 py-6 rounded-[2rem] font-black uppercase text-[10px] hover:bg-white/20 border border-white/20 flex items-center justify-center gap-2">
-                                            <Save className="w-4 h-4" /> Salvar
-                                        </button>
-                                        <button onClick={handleCopyQuoteText} className="bg-white py-6 rounded-[2rem] font-black uppercase text-[10px] text-[#005a9c] hover:bg-slate-100 flex items-center justify-center gap-2 shadow-lg">
-                                            <ClipboardCopy className="w-4 h-4" /> Copiar
-                                        </button>
-                                        <button onClick={generatePDF} className="col-span-2 md:col-span-4 bg-slate-800 text-white py-4 rounded-[2rem] font-black uppercase text-[10px] hover:bg-slate-900 border border-slate-700 flex items-center justify-center gap-2 shadow-lg mt-2">
-                                            <FileDown className="w-4 h-4 text-emerald-400" /> Gerar Proposta Comercial (PDF)
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     ) : (
                         <div className="space-y-4 animate-fade-in-up">
