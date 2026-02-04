@@ -341,6 +341,24 @@ const App: React.FC = () => {
         } catch (err) { console.error(err); } finally { setLoadingDistance(false); }
     };
 
+    const historicalAlert = useMemo(() => {
+        if (!origin || !destination) return null;
+        const matches = history.filter(h =>
+            h.origin.toLowerCase().includes(origin.toLowerCase()) &&
+            h.destination.toLowerCase().includes(destination.toLowerCase())
+        );
+        if (matches.length === 0) return null;
+        const checkWon = matches.some(h => h.status === 'won');
+        return (
+            <div className={`col-span-1 md:col-span-2 px-6 py-3 rounded-xl flex items-center gap-3 animate-fade-in ${checkWon ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                {checkWon ? <CheckCircle className="w-4 h-4" /> : <Info className="w-4 h-4" />}
+                <span className="text-[10px] font-black uppercase">
+                    Histórico Encontrado: {matches.length} cotações anteriores ({checkWon ? 'JÁ ATENDEMOS' : 'NUNCA FECHAMOS'})
+                </span>
+            </div>
+        );
+    }, [origin, destination, history]);
+
     const generateId = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
 
     const saveQuote = async (status: QuoteStatus) => {
@@ -877,23 +895,8 @@ Disponibilidade: ${disponibilidade}`;
                                         <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={destination} onChange={e => setDestination(e.target.value)} onBlur={handleFetchDistance} placeholder="Destino (Cidade, UF)" />
                                     </div>
                                     {/* Alerta de Histórico */}
-                                    {useMemo(() => {
-                                        if (!origin || !destination) return null;
-                                        const matches = history.filter(h =>
-                                            h.origin.toLowerCase().includes(origin.toLowerCase()) &&
-                                            h.destination.toLowerCase().includes(destination.toLowerCase())
-                                        );
-                                        if (matches.length === 0) return null;
-                                        const checkWon = matches.some(h => h.status === 'won');
-                                        return (
-                                            <div className={`col-span-1 md:col-span-2 px-6 py-3 rounded-xl flex items-center gap-3 animate-fade-in ${checkWon ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                                                {checkWon ? <CheckCircle className="w-4 h-4" /> : <Info className="w-4 h-4" />}
-                                                <span className="text-[10px] font-black uppercase">
-                                                    Histórico Encontrado: {matches.length} cotações anteriores ({checkWon ? 'JÁ ATENDEMOS' : 'NUNCA FECHAMOS'})
-                                                </span>
-                                            </div>
-                                        );
-                                    }, [origin, destination, history])}
+                                    {/* Alerta de Histórico */}
+                                    {historicalAlert}
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                                         <div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-blue-50/50 rounded-2xl font-bold border-2 border-blue-100 focus:border-blue-300 outline-none" value={clientReference} onChange={e => setClientReference(e.target.value)} placeholder="Ref Cliente" /></div>
                                         <select className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>{Object.keys(vehicleConfigs).map(v => <option key={v} value={v}>{v}</option>)}</select>
