@@ -1,56 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import jsPDF from 'jspdf';
 import {
-    History,
-    PlusCircle,
-    Trash2,
-    Search,
-    Edit3,
-    X,
-    CheckCircle,
-    Settings,
-    Percent,
-    Copy,
-    Users,
-    Package,
-    Target,
-    Info,
-    Activity,
-    BarChart3,
-    Layers,
-    ThumbsUp,
-    ThumbsDown,
-    Save,
-    ShieldCheck,
-    ChevronRight,
-    Calculator,
-    Truck,
-    ArrowRightLeft,
-    CreditCard,
-    Wrench,
-    Plus,
-    Lock,
-    User as UserIcon,
-    LogOut,
-    UserCheck,
-    ImageIcon,
-    RotateCcw,
-    Map as MapIcon,
-    Download,
-    AlertTriangle,
-    ClipboardCopy,
-    Clock,
-    Hash,
-    Scale,
-    PieChart,
-    DollarSign,
-    TrendingUp,
-    ArrowDown,
-    Zap,
-    Award,
-    Calendar,
-    Check,
-    FileText
+    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle
 } from 'lucide-react';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
@@ -380,7 +332,8 @@ const App: React.FC = () => {
             baseFreight: activeTab === 'reverse' ? calcData.buyerPower : (parseFloat(baseFreight.replace(',', '.')) || 0),
             tolls: parseFloat(tolls.replace(',', '.')) || 0, extraCosts: parseFloat(extraCosts.replace(',', '.')) || 0, extraCostsDescription, goodsValue: parseFloat(goodsValue.replace(',', '.')) || 0, insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
             pisPercent: fedTaxes.pis, cofinsPercent: fedTaxes.cofins, csllPercent: fedTaxes.csll, irpjPercent: fedTaxes.irpj,
-            totalFreight: calcData.finalFreight, createdAt: createdDate, disponibilidade, status, updatedBy: currentUser?.id, updatedByName: currentUser?.name
+            totalFreight: calcData.finalFreight, createdAt: createdDate, disponibilidade, status, updatedBy: currentUser?.id, updatedByName: currentUser?.name,
+            realProfit: calcData.realProfitAmount, realMarginPercent: calcData.realMarginPercent
         };
         try {
             if (editingId) {
@@ -422,6 +375,205 @@ Veículo: ${vehicleType}
 Valor: R$ ${formatCur(val)} All In.
 Disponibilidade: ${disponibilidade}`;
         navigator.clipboard.writeText(text).then(() => showFeedback("Copiado!"));
+    };
+
+    const generatePDF = async () => {
+        const doc = new jsPDF();
+        const primaryColor = "#005a9c"; // OmniCargo Blue
+        const grayColor = "#64748b";
+
+        showFeedback("Gerando PDF...");
+
+        // Helper to load image
+        const loadImage = (src: string): Promise<HTMLImageElement> => {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = src;
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+            });
+        };
+
+        try {
+            const [logoFull, logoIcon] = await Promise.all([
+                loadImage('/logo-full.png').catch(() => null),
+                loadImage('/logo-icon.jpg').catch(() => null)
+            ]);
+
+            // --- WATERMARK ---
+            if (logoIcon) {
+                // Set transparency
+                (doc as any).saveGraphicsState();
+                (doc as any).setGState(new (doc as any).GState({ opacity: 0.05 }));
+
+                const pageWidth = doc.internal.pageSize.width;
+                const pageHeight = doc.internal.pageSize.height;
+                const imgWidth = 120;
+                const imgHeight = 120;
+                const x = (pageWidth - imgWidth) / 2;
+                const y = (pageHeight - imgHeight) / 2;
+
+                doc.addImage(logoIcon, 'JPEG', x, y, imgWidth, imgHeight);
+                (doc as any).restoreGraphicsState();
+            }
+
+            // --- HEADER ---
+            if (logoFull) {
+                const logoRatio = logoFull.width / logoFull.height;
+                const logoW = 50;
+                const logoH = logoW / logoRatio;
+                doc.addImage(logoFull, 'PNG', 15, 10, logoW, logoH);
+            } else {
+                doc.setFontSize(22);
+                doc.setTextColor(primaryColor);
+                doc.setFont("helvetica", "bold");
+                doc.text("OmniCargo", 15, 20);
+            }
+
+            // Top Line
+            doc.setDrawColor(200, 200, 200);
+            doc.setLineWidth(0.5);
+            doc.line(15, 30, 195, 30);
+
+            // Orange accent line
+            doc.setDrawColor(243, 112, 33);
+            doc.setLineWidth(1);
+            doc.line(15, 30, 45, 30);
+
+
+            // --- INFO ---
+            const customerName = customers.find(c => c.id === selectedCustomerId)?.name || "Cliente não informado";
+            const todayStr = new Date().toLocaleDateString('pt-BR');
+            const quoteNum = editingId ? (history.find(h => h.id === editingId)?.proposalNumber || "N/A") : "NOVA";
+
+            doc.setFontSize(14);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont("helvetica", "bold");
+            doc.text("PROPOSTA COMERCIAL", 15, 42);
+
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "bold");
+            doc.text(`Para:`, 15, 52);
+            doc.setFont("helvetica", "normal");
+            doc.text(customerName, 25, 52);
+
+            doc.setFont("helvetica", "bold");
+            doc.text(`De:`, 15, 57);
+            doc.setFont("helvetica", "normal");
+            doc.text("Omnicargo Transportes", 25, 57);
+
+            doc.setFont("helvetica", "bold");
+            doc.text(`Data:`, 120, 52);
+            doc.setFont("helvetica", "normal");
+            doc.text(todayStr, 130, 52);
+
+            doc.setFont("helvetica", "bold");
+            doc.text(`Cotação:`, 120, 57);
+            doc.setFont("helvetica", "normal");
+            doc.text(quoteNum, 135, 57);
+
+            doc.text("A Omnicargo Transportes tem o prazer de apresentar esta proposta para a realização dos serviços de transporte conforme descrito abaixo.", 15, 68);
+
+            // --- SECTIONS (Compact Layout) ---
+            let currentY = 80;
+            const spacing = 5;
+            const indent = 20;
+
+            // 1. Objeto
+            doc.setFont("helvetica", "bold");
+            doc.text("1. Objeto da Proposta", 15, currentY); currentY += spacing + 1;
+            doc.setFont("helvetica", "normal");
+
+            doc.text(`•   Origem: ${origin || "A definir"}`, indent, currentY); currentY += spacing;
+            doc.text(`•   Destino: ${destination || "A definir"}`, indent, currentY); currentY += spacing;
+            doc.text(`•   Veículo: ${vehicleType}`, indent, currentY);
+            doc.text(`•   Qtd: 01 viagem`, indent + 80, currentY); currentY += spacing;
+            doc.text(`•   Prazo Coleta: ${disponibilidade}`, indent, currentY); currentY += spacing + 3;
+
+            // 2. Valor
+            doc.setFont("helvetica", "bold");
+            doc.text("2. Valor do Serviço", 15, currentY); currentY += spacing + 1;
+            doc.setFont("helvetica", "normal");
+
+            const freightVal = activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight;
+            const formattedVal = freightVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            doc.setFont("helvetica", "bold");
+            doc.text(`Valor Total: R$ ${formattedVal}`, indent, currentY); currentY += spacing;
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.text(`(CNPJ Recebedor: 51.653.821/0001-68)`, indent, currentY);
+            doc.setFontSize(9);
+            currentY += spacing + 3;
+
+            // 3. Detalhes
+            doc.setFont("helvetica", "bold");
+            doc.text("3. Detalhes do Serviço", 15, currentY); currentY += spacing + 1;
+            doc.setFont("helvetica", "normal");
+            doc.text(`•   Incluso: Frete, pedágio${num(insurancePercent) > 0 ? ', seguro' : ''} e impostos. Modalidade: Rodoviário dedicado.`, indent, currentY); currentY += spacing + 3;
+
+            // 4/5. Condições e Diferenciais
+            doc.setFont("helvetica", "bold");
+            doc.text("4. Condições e Diferenciais", 15, currentY); currentY += spacing + 1;
+            doc.setFont("helvetica", "normal");
+            doc.text(`•   Prazo conforme programação.`, indent, currentY); currentY += spacing;
+            doc.text(`•   Monitoramento em tempo real e eficiência logística.`, indent, currentY); currentY += spacing + 6;
+
+            // 6. Final
+            doc.setFont("helvetica", "bold");
+            doc.text("5. Considerações Finais", 15, currentY); currentY += spacing + 1;
+            doc.setFont("helvetica", "normal");
+            doc.text("Em caso de dúvidas, estamos à disposição.", indent, currentY); currentY += 12;
+
+            // --- SIGNATURE ---
+            doc.setFont("helvetica", "bold");
+            doc.text(currentUser?.name || "Omnicargo Transportes", 15, currentY); currentY += 5;
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.text("Omnicargo Transportes", 15, currentY); currentY += 4;
+
+            const userEmail = currentUser?.username || "contato@omnicargo.com.br";
+            const userPhone = "(27) 99730-9770";
+
+            doc.setTextColor(primaryColor);
+            doc.text(userEmail, 15, currentY);
+            doc.setTextColor(0, 0, 0);
+            doc.text(" | " + userPhone, 15 + doc.getTextWidth(userEmail) + 2, currentY);
+
+            // --- FOOTER ---
+            const pageHeight = doc.internal.pageSize.height;
+            const footerY = pageHeight - 20;
+
+            doc.setDrawColor(200, 200, 200);
+            doc.line(15, footerY - 5, 195, footerY - 5);
+            doc.setDrawColor(243, 112, 33);
+            doc.line(170, footerY - 5, 195, footerY - 5);
+
+            // Left: Phones
+            if (logoFull) {
+                // Try to render logo again small in footer or just text
+                // Let's use text for cleaner footer as per request "make part of composition" - we used it on header. 
+                // We can put the icon on the right
+                if (logoIcon) {
+                    doc.addImage(logoIcon, 'JPEG', 185, footerY - 2, 10, 10);
+                }
+            }
+
+            doc.setFontSize(7);
+            doc.setTextColor(grayColor);
+            doc.text("Tel: +55 27 99730-9770 | +55 27 3207-1920", 15, footerY);
+            doc.text("Email: contato@omnicargo.com.br", 15, footerY + 3);
+            doc.text("End: Cândido Portinari, 27, Ed. River Center, Sl 401, Vitória - ES", 15, footerY + 6);
+            doc.text("www.omnicargo.com.br", 15, footerY + 9);
+
+            // OPEN POPUP
+            const blob = doc.output('bloburl');
+            window.open(blob, '_blank', 'width=800,height=1000');
+
+        } catch (error) {
+            console.error(error);
+            showFeedback("Erro ao gerar PDF.", "error");
+        }
     };
 
     const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -873,6 +1025,9 @@ Disponibilidade: ${disponibilidade}`;
                                         <button onClick={handleCopyQuoteText} className="bg-white py-6 rounded-[2rem] font-black uppercase text-[10px] text-[#005a9c] hover:bg-slate-100 flex items-center justify-center gap-2 shadow-lg">
                                             <ClipboardCopy className="w-4 h-4" /> Copiar
                                         </button>
+                                        <button onClick={generatePDF} className="col-span-2 md:col-span-4 bg-slate-800 text-white py-4 rounded-[2rem] font-black uppercase text-[10px] hover:bg-slate-900 border border-slate-700 flex items-center justify-center gap-2 shadow-lg mt-2">
+                                            <FileDown className="w-4 h-4 text-emerald-400" /> Gerar Proposta Comercial (PDF)
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -890,12 +1045,24 @@ Disponibilidade: ${disponibilidade}`;
                             </div>
                             <div className="space-y-3">
                                 {filteredHistory.map(h => {
-                                    // Cálculo rápido para exibição do lucro real no histórico
-                                    const icmsAmt = h.totalFreight * (h.icmsPercent / 100);
-                                    const fedAmt = h.totalFreight * ((h.pisPercent + h.cofinsPercent + h.csllPercent + h.irpjPercent) / 100);
-                                    const directCosts = h.baseFreight + h.tolls + (h.extraCosts || 0);
-                                    const netProfit = h.totalFreight - icmsAmt - fedAmt - directCosts - (h.adValorem || 0);
-                                    const realMargin = h.totalFreight > 0 ? (netProfit / h.totalFreight) * 100 : 0;
+                                    // Uso de valores persistidos ou cálculo de fallback para compatibilidade
+                                    const realMargin = h.realMarginPercent !== undefined ? h.realMarginPercent : (
+                                        (() => {
+                                            const icmsAmt = h.totalFreight * (h.icmsPercent / 100);
+                                            const fedAmt = h.totalFreight * ((h.pisPercent + h.cofinsPercent + h.csllPercent + h.irpjPercent) / 100);
+                                            const directCosts = h.baseFreight + h.tolls + (h.extraCosts || 0);
+                                            const netProfit = h.totalFreight - icmsAmt - fedAmt - directCosts - (h.adValorem || 0);
+                                            return h.totalFreight > 0 ? (netProfit / h.totalFreight) * 100 : 0;
+                                        })()
+                                    );
+                                    const profitValue = h.realProfit !== undefined ? h.realProfit : (
+                                        (() => {
+                                            const icmsAmt = h.totalFreight * (h.icmsPercent / 100);
+                                            const fedAmt = h.totalFreight * ((h.pisPercent + h.cofinsPercent + h.csllPercent + h.irpjPercent) / 100);
+                                            const directCosts = h.baseFreight + h.tolls + (h.extraCosts || 0);
+                                            return h.totalFreight - icmsAmt - fedAmt - directCosts - (h.adValorem || 0);
+                                        })()
+                                    );
 
                                     return (
                                         <div key={h.id} className="bg-white h-24 px-12 rounded-[2rem] border shadow-sm flex items-center gap-8 group hover:border-blue-500 transition-all">
@@ -918,7 +1085,7 @@ Disponibilidade: ${disponibilidade}`;
                                             </div>
                                             <div className="w-32 text-right">
                                                 <p className={`text-sm font-black ${realMargin < 15 ? 'text-red-500' : 'text-emerald-600'}`}>{realMargin.toFixed(1)}%</p>
-                                                <p className="text-[9px] font-bold text-slate-400 uppercase">Lucro: R$ {formatCur(netProfit)}</p>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase">Lucro: R$ {formatCur(profitValue)}</p>
                                             </div>
                                             <div className="w-40 text-right"><p className="text-lg font-black text-[#344a5e]">R$ {formatCur(h.totalFreight)}</p></div>
                                             <div className="w-20 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all"><button onClick={() => loadQuote(h)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit3 className="w-4 h-4" /></button><button onClick={async () => { if (await deleteFreightCalculation(h.id)) setHistory(prev => prev.filter(i => i.id !== h.id)); }} className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></div>

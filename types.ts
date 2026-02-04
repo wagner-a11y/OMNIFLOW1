@@ -76,6 +76,8 @@ export interface FreightCalculation {
     createdAt: number;
     disponibilidade: Disponibilidade;
     status: QuoteStatus;
+    realProfit?: number;
+    realMarginPercent?: number;
     isEdited?: boolean;
     updatedBy?: string;
     updatedByName?: string;

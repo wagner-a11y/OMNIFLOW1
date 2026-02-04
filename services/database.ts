@@ -250,9 +250,12 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
         csllPercent: Number(item.csll_percent),
         irpjPercent: Number(item.irpj_percent),
         totalFreight: Number(item.total_freight),
+        createdAt: Number(item.created_at_timestamp),
         disponibilidade: item.disponibilidade,
         status: item.status,
-        createdAt: Number(item.created_at),
+        realProfit: item.real_profit ? Number(item.real_profit) : undefined,
+        realMarginPercent: item.real_margin_percent ? Number(item.real_margin_percent) : undefined,
+        isEdited: item.is_edited,
         updatedBy: item.updated_by,
         updatedByName: item.updated_by_name,
         updatedAt: item.updated_at
@@ -286,9 +289,11 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         csll_percent: calc.csllPercent,
         irpj_percent: calc.irpjPercent,
         total_freight: calc.totalFreight,
+        created_at_timestamp: calc.createdAt,
         disponibilidade: calc.disponibilidade,
         status: calc.status,
-        created_at: Math.floor(calc.createdAt),
+        real_profit: calc.realProfit || 0,
+        real_margin_percent: calc.realMarginPercent || 0,
         updated_by: calc.updatedBy || null,
         updated_by_name: calc.updatedByName || null
     };
@@ -333,6 +338,9 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         disponibilidade: calc.disponibilidade,
         status: calc.status,
         updated_at: new Date().toISOString(),
+        real_profit: calc.realProfit || 0,
+        real_margin_percent: calc.realMarginPercent || 0,
+        is_edited: true,
         updated_by: calc.updatedBy || null,
         updated_by_name: calc.updatedByName || null
     };
