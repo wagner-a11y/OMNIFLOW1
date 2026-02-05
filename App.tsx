@@ -1077,6 +1077,10 @@ Disponibilidade: ${disponibilidade}`;
                         </div>
                     ) : (
                         <div className="space-y-4 animate-fade-in-up">
+                            <div className="flex items-center gap-4 px-4 mb-4">
+                                <History className="w-8 h-8 text-[#344a5e]" />
+                                <h1 className="text-3xl font-black text-[#344a5e] tracking-tight">Histórico de Cotações</h1>
+                            </div>
                             <div className="bg-white p-5 rounded-[2rem] border shadow-sm flex items-center gap-8 px-12 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">
                                 <span className="w-28">Status</span>
                                 <span className="w-32">Data</span>
@@ -1107,15 +1111,28 @@ Disponibilidade: ${disponibilidade}`;
                                         })()
                                     );
 
+                                    const customer = customers.find(c => c.id === h.customerId);
+
                                     return (
                                         <div key={h.id} className="bg-white h-24 px-12 rounded-[2rem] border shadow-sm flex items-center gap-8 group hover:border-blue-500 transition-all">
                                             <div className="w-28"><span className={`px-4 py-2 rounded-xl text-[9px] font-black text-white uppercase ${h.status === 'won' ? 'bg-emerald-500' : h.status === 'lost' ? 'bg-red-500' : 'bg-amber-400'}`}>{h.status === 'won' ? 'GANHO' : h.status === 'lost' ? 'PERDIDO' : 'PAUTA'}</span></div>
-                                            <span className="w-32 text-xs font-bold text-slate-400">{new Date(h.createdAt).toLocaleDateString()}</span>
-                                            <div className="flex-1 min-w-0">
-                                                <span className="font-black text-[#344a5e] text-sm">
-                                                    {h.proposalNumber} {h.clientReference && <span className="text-[10px] text-blue-500 font-black ml-2 uppercase opacity-50">[{h.clientReference}]</span>}
-                                                </span>
-                                                <p className="text-[10px] font-bold text-slate-400 truncate uppercase mt-1">{h.origin.split(',')[0]} ➝ {h.destination.split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
+                                            <span className="w-32 text-xs font-bold text-slate-400">
+                                                {(() => {
+                                                    try {
+                                                        const d = new Date(h.createdAt);
+                                                        return isNaN(d.getTime()) ? 'Data Inválida' : d.toLocaleDateString();
+                                                    } catch (e) { return '-'; }
+                                                })()}
+                                            </span>
+                                            <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-black text-[#344a5e] text-sm">{h.proposalNumber}</span>
+                                                    {h.clientReference && <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide">{h.clientReference}</span>}
+                                                </div>
+                                                {customer && (
+                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-0.5">{customer.name}</p>
+                                                )}
+                                                <p className="text-[9px] font-bold text-slate-400 truncate uppercase mt-0.5">{h.origin.split(',')[0]} ➝ {h.destination.split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
                                             </div>
                                             <div className="w-40 flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center font-black text-xs text-[#344a5e] shadow-sm border border-slate-100">
