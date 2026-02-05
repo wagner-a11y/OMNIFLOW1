@@ -1118,10 +1118,8 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="w-28"><span className={`px-4 py-2 rounded-xl text-[9px] font-black text-white uppercase ${h.status === 'won' ? 'bg-emerald-500' : h.status === 'lost' ? 'bg-red-500' : 'bg-amber-400'}`}>{h.status === 'won' ? 'GANHO' : h.status === 'lost' ? 'PERDIDO' : 'PAUTA'}</span></div>
                                             <span className="w-32 text-xs font-bold text-slate-400">
                                                 {(() => {
-                                                    try {
-                                                        const d = new Date(h.createdAt);
-                                                        return isNaN(d.getTime()) ? 'Data Inválida' : d.toLocaleDateString();
-                                                    } catch (e) { return '-'; }
+                                                    const d = new Date(h.createdAt || Date.now());
+                                                    return isNaN(d.getTime()) ? new Date().toLocaleDateString() : d.toLocaleDateString();
                                                 })()}
                                             </span>
                                             <div className="flex-1 min-w-0 flex flex-col justify-center">
