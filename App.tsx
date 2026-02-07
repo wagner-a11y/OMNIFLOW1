@@ -131,13 +131,29 @@ const App: React.FC = () => {
         }
     }, [toast]);
 
-    const handleLogin = (e: React.FormEvent) => {
-        e.preventDefault();
-        const user = users.find(u => u.username === loginForm.username && u.password === loginForm.password);
+    const handleLogin = (e?: React.FormEvent | React.MouseEvent) => {
+        if (e) e.preventDefault();
+
+        if (users.length === 0) {
+            console.log("Login blocked: Users not loaded yet");
+            showFeedback("Carregando sistema... Tente em instantes.", "info");
+            loadAllData(); // Tenta recarregar se estiver vazio
+            return;
+        }
+
+        console.log("Login attempt started", loginForm);
+
+        const user = users.find(u =>
+            u.username.toLowerCase().trim() === loginForm.username.toLowerCase().trim() &&
+            u.password === loginForm.password
+        );
+
         if (user) {
+            console.log("User found, logging in:", user.name);
             setCurrentUser(user);
             showFeedback(`Bem-vindo, ${user.name}!`);
         } else {
+            console.log("Login failed: User not found or password incorrect");
             showFeedback("Usuário ou senha incorretos.", "error");
         }
     };
@@ -364,7 +380,10 @@ const App: React.FC = () => {
 
     const saveQuote = async (status: QuoteStatus) => {
         const quoteId = editingId || generateId();
-        const createdDate = editingId ? (history.find(h => h.id === editingId)?.createdAt || Date.now()) : Date.now();
+        const existingQuote = history.find(h => h.id === editingId);
+        const createdDate = existingQuote?.createdAt ? existingQuote.createdAt : Date.now();
+        console.log("Saving quote with createdDate:", createdDate, "Is edit:", !!editingId);
+
         const data: FreightCalculation = {
             id: quoteId,
             proposalNumber: editingId ? (history.find(h => h.id === editingId)?.proposalNumber || '') : `CT-${new Date().getFullYear()}-${(history.length + 1).toString().padStart(4, '0')}`,
@@ -376,22 +395,37 @@ const App: React.FC = () => {
             totalFreight: calcData.finalFreight, createdAt: createdDate, disponibilidade, status, updatedBy: currentUser?.id, updatedByName: currentUser?.name,
             realProfit: calcData.realProfitAmount, realMarginPercent: calcData.realMarginPercent
         };
+
+        console.log("Saving data object:", data);
         try {
             if (editingId) {
-                if (await updateFreightCalculation(data)) {
+                const success = await updateFreightCalculation(data);
+                if (success) {
                     setHistory(prev => prev.map(h => h.id === editingId ? data : h));
                     showFeedback("Atualizado!");
                     if (status === 'won') { setShowCelebration(true); setTimeout(() => setShowCelebration(false), 4000); }
+                    setEditingId(null); resetForm(); setActiveTab('history');
+                } else {
+                    console.error("Failed to update quote in DB");
+                    showFeedback("Erro ao atualizar no banco.", "error");
                 }
             } else {
-                if (await createFreightCalculation(data)) {
+                const saved = await createFreightCalculation(data);
+                if (saved) {
+                    console.log("Quote saved successfully, updating local history state");
                     setHistory(prev => [data, ...prev]);
-                    showFeedback("Salvo!");
+                    showFeedback("Salvo com sucesso!");
                     if (status === 'won') { setShowCelebration(true); setTimeout(() => setShowCelebration(false), 4000); }
+                    setEditingId(null); resetForm(); setActiveTab('history');
+                } else {
+                    console.error("Failed to create quote in DB (service returned null)");
+                    showFeedback("Erro ao salvar no banco. Verifique conexão.", "error");
                 }
             }
-            setEditingId(null); resetForm(); setActiveTab('history');
-        } catch (error) { showFeedback("Erro ao salvar.", "error"); }
+        } catch (error) {
+            console.error("Exception in saveQuote:", error);
+            showFeedback("Erro inesperado ao salvar.", "error");
+        }
     };
 
     const loadQuote = (quote: FreightCalculation) => {
@@ -641,7 +675,9 @@ Disponibilidade: ${disponibilidade}`;
                     <form onSubmit={handleLogin} className="space-y-6">
                         <input type="text" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-bold outline-none" placeholder="Usuário" value={loginForm.username} onChange={e => setLoginForm({ ...loginForm, username: e.target.value })} required />
                         <input type="password" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-bold outline-none" placeholder="Senha" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required />
-                        <button type="submit" className="w-full py-5 bg-[#005a9c] text-white rounded-3xl font-black uppercase text-xs cursor-pointer active:scale-95 transition-all">Acessar</button>
+                        <button type="submit" onClick={handleLogin} className="w-full py-5 bg-[#005a9c] text-white rounded-3xl font-black uppercase text-xs cursor-pointer active:scale-95 transition-all shadow-lg hover:shadow-xl disabled:opacity-50" disabled={users.length === 0}>
+                            {users.length === 0 ? 'Conectando...' : 'Acessar'}
+                        </button>
                     </form>
                 </div>
             </div>
@@ -1122,8 +1158,9 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="w-28"><span className={`px-4 py-2 rounded-xl text-[9px] font-black text-white uppercase ${h.status === 'won' ? 'bg-emerald-500' : h.status === 'lost' ? 'bg-red-500' : 'bg-amber-400'}`}>{h.status === 'won' ? 'GANHO' : h.status === 'lost' ? 'PERDIDO' : 'PAUTA'}</span></div>
                                             <span className="w-32 text-xs font-bold text-slate-400">
                                                 {(() => {
-                                                    const d = new Date(h.createdAt || Date.now());
-                                                    return isNaN(d.getTime()) ? new Date().toLocaleDateString() : d.toLocaleDateString();
+                                                    if (!h.createdAt || h.createdAt === 0) return 'S/ Data';
+                                                    const d = new Date(h.createdAt);
+                                                    return isNaN(d.getTime()) ? 'Data Inválida' : d.toLocaleDateString();
                                                 })()}
                                             </span>
                                             <div className="flex-1 min-w-0 flex flex-col justify-center">

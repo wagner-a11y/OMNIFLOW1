@@ -127,7 +127,8 @@ export const getVehicleConfigs = async (): Promise<Record<string, ANTTCoefficien
             fixed: Number(config.fixed),
             variable: Number(config.variable),
             axles: config.axles,
-            factor: config.factor ? Number(config.factor) : undefined
+            factor: config.factor ? Number(config.factor) : 0,
+            calcMode: config.calc_mode || 'ANTT'
         };
     });
 
@@ -303,9 +304,11 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         .insert([dbRecord]);
 
     if (error) {
-        console.error('Error creating freight calculation:', error);
+        console.error('CRITICAL: Error creating freight calculation in Supabase!', error);
+        console.error('Payload attempted:', dbRecord);
         return null;
     }
+    console.log('Successfully saved to Supabase:', calc.proposalNumber);
     return calc;
 };
 
