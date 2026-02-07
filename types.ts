@@ -31,6 +31,8 @@ export interface User {
 export interface ANTTCoefficients {
     fixed: number;
     variable: number;
+    factor: number;
+    calcMode: 'KM' | 'ANTT';
 }
 
 export interface Customer {

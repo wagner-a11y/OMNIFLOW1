@@ -84,6 +84,7 @@ const App: React.FC = () => {
     const [targetFreightClient, setTargetFreightClient] = useState<string>('0');
     const [loadingDistance, setLoadingDistance] = useState(false);
     const [disponibilidade, setDisponibilidade] = useState<Disponibilidade>("Imediato");
+    const [merchandiseType, setMerchandiseType] = useState('');
 
     // Novo estado para usuários e veículos
     const [newUserForm, setNewUserForm] = useState<Partial<User>>({ name: '', username: '', password: '', role: 'operador' });
@@ -286,8 +287,8 @@ const App: React.FC = () => {
         const config = vehicleConfigs[vehicleType];
         const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
         if (!config || dist === 0) return 0;
-        if (config.factor && config.factor > 0) return dist * 2 * config.factor;
-        return (dist * config.variable) + config.fixed;
+        if (config.calcMode === 'KM') return dist * config.factor;
+        return config.fixed + (dist * config.variable);
     }, [vehicleType, distanceKm, vehicleConfigs]);
 
     const calcData = useMemo(() => {
@@ -367,7 +368,7 @@ const App: React.FC = () => {
         const data: FreightCalculation = {
             id: quoteId,
             proposalNumber: editingId ? (history.find(h => h.id === editingId)?.proposalNumber || '') : `CT-${new Date().getFullYear()}-${(history.length + 1).toString().padStart(4, '0')}`,
-            clientReference, origin, destination, distanceKm: parseFloat(distanceKm.replace(',', '.')) || 0, vehicleType: vehicleType as VehicleType, merchandiseType: '', weight: parseFloat(weight.replace(',', '.')) || 0,
+            clientReference, origin, destination, distanceKm: parseFloat(distanceKm.replace(',', '.')) || 0, vehicleType: vehicleType as VehicleType, merchandiseType, weight: parseFloat(weight.replace(',', '.')) || 0,
             customerId: selectedCustomerId, suggestedFreight: suggestedFreightANTT,
             baseFreight: activeTab === 'reverse' ? calcData.buyerPower : (parseFloat(baseFreight.replace(',', '.')) || 0),
             tolls: parseFloat(tolls.replace(',', '.')) || 0, extraCosts: parseFloat(extraCosts.replace(',', '.')) || 0, extraCostsDescription, goodsValue: parseFloat(goodsValue.replace(',', '.')) || 0, insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
@@ -399,13 +400,14 @@ const App: React.FC = () => {
         setTolls(quote.tolls.toString()); setExtraCosts((quote.extraCosts || 0).toString()); setExtraCostsDescription(quote.extraCostsDescription || '');
         setGoodsValue(quote.goodsValue.toString()); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
         setIcmsPercent(quote.icmsPercent.toString()); setEditingId(quote.id); setDisponibilidade(quote.disponibilidade || "Imediato");
+        setMerchandiseType(quote.merchandiseType || '');
         setActiveTab('new'); showFeedback("Editando...");
     };
 
     const resetForm = () => {
         setOrigin(''); setDestination(''); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
         setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setTargetFreightClient('0'); setEditingId(null);
-        setDisponibilidade("Imediato");
+        setDisponibilidade("Imediato"); setMerchandiseType('');
     };
 
     const handleCopyQuoteText = () => {
@@ -527,8 +529,9 @@ Disponibilidade: ${disponibilidade}`;
             doc.text(`•   Origem: ${origin || "A definir"}`, indent, currentY); currentY += spacing;
             doc.text(`•   Destino: ${destination || "A definir"}`, indent, currentY); currentY += spacing;
             doc.text(`•   Veículo: ${vehicleType}`, indent, currentY);
-            doc.text(`•   Qtd: 01 viagem`, indent + 80, currentY); currentY += spacing;
-            doc.text(`•   Prazo Coleta: ${disponibilidade}`, indent, currentY); currentY += spacing + 3;
+            doc.text(`•   Mercadoria: ${merchandiseType || "Geral"}`, indent + 80, currentY); currentY += spacing;
+            doc.text(`•   Qtd: 01 viagem`, indent, currentY);
+            doc.text(`•   Prazo Coleta: ${disponibilidade}`, indent + 80, currentY); currentY += spacing + 3;
 
             // 2. Valor
             doc.setFont("helvetica", "bold");
@@ -638,7 +641,7 @@ Disponibilidade: ${disponibilidade}`;
                     <form onSubmit={handleLogin} className="space-y-6">
                         <input type="text" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-bold outline-none" placeholder="Usuário" value={loginForm.username} onChange={e => setLoginForm({ ...loginForm, username: e.target.value })} required />
                         <input type="password" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-bold outline-none" placeholder="Senha" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required />
-                        <button type="submit" className="w-full py-5 bg-[#005a9c] text-white rounded-3xl font-black uppercase text-xs">Acessar</button>
+                        <button type="submit" className="w-full py-5 bg-[#005a9c] text-white rounded-3xl font-black uppercase text-xs cursor-pointer active:scale-95 transition-all">Acessar</button>
                     </form>
                 </div>
             </div>
@@ -900,6 +903,7 @@ Disponibilidade: ${disponibilidade}`;
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                                         <div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-blue-50/50 rounded-2xl font-bold border-2 border-blue-100 focus:border-blue-300 outline-none" value={clientReference} onChange={e => setClientReference(e.target.value)} placeholder="Ref Cliente" /></div>
                                         <select className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>{Object.keys(vehicleConfigs).map(v => <option key={v} value={v}>{v}</option>)}</select>
+                                        <div className="relative col-span-1 md:col-span-2"><Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={merchandiseType} onChange={e => setMerchandiseType(e.target.value)} placeholder="Tipo da Mercadoria (Ex: Peças, Grãos...)" /></div>
                                         <div className="relative">
                                             <Scale className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                                             <input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={weight} onChange={e => setWeight(e.target.value)} placeholder="Peso KG" />
@@ -1128,7 +1132,7 @@ Disponibilidade: ${disponibilidade}`;
                                                     {h.clientReference && <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide">{h.clientReference}</span>}
                                                 </div>
                                                 {customer && (
-                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-0.5">{customer.name}</p>
+                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-0.5">{customer.name} {h.merchandiseType && <span className="text-slate-300 ml-2">| {h.merchandiseType}</span>}</p>
                                                 )}
                                                 <p className="text-[9px] font-bold text-slate-400 truncate uppercase mt-0.5">{h.origin.split(',')[0]} ➝ {h.destination.split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
                                             </div>
@@ -1299,7 +1303,7 @@ Disponibilidade: ${disponibilidade}`;
                                             <h3 className="font-black text-[#344a5e]">Configuração de Frota e ANTT</h3>
                                             <button onClick={() => {
                                                 const name = prompt("Nome do novo tipo de veículo:");
-                                                if (name) handleUpdateVehicleConfig(name, { capacity: 10000, consumption: 2.5, factor: 1.5, fixed: 0, variable: 0 });
+                                                if (name) handleUpdateVehicleConfig(name, { capacity: 10000, consumption: 2.5, factor: 0, fixed: 0, variable: 0, calcMode: 'ANTT' });
                                             }} className="px-4 py-2 bg-blue-100 text-blue-600 rounded-xl font-black text-[10px] uppercase hover:bg-blue-200 transition-colors">
                                                 + Novo Veículo
                                             </button>
@@ -1310,19 +1314,39 @@ Disponibilidade: ${disponibilidade}`;
                                                     <h4 className="font-black text-[#344a5e] uppercase flex items-center gap-2"><Truck className="w-4 h-4 text-slate-400" /> {key}</h4>
                                                     <button onClick={() => handleDeleteVehicleConfig(key)} className="p-2 text-red-300 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                                                 </div>
-                                                <div className="grid grid-cols-3 gap-4">
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                                                     <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase">Capacidade (KG)</label>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Capacidade (KG)</label>
                                                         <input type="number" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.capacity} onChange={e => handleUpdateVehicleConfig(key, { ...config, capacity: Number(e.target.value) })} />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase">Consumo (KM/L)</label>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Consumo (KM/L)</label>
                                                         <input type="number" step="0.1" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.consumption} onChange={e => handleUpdateVehicleConfig(key, { ...config, consumption: Number(e.target.value) })} />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase">Fator ANTT</label>
-                                                        <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.factor || 1.2} onChange={e => handleUpdateVehicleConfig(key, { ...config, factor: Number(e.target.value) })} />
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Modo Cálculo</label>
+                                                        <select className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.calcMode} onChange={e => handleUpdateVehicleConfig(key, { ...config, calcMode: e.target.value as 'KM' | 'ANTT' })}>
+                                                            <option value="KM">KM (Fator)</option>
+                                                            <option value="ANTT">ANTT (Fixo+Var)</option>
+                                                        </select>
                                                     </div>
+                                                    {config.calcMode === 'KM' ? (
+                                                        <div>
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Fator por KM (R$)</label>
+                                                            <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.factor} onChange={e => handleUpdateVehicleConfig(key, { ...config, factor: Number(e.target.value) })} />
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div>
+                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Custo Fixo (R$)</label>
+                                                                <input type="number" step="1" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.fixed} onChange={e => handleUpdateVehicleConfig(key, { ...config, fixed: Number(e.target.value) })} />
+                                                            </div>
+                                                            <div className="col-span-1">
+                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Custo Var / KM (R$)</label>
+                                                                <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.variable} onChange={e => handleUpdateVehicleConfig(key, { ...config, variable: Number(e.target.value) })} />
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
