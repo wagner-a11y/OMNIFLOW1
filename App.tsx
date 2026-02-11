@@ -976,7 +976,7 @@ Disponibilidade: ${disponibilidade}`;
                                 </div>
                             </div>
                         </div>
-                    ) : activeTab !== 'history' ? (
+                    ) : activeTab !== 'history' && activeTab !== 'crm' ? (
                         <div className="space-y-8 animate-fade-in-up">
                             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                                 <div className="lg:col-span-3 bg-white p-8 rounded-[2.5rem] shadow-sm border space-y-6">
