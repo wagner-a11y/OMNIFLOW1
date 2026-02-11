@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import jsPDF from 'jspdf';
 import {
-    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle
+    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List
 } from 'lucide-react';
+import { CRMBoard } from './components/CRMBoard';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { estimateDistance } from './services/geminiService';
@@ -50,7 +51,7 @@ const App: React.FC = () => {
     const [fedTaxes, setFedTaxes] = useState<FederalTaxes>({ pis: 0.65, cofins: 3.0, csll: 1.08, irpj: 1.2, insurancePolicyRate: 0.035 });
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'reverse' | 'dashboard'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'reverse' | 'dashboard' | 'crm'>('dashboard');
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -298,6 +299,30 @@ const App: React.FC = () => {
             filteredCount: filteredHistory.length
         };
     }, [history, customers, selectedMonth]);
+
+    const handleCRMStatusUpdate = async (id: string, newStatus: QuoteStatus, lostData?: { reason: any; obs: string; fileUrl: string }) => {
+        const quote = history.find(h => h.id === id);
+        if (!quote) return;
+
+        const updatedQuote: FreightCalculation = {
+            ...quote,
+            status: newStatus,
+            lostReason: lostData?.reason,
+            lostObs: lostData?.obs,
+            lostFileUrl: lostData?.fileUrl,
+            updatedAt: new Date().toISOString(),
+            updatedBy: currentUser?.id,
+            updatedByName: currentUser?.name
+        };
+
+        const success = await updateFreightCalculation(updatedQuote);
+        if (success) {
+            setHistory(prev => prev.map(h => h.id === id ? updatedQuote : h));
+            showFeedback('Status atualizado!');
+        } else {
+            showFeedback('Erro ao atualizar status.', 'error');
+        }
+    };
 
     const suggestedFreightANTT = useMemo(() => {
         const config = vehicleConfigs[vehicleType];
@@ -707,6 +732,7 @@ Disponibilidade: ${disponibilidade}`;
                 <nav className="flex-1 px-4 space-y-3 mt-6 relative z-10">
                     {[
                         { id: 'dashboard', icon: BarChart3, label: 'Visão Geral' },
+                        { id: 'crm', icon: List, label: 'CRM / Kanban' },
                         { id: 'new', icon: PlusCircle, label: 'Cotação Venda' },
                         { id: 'reverse', icon: Target, label: 'Custo Ideal' },
                         { id: 'history', icon: History, label: 'Histórico' }
@@ -735,7 +761,7 @@ Disponibilidade: ${disponibilidade}`;
             <main className="flex-1 overflow-y-auto pb-20">
                 <header className="bg-white border-b px-8 py-6 sticky top-0 z-10 flex justify-between items-center shadow-sm">
                     <h2 className="text-lg font-black text-[#344a5e] uppercase tracking-tight">
-                        {editingId ? 'Editando Registro' : activeTab === 'dashboard' ? 'Visão Geral Executiva' : activeTab === 'new' ? 'Formação Comercial' : activeTab === 'reverse' ? 'Engenharia Reversa' : 'Histórico'}
+                        {editingId ? 'Editando Registro' : activeTab === 'dashboard' ? 'Visão Geral Executiva' : activeTab === 'crm' ? 'Gestão de Oportunidades (CRM)' : activeTab === 'new' ? 'Formação Comercial' : activeTab === 'reverse' ? 'Engenharia Reversa' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
                         <div className="relative w-72">
@@ -746,6 +772,16 @@ Disponibilidade: ${disponibilidade}`;
                 </header>
 
                 <div className="p-8 max-w-7xl mx-auto space-y-8">
+                    {activeTab === 'crm' && (
+                        <div className="h-full animate-fade-in">
+                            <CRMBoard
+                                quotes={history}
+                                onUpdateStatus={handleCRMStatusUpdate}
+                                customers={customers}
+                            />
+                        </div>
+                    )}
+
                     {activeTab === 'dashboard' ? (
                         <div className="space-y-8 animate-fade-in-up">
                             {/* Filtro de Período */}

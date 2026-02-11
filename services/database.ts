@@ -259,7 +259,10 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
         isEdited: item.is_edited,
         updatedBy: item.updated_by,
         updatedByName: item.updated_by_name,
-        updatedAt: item.updated_at
+        updatedAt: item.updated_at,
+        lostReason: item.lost_reason,
+        lostObs: item.lost_obs,
+        lostFileUrl: item.lost_file_url
     }));
 };
 
@@ -294,7 +297,10 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         disponibilidade: calc.disponibilidade,
         status: calc.status,
         updated_by: calc.updatedBy || null,
-        updated_by_name: calc.updatedByName || null
+        updated_by_name: calc.updatedByName || null,
+        lost_reason: calc.lostReason || null,
+        lost_obs: calc.lostObs || null,
+        lost_file_url: calc.lostFileUrl || null
     };
 
     const { error } = await supabase
@@ -340,7 +346,10 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         status: calc.status,
         updated_at: new Date().toISOString(),
         updated_by: calc.updatedBy || null,
-        updated_by_name: calc.updatedByName || null
+        updated_by_name: calc.updatedByName || null,
+        lost_reason: calc.lostReason || null,
+        lost_obs: calc.lostObs || null,
+        lost_file_url: calc.lostFileUrl || null
     };
 
     const { error } = await supabase

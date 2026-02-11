@@ -14,7 +14,16 @@ export enum VehicleType {
 }
 
 export type Disponibilidade = "Imediato" | "Conforme programação";
-export type QuoteStatus = "pending" | "won" | "lost";
+export type QuoteStatus = "pending" | "respondida" | "aprovada" | "em_operacao" | "won" | "lost";
+export type LostReason = "preco_alto" | "prazo_entrega" | "concorrencia" | "disponibilidade" | "outros" | "";
+
+export const LOST_REASONS: Record<string, string> = {
+    "preco_alto": "Preço muito alto",
+    "prazo_entrega": "Prazo de entrega",
+    "concorrencia": "Concorrência",
+    "disponibilidade": "Indisponibilidade de veículo",
+    "outros": "Outros"
+};
 export type UserRole = "master" | "operador";
 
 export interface User {
@@ -81,4 +90,7 @@ export interface FreightCalculation {
     updatedBy?: string;
     updatedByName?: string;
     updatedAt?: string;
+    lostReason?: LostReason;
+    lostObs?: string;
+    lostFileUrl?: string;
 }
