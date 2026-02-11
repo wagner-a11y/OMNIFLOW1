@@ -293,8 +293,6 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         created_at: calc.createdAt,
         disponibilidade: calc.disponibilidade,
         status: calc.status,
-        real_profit: calc.realProfit || 0,
-        real_margin_percent: calc.realMarginPercent || 0,
         updated_by: calc.updatedBy || null,
         updated_by_name: calc.updatedByName || null
     };
@@ -341,9 +339,6 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         disponibilidade: calc.disponibilidade,
         status: calc.status,
         updated_at: new Date().toISOString(),
-        real_profit: calc.realProfit || 0,
-        real_margin_percent: calc.realMarginPercent || 0,
-        is_edited: true,
         updated_by: calc.updatedBy || null,
         updated_by_name: calc.updatedByName || null
     };
