@@ -303,8 +303,18 @@ const App: React.FC = () => {
         const config = vehicleConfigs[vehicleType];
         const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
         if (!config || dist === 0) return 0;
-        if (config.calcMode === 'KM') return dist * config.factor;
-        return config.fixed + (dist * config.variable);
+
+        switch (config.calcMode) {
+            case 'KM_ROUND_TRIP':
+                return dist * 2 * config.factor;
+            case 'FREE':
+                return 0;
+            case 'ANTT':
+                return config.fixed + (dist * config.variable);
+            case 'KM':
+            default:
+                return dist * config.factor;
+        }
     }, [vehicleType, distanceKm, vehicleConfigs]);
 
     const calcData = useMemo(() => {
@@ -1039,6 +1049,22 @@ Disponibilidade: ${disponibilidade}`;
                                     <p className="text-9xl font-black tracking-tighter drop-shadow-2xl">
                                         R$ {formatCur(activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight)}
                                     </p>
+
+                                    {/* New: Value per Ton Indicators */}
+                                    <div className="flex justify-center gap-8 mt-2 mb-6">
+                                        <div className="text-center">
+                                            <p className="text-[9px] font-black uppercase opacity-60">R$ / Ton (Cobrar)</p>
+                                            <p className="text-lg font-black">
+                                                R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? (activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
+                                            </p>
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-[9px] font-black uppercase opacity-60">R$ / Ton (Pagar)</p>
+                                            <p className="text-lg font-black text-white/80">
+                                                R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? (activeTab === 'reverse' ? calcData.buyerPower : num(baseFreight)) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
+                                            </p>
+                                        </div>
+                                    </div>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full mt-8">
                                         <button onClick={() => saveQuote('won')} className="bg-emerald-500 py-6 rounded-[2rem] font-black uppercase text-[10px] flex items-center justify-center gap-2 hover:bg-emerald-600 shadow-lg transition-transform hover:scale-105">
                                             <ThumbsUp className="w-4 h-4" /> Fechado

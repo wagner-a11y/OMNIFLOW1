@@ -1,19 +1,16 @@
 
 export enum VehicleType {
-    Fiorino = "Fiorino",
-    Van = "Van",
-    HR = "HR",
-    TresQuartos = "3/4",
+    Fiorino = "Fiorino - Utilitário",
+    Van = "Van - Utilitário",
+    HR_VUC = "HR/VUC - Utilitário",
     Toco = "Toco",
     Truck = "Truck",
-    Bitruck = "Bitruck",
-    Carreta5Eixos = "Carreta 5 eixos",
+    CarretaSimples = "Carreta Simples",
     CarretaLS = "Carreta LS",
-    CarretaVanderleia = "Carreta Vanderleia",
     Carreta4Eixo = "Carreta 4º Eixo",
+    Vanderleia = "Vanderleia",
     Rodotrem = "Rodotrem",
-    Prancha = "Prancha",
-    Rodoaereo = "Rodoaéreo"
+    Prancha = "Prancha - Preço livre"
 }
 
 export type Disponibilidade = "Imediato" | "Conforme programação";
@@ -32,7 +29,7 @@ export interface ANTTCoefficients {
     fixed: number;
     variable: number;
     factor: number;
-    calcMode: 'KM' | 'ANTT';
+    calcMode: 'KM' | 'ANTT' | 'KM_ROUND_TRIP' | 'FREE';
 }
 
 export interface Customer {
