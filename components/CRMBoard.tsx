@@ -218,6 +218,9 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                             <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 bg-slate-50/50">
                                 {items.map(quote => {
                                     const customer = customers.find(c => c.id === quote.customerId);
+                                    const loadingDate = quote.createdAt ? new Date(quote.createdAt) : null;
+                                    const daysUntilLoad = loadingDate ? Math.ceil((loadingDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+                                    const isUrgentDate = daysUntilLoad !== null && daysUntilLoad <= 3 && daysUntilLoad >= 0;
                                     return (
                                         <div
                                             key={quote.id}
@@ -227,31 +230,50 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                         >
                                             <div className="absolute top-0 left-0 w-1 h-full bg-slate-200 group-hover:bg-blue-400 transition-colors"></div>
                                             <div className="pl-3">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <span className="text-[10px] font-bold text-slate-400">#{quote.proposalNumber}</span>
-                                                    {quote.disponibilidade === 'Imediato' && (
-                                                        <span className="bg-red-50 text-red-600 text-[9px] px-2 py-1 rounded-lg font-black flex items-center gap-1 uppercase tracking-tighter">
-                                                            <AlertCircle className="w-3 h-3" /> Urgente
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                <div className="mb-3">
-                                                    <h4 className="font-black text-[#344a5e] text-sm line-clamp-1 mb-1">{customer?.name || 'Cliente Não Identificado'}</h4>
-                                                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
-                                                        <MapPin className="w-3 h-3" />
-                                                        <span className="truncate max-w-[200px]">{quote.origin.split(',')[0]} ➝ {quote.destination.split(',')[0]}</span>
+                                                {/* Header: Logo + Info */}
+                                                <div className="flex items-start gap-3 mb-3">
+                                                    {/* Customer Logo */}
+                                                    <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                                        {customer?.logoUrl ? (
+                                                            <img src={customer.logoUrl} className="w-full h-full object-contain" alt={customer.name} />
+                                                        ) : (
+                                                            <span className="font-black text-slate-300 text-sm">{(customer?.name || '?').charAt(0)}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex justify-between items-start">
+                                                            <h4 className="font-black text-[#344a5e] text-sm line-clamp-1">{customer?.name || 'Cliente'}</h4>
+                                                            {quote.disponibilidade === 'Imediato' && (
+                                                                <span className="bg-red-50 text-red-600 text-[9px] px-2 py-1 rounded-lg font-black flex items-center gap-1 uppercase tracking-tighter ml-1 flex-shrink-0">
+                                                                    <AlertCircle className="w-3 h-3" /> Urgente
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-[10px] font-bold text-slate-400">#{quote.proposalNumber}</span>
                                                     </div>
                                                 </div>
 
-                                                <div className="flex justify-between items-end pt-3 border-t border-slate-50">
+                                                {/* Route */}
+                                                <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 mb-3">
+                                                    <MapPin className="w-3 h-3 flex-shrink-0" />
+                                                    <span className="truncate">{quote.origin.split(',')[0]} × {quote.destination.split(',')[0]}</span>
+                                                </div>
+
+                                                {/* Value */}
+                                                <div className="flex justify-between items-center mb-2">
                                                     <div className="flex flex-col">
                                                         <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{quote.vehicleType.split('-')[0]}</span>
-                                                        <span className="text-sm font-black text-[#344a5e]">{formatCurrency(quote.totalFreight)}</span>
+                                                        <span className="text-base font-black text-[#344a5e]">{formatCurrency(quote.totalFreight)}</span>
                                                     </div>
-                                                    <div className="text-[9px] font-bold text-slate-300">
-                                                        {new Date(quote.createdAt).toLocaleDateString()}
-                                                    </div>
+                                                </div>
+
+                                                {/* Date */}
+                                                <div className={`flex items-center gap-1.5 pt-2 border-t border-slate-50 ${isUrgentDate ? 'text-amber-500' : 'text-slate-300'}`}>
+                                                    <Calendar className="w-3 h-3" />
+                                                    <span className="text-[10px] font-bold">
+                                                        {loadingDate ? loadingDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '---'}
+                                                    </span>
+                                                    {isUrgentDate && <AlertCircle className="w-3 h-3 text-amber-500" />}
                                                 </div>
                                             </div>
                                         </div>

@@ -1291,7 +1291,8 @@ Disponibilidade: ${disponibilidade}`;
                                     { id: 'financial', label: 'Tributação', icon: Percent },
                                     { id: 'goals', label: 'Metas', icon: Target },
                                     { id: 'fleet', label: 'Frota/ANTT', icon: Truck },
-                                    { id: 'identity', label: 'Marca', icon: ImageIcon }
+                                    { id: 'identity', label: 'Marca', icon: ImageIcon },
+                                    { id: 'users', label: 'Usuários', icon: Users }
                                 ].map(tab => (
                                     <button key={tab.id} onClick={() => setConfigTab(tab.id as any)} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black uppercase text-[10px] transition-all ${configTab === tab.id ? 'bg-white text-blue-600 shadow-md translate-x-2' : 'text-slate-400 hover:bg-white/50'}`}>
                                         <tab.icon className="w-4 h-4" /> {tab.label}
@@ -1492,6 +1493,98 @@ Disponibilidade: ${disponibilidade}`;
                                         <div className="w-48 h-48 bg-white p-6 rounded-[3rem] shadow-2xl flex items-center justify-center overflow-hidden border-4 border-white">{appLogo ? <img src={appLogo} className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full text-[#344a5e]" />}</div>
                                         <label className="bg-blue-600 px-10 py-5 rounded-2xl text-white font-black uppercase text-xs cursor-pointer"><ImageIcon className="w-5 h-5 inline mr-2" /> Alterar Logo<input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" /></label>
                                         <button onClick={() => setAppLogo(null)} className="text-red-400 font-black text-[10px] uppercase underline underline-offset-4">Resetar Padrão</button>
+                                    </div>
+                                )}
+                                {configTab === 'users' && (
+                                    <div className="space-y-8">
+                                        {/* User Creation Form */}
+                                        <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
+                                            <div className="flex items-center gap-3 mb-6">
+                                                <Users className="w-5 h-5 text-blue-600" />
+                                                <h3 className="font-black text-[#344a5e] uppercase text-xs">Cadastrar Novo Usuário</h3>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                                <div>
+                                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Nome Completo</label>
+                                                    <input type="text" id="new-user-name" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: João Silva" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Login (Usuário)</label>
+                                                    <input type="text" id="new-user-username" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: joao.silva" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Senha</label>
+                                                    <input type="password" id="new-user-password" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="••••••••" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Perfil</label>
+                                                    <select id="new-user-role" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all">
+                                                        <option value="operador">Operador</option>
+                                                        <option value="master">Master</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={async () => {
+                                                    const nameEl = document.getElementById('new-user-name') as HTMLInputElement;
+                                                    const usernameEl = document.getElementById('new-user-username') as HTMLInputElement;
+                                                    const passwordEl = document.getElementById('new-user-password') as HTMLInputElement;
+                                                    const roleEl = document.getElementById('new-user-role') as HTMLSelectElement;
+                                                    if (!nameEl.value || !usernameEl.value || !passwordEl.value) {
+                                                        showFeedback('Preencha todos os campos.', 'error');
+                                                        return;
+                                                    }
+                                                    const newUser = await createUser({
+                                                        id: crypto.randomUUID(),
+                                                        name: nameEl.value,
+                                                        username: usernameEl.value,
+                                                        password: passwordEl.value,
+                                                        role: roleEl.value as any
+                                                    });
+                                                    if (newUser) {
+                                                        setUsers([...users, newUser]);
+                                                        nameEl.value = '';
+                                                        usernameEl.value = '';
+                                                        passwordEl.value = '';
+                                                        showFeedback('Usuário cadastrado!');
+                                                    } else {
+                                                        showFeedback('Erro ao cadastrar usuário.', 'error');
+                                                    }
+                                                }}
+                                                className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <Save className="w-4 h-4" /> Cadastrar Usuário
+                                            </button>
+                                        </div>
+
+                                        {/* Users List */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            {users.map(u => (
+                                                <div key={u.id} className="p-5 bg-white rounded-[2rem] border-2 border-slate-50 flex items-center justify-between group hover:border-blue-100 transition-all shadow-sm">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center">
+                                                            <span className="font-black text-blue-400 text-sm">{u.name.charAt(0)}</span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-black text-[#344a5e] text-xs uppercase tracking-tight">{u.name}</p>
+                                                            <p className="text-[9px] font-bold text-slate-300 uppercase">@{u.username} • {u.role === 'master' ? 'Master' : 'Operador'}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                        {u.role !== 'master' && (
+                                                            <button onClick={async () => {
+                                                                if (await deleteUser(u.id)) {
+                                                                    setUsers(users.filter(i => i.id !== u.id));
+                                                                    showFeedback('Usuário removido!');
+                                                                }
+                                                            }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
                                 {configTab === 'goals' && (
