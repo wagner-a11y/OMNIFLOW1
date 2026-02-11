@@ -52,7 +52,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
 
     const [activeTab, setActiveTab] = useState<'new' | 'history' | 'reverse' | 'dashboard' | 'crm'>('dashboard');
-    const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity'>('financial');
+    const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
     const [showConfigModal, setShowConfigModal] = useState(false);
@@ -179,6 +179,19 @@ const App: React.FC = () => {
             showFeedback("Imposto atualizado!");
         } catch (e) {
             showFeedback("Erro ao salvar imposto.", "error");
+        }
+    };
+
+    const handleUpdateGoals = async (month: string, value: number) => {
+        const currentGoals = fedTaxes.goals || {};
+        const newGoals = { ...currentGoals, [month]: value };
+        const newTaxes = { ...fedTaxes, goals: newGoals };
+        setFedTaxes(newTaxes);
+        try {
+            await updateSystemConfig(newTaxes);
+        } catch (e) {
+            console.error(e);
+            showFeedback("Erro ao salvar meta.", "error");
         }
     };
 
@@ -778,6 +791,7 @@ Disponibilidade: ${disponibilidade}`;
                                 quotes={history}
                                 onUpdateStatus={handleCRMStatusUpdate}
                                 customers={customers}
+                                systemConfig={fedTaxes}
                             />
                         </div>
                     )}
@@ -1275,6 +1289,7 @@ Disponibilidade: ${disponibilidade}`;
                                 {[
                                     { id: 'customers', label: 'Clientes', icon: Users },
                                     { id: 'financial', label: 'Tributação', icon: Percent },
+                                    { id: 'goals', label: 'Metas', icon: Target },
                                     { id: 'fleet', label: 'Frota/ANTT', icon: Truck },
                                     { id: 'identity', label: 'Marca', icon: ImageIcon }
                                 ].map(tab => (
@@ -1389,12 +1404,33 @@ Disponibilidade: ${disponibilidade}`;
                                     </div>
                                 )}
                                 {configTab === 'financial' && (
-                                    <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).map(([key, val]) => (
+                                    <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).filter(([k]) => k !== 'goals').map(([key, val]) => (
                                         <div key={key} className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm">
                                             <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">{key}</label>
-                                            <input type="number" step="0.01" className="w-full p-4 bg-white rounded-2xl font-black text-2xl text-[#344a5e]" value={val} onChange={e => handleUpdateFedTaxes(key as any, Number(e.target.value))} />
+                                            <input type="number" step="0.01" className="w-full p-4 bg-white rounded-2xl font-black text-2xl text-[#344a5e]" value={val as number} onChange={e => handleUpdateFedTaxes(key as any, Number(e.target.value))} />
                                         </div>
                                     ))}</div>
+                                )}
+                                {configTab === 'goals' && (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                                        {Array.from({ length: 12 }, (_, i) => {
+                                            const date = new Date(new Date().getFullYear(), i, 1);
+                                            const monthKey = `${date.getFullYear()}-${String(i + 1).padStart(2, '0')}`;
+                                            const label = date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+                                            return (
+                                                <div key={monthKey} className="bg-slate-50 p-6 rounded-[2rem] border shadow-sm">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase block mb-2 capitalize">{label}</label>
+                                                    <input
+                                                        type="number"
+                                                        className="w-full p-3 bg-white rounded-xl font-bold text-lg text-[#344a5e]"
+                                                        value={fedTaxes.goals?.[monthKey] || ''}
+                                                        onChange={e => handleUpdateGoals(monthKey, Number(e.target.value))}
+                                                        placeholder="R$ 0,00"
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 )}
                                 {configTab === 'fleet' && (
                                     <div className="space-y-6">
@@ -1456,6 +1492,37 @@ Disponibilidade: ${disponibilidade}`;
                                         <div className="w-48 h-48 bg-white p-6 rounded-[3rem] shadow-2xl flex items-center justify-center overflow-hidden border-4 border-white">{appLogo ? <img src={appLogo} className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full text-[#344a5e]" />}</div>
                                         <label className="bg-blue-600 px-10 py-5 rounded-2xl text-white font-black uppercase text-xs cursor-pointer"><ImageIcon className="w-5 h-5 inline mr-2" /> Alterar Logo<input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" /></label>
                                         <button onClick={() => setAppLogo(null)} className="text-red-400 font-black text-[10px] uppercase underline underline-offset-4">Resetar Padrão</button>
+                                    </div>
+                                )}
+                                {configTab === 'goals' && (
+                                    <div className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm space-y-4">
+                                        <h3 className="font-black text-[#344a5e] mb-4">Metas Mensais (R$)</h3>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                            {Array.from({ length: 12 }).map((_, i) => {
+                                                const year = new Date().getFullYear();
+                                                const monthStr = (i + 1).toString().padStart(2, '0');
+                                                const key = `${year}-${monthStr}`;
+                                                const monthName = new Date(year, i).toLocaleString('pt-BR', { month: 'long' });
+
+                                                return (
+                                                    <div key={key}>
+                                                        <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 capitalize">{monthName}</label>
+                                                        <input
+                                                            type="number"
+                                                            className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border"
+                                                            value={fedTaxes.goals?.[key] || ''}
+                                                            placeholder="0,00"
+                                                            onChange={e => {
+                                                                const val = Number(e.target.value);
+                                                                const newGoals = { ...fedTaxes.goals, [key]: val };
+                                                                setFedTaxes({ ...fedTaxes, goals: newGoals });
+                                                                updateSystemConfig({ ...fedTaxes, goals: newGoals });
+                                                            }}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 )}
                             </div>

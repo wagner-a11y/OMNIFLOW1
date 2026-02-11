@@ -188,7 +188,8 @@ export const getSystemConfig = async (): Promise<FederalTaxes | null> => {
         cofins: Number(data.cofins),
         csll: Number(data.csll),
         irpj: Number(data.irpj),
-        insurancePolicyRate: Number(data.insurance_policy_rate)
+        insurancePolicyRate: Number(data.insurance_policy_rate),
+        goals: data.goals || {}
     };
 };
 
@@ -201,6 +202,7 @@ export const updateSystemConfig = async (config: FederalTaxes): Promise<boolean>
             csll: config.csll,
             irpj: config.irpj,
             insurance_policy_rate: config.insurancePolicyRate,
+            goals: config.goals || {},
             updated_at: new Date().toISOString()
         })
         .eq('id', 'default');

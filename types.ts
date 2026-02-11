@@ -53,6 +53,7 @@ export interface FederalTaxes {
     csll: number;
     irpj: number;
     insurancePolicyRate: number;
+    goals?: Record<string, number>; // Format: "YYYY-MM": value
 }
 
 export interface FreightCalculation {
