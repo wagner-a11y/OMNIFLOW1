@@ -70,7 +70,12 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                 icmsRate, icmsCheio, creditoPresumido, icmsEfetivo,
                 fedTaxPercent, fedTaxAmount, impostoTotal,
                 ebitda, ebitdaPercent,
-                anttOk, ebitdaOk, canTake, axles
+                anttOk, ebitdaOk, canTake, axles,
+                configFixed: config?.fixed || 0,
+                configVariable: config?.variable || 0,
+                configFactor: config?.factor || 0,
+                configCalcMode: config?.calcMode || 'ANTT',
+                vehicleName: spotVehicle
             });
         } catch (err) {
             console.error(err);
@@ -152,7 +157,74 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                             </div>
                         </div>
 
-                        {/* ANTT Compliance */}
+                        {/* Formação do Piso ANTT — Formula Breakdown */}
+                        <div className="bg-white p-6 rounded-[2rem] shadow-sm border space-y-4">
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-black text-[11px] uppercase text-slate-400 tracking-widest">Formação do Piso ANTT</h3>
+                                <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">{spotResult.vehicleName}</span>
+                            </div>
+                            {/* KM retrieved */}
+                            <div className="bg-slate-50 p-4 rounded-xl flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <MapPin className="w-5 h-5 text-blue-500" />
+                                    <span className="text-sm font-black text-[#344a5e]">Distância Estimada</span>
+                                </div>
+                                <span className="text-xl font-black text-blue-600">{fmt(spotResult.dist)} KM</span>
+                            </div>
+                            {/* Formula breakdown */}
+                            {spotResult.configCalcMode === 'ANTT' ? (
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                                        <span className="text-sm font-bold text-slate-500">Coeficiente Variável (por KM)</span>
+                                        <span className="font-black text-[#344a5e]">R$ {fmt(spotResult.configVariable)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                                        <span className="text-sm font-bold text-slate-500">KM × Coeficiente</span>
+                                        <span className="font-black text-[#344a5e]">R$ {fmt(spotResult.dist * spotResult.configVariable)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                                        <span className="text-sm font-bold text-slate-500">Custo Fixo Cadastrado</span>
+                                        <span className="font-black text-[#344a5e]">+ R$ {fmt(spotResult.configFixed)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-3 bg-blue-50 rounded-xl px-4 -mx-1">
+                                        <span className="text-sm font-black text-blue-700">Piso Mínimo Legal (ANTT)</span>
+                                        <span className="font-black text-lg text-blue-700">= R$ {fmt(spotResult.pisoANTT)}</span>
+                                    </div>
+                                </div>
+                            ) : spotResult.configCalcMode === 'KM_ROUND_TRIP' ? (
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                                        <span className="text-sm font-bold text-slate-500">Valor por KM</span>
+                                        <span className="font-black text-[#344a5e]">R$ {fmt(spotResult.configFactor)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                                        <span className="text-sm font-bold text-slate-500">KM × 2 (Ida e Volta) × Valor</span>
+                                        <span className="font-black text-[#344a5e]">R$ {fmt(spotResult.dist * 2 * spotResult.configFactor)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-3 bg-blue-50 rounded-xl px-4 -mx-1">
+                                        <span className="text-sm font-black text-blue-700">Piso Mínimo</span>
+                                        <span className="font-black text-lg text-blue-700">= R$ {fmt(spotResult.pisoANTT)}</span>
+                                    </div>
+                                </div>
+                            ) : spotResult.configCalcMode === 'KM' ? (
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                                        <span className="text-sm font-bold text-slate-500">Valor por KM</span>
+                                        <span className="font-black text-[#344a5e]">R$ {fmt(spotResult.configFactor)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-3 bg-blue-50 rounded-xl px-4 -mx-1">
+                                        <span className="text-sm font-black text-blue-700">Piso Mínimo (KM × Valor)</span>
+                                        <span className="font-black text-lg text-blue-700">= R$ {fmt(spotResult.pisoANTT)}</span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="py-3 bg-amber-50 rounded-xl px-4 text-center">
+                                    <span className="text-sm font-black text-amber-600">Preço livre (sem piso ANTT)</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Compliance Comparison */}
                         <div className="bg-white p-6 rounded-[2rem] shadow-sm border space-y-4">
                             <div className="flex items-center justify-between">
                                 <h3 className="font-black text-[11px] uppercase text-slate-400 tracking-widest">Compliance ANTT</h3>
@@ -164,11 +236,11 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                                     <p className={`text-2xl font-black ${spotResult.anttOk ? 'text-[#344a5e]' : 'text-red-500'}`}>R$ {fmt(spotResult.pisoANTT)}</p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">P_Max Oferecido</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Frete Oferecido</p>
                                     <p className={`text-2xl font-black ${spotResult.anttOk ? 'text-emerald-500' : 'text-red-500'}`}>R$ {fmt(spotResult.freteOfertado)}</p>
                                 </div>
                             </div>
-                            <p className="text-[10px] text-slate-400">* O cálculo considera a categoria informada, {fmt(spotResult.dist)} KM estimados e custos de {spotResult.axles} eixos.</p>
+                            <p className="text-[10px] text-slate-400">* Dados cruzados com o coeficiente cadastrado em Parâmetros → Frota/ANTT para "{spotResult.vehicleName}", {fmt(spotResult.dist)} KM estimados, {spotResult.axles} eixos.</p>
                         </div>
 
                         {/* Tax Memory */}
