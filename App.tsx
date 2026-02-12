@@ -770,10 +770,10 @@ Disponibilidade: ${disponibilidade}`;
                 <nav className="flex-1 px-4 space-y-3 mt-6 relative z-10">
                     {[
                         { id: 'dashboard', icon: BarChart3, label: 'Visão Geral' },
-                        { id: 'crm', icon: List, label: 'CRM / Kanban' },
-                        { id: 'spot', icon: Zap, label: 'Spot Checker' },
-                        { id: 'new', icon: PlusCircle, label: 'Cotação Venda' },
-                        { id: 'reverse', icon: Target, label: 'Custo Ideal' },
+                        { id: 'crm', icon: List, label: 'CRM' },
+                        { id: 'spot', icon: Zap, label: 'Frete Rápido' },
+                        { id: 'new', icon: PlusCircle, label: 'Formação Comercial' },
+                        { id: 'reverse', icon: Target, label: 'Frete Cliente' },
                         { id: 'history', icon: History, label: 'Histórico' }
                     ].map(item => (
                         <button key={item.id} onClick={() => { setActiveTab(item.id as any); if (item.id !== 'history' && item.id !== 'dashboard') resetForm(); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg translate-x-2' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
@@ -800,7 +800,7 @@ Disponibilidade: ${disponibilidade}`;
             <main className="flex-1 overflow-y-auto pb-20">
                 <header className="bg-white border-b px-8 py-6 sticky top-0 z-10 flex justify-between items-center shadow-sm">
                     <h2 className="text-lg font-black text-[#344a5e] uppercase tracking-tight">
-                        {editingId ? 'Editando Registro' : activeTab === 'dashboard' ? 'Visão Geral Executiva' : activeTab === 'crm' ? 'Gestão de Oportunidades (CRM)' : activeTab === 'spot' ? 'Verificador de Carga Spot' : activeTab === 'new' ? 'Formação Comercial' : activeTab === 'reverse' ? 'Engenharia Reversa' : 'Histórico'}
+                        {editingId ? 'Editando Registro' : activeTab === 'dashboard' ? 'Visão Geral Executiva' : activeTab === 'crm' ? 'CRM' : activeTab === 'spot' ? 'Frete Rápido' : activeTab === 'new' ? 'Formação Comercial' : activeTab === 'reverse' ? 'Frete Cliente' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
                         <div className="relative w-72">

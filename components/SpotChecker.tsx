@@ -372,7 +372,7 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                         <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center">
                             <Zap className="w-10 h-10 text-slate-200" />
                         </div>
-                        <h3 className="font-black text-[#344a5e] text-lg">Verificação Rápida de Carga</h3>
+                        <h3 className="font-black text-[#344a5e] text-lg">Frete Rápido</h3>
                         <p className="text-xs text-slate-400 max-w-md leading-relaxed">Preencha a rota, o valor oferecido e o tipo de veículo. O sistema cruzará automaticamente com a tabela ANTT e tributação para dizer se você pode pegar a carga.</p>
                     </div>
                 )}
