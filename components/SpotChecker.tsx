@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Zap, RotateCcw, CheckCircle, AlertTriangle, Calendar, MapPin, AlertCircle } from 'lucide-react';
+import { Zap, RotateCcw, CheckCircle, AlertTriangle, Calendar, MapPin, AlertCircle, Handshake, TrendingUp } from 'lucide-react';
 import { ANTTCoefficients, FederalTaxes } from '../types';
 import { estimateDistance } from '../services/geminiService';
 
@@ -67,9 +67,18 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
             const ebitda = freteOfertado - pisoANTT - impostoTotal;
             const ebitdaPercent = freteOfertado > 0 ? (ebitda / freteOfertado) * 100 : 0;
 
-            const anttOk = pisoANTT <= freteOfertado || pisoANTT === 0;
+            const anttOk = (pisoANTT <= freteOfertado || pisoANTT === 0) && dist > 0;
             const ebitdaOk = ebitdaPercent >= 15;
             const canTake = anttOk && ebitdaOk;
+
+            // Strategic Insights
+            // totalTaxRate: ICMS (12% * 0.8 efetivo = 9.6%) + Fed Taxes
+            const totalTaxRate = (icmsRate * 0.8 / 100) + (fedTaxPercent / 100);
+            const targetMarginRate = 0.15;
+            const retentionRate = 1 - totalTaxRate - targetMarginRate; // Quanto sobra pro motorista após impostos e margem
+
+            const maxDriverPayment = freteOfertado * retentionRate;
+            const suggestedSalesFreight = retentionRate > 0 ? (pisoANTT / retentionRate) : 0;
 
             setSpotResult({
                 freteOfertado, pisoANTT, dist, tolls,
@@ -77,6 +86,7 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                 fedTaxPercent, fedTaxAmount, impostoTotal,
                 ebitda, ebitdaPercent,
                 anttOk, ebitdaOk, canTake, axles: configAxles,
+                maxDriverPayment, suggestedSalesFreight,
                 configFixed: config?.fixed || 0,
                 configVariable: config?.variable || 0,
                 configFactor: config?.factor || 0,
@@ -278,6 +288,37 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                                     <span className={`font-black text-lg ${spotResult.ebitdaPercent >= 15 ? 'text-emerald-600' : 'text-red-500'}`}>R$ {fmt(spotResult.ebitda)} ({spotResult.ebitdaPercent.toFixed(1)}%)</span>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Strategic Insights Section */}
+                        <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-xl text-white space-y-6">
+                            <div className="flex items-center gap-3">
+                                <Handshake className="w-6 h-6 text-blue-300" />
+                                <h3 className="font-black text-xs uppercase tracking-widest text-blue-200">Insights de Negociação</h3>
+                            </div>
+
+                            {spotResult.canTake ? (
+                                <div className="bg-white/10 p-6 rounded-2xl border border-white/10">
+                                    <p className="text-[10px] font-bold uppercase text-blue-200 mb-2">Teto para o Motorista</p>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-3xl font-black">R$ {fmt(spotResult.maxDriverPayment)}</span>
+                                    </div>
+                                    <p className="text-[10px] text-blue-100/60 mt-3 leading-relaxed">
+                                        Para resguardar sua **margem de 15%**, você pode pagar até este valor ao motorista (incluindo pedágios).
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-white/10 p-6 rounded-2xl border border-white/10">
+                                    <p className="text-[10px] font-bold uppercase text-amber-300 mb-2">Frete de Venda Ideal</p>
+                                    <div className="flex items-baseline gap-2 text-amber-400">
+                                        <TrendingUp className="w-5 h-5" />
+                                        <span className="text-3xl font-black">R$ {fmt(spotResult.suggestedSalesFreight)}</span>
+                                    </div>
+                                    <p className="text-[10px] text-blue-100/60 mt-3 leading-relaxed">
+                                        Para atingir a **margem de 15%** e cobrir o piso ANTT (R$ {fmt(spotResult.pisoANTT)}), o valor de venda sugerido para o cliente é este.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </>
                 ) : (
