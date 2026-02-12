@@ -13,7 +13,7 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
     const [spotOrigin, setSpotOrigin] = useState('');
     const [spotDest, setSpotDest] = useState('');
     const [spotFreight, setSpotFreight] = useState('');
-    const [spotAxles, setSpotAxles] = useState('6');
+    const [spotKm, setSpotKm] = useState('');
     const [spotVehicle, setSpotVehicle] = useState(Object.keys(vehicleConfigs)[0] || 'Truck');
     const [spotResult, setSpotResult] = useState<any>(null);
     const [spotLoading, setSpotLoading] = useState(false);
@@ -23,14 +23,20 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
         setSpotLoading(true);
         try {
             const config = vehicleConfigs[spotVehicle];
-            const axles = parseInt(spotAxles) || config?.axles || 6;
+            const configAxles = config?.axles || 6;
 
-            // Fetch distance
-            const distResult = await estimateDistance(spotOrigin, spotDest, spotVehicle, axles);
-            const dist = distResult.km;
-            const tolls = distResult.estimatedTolls;
-            setSpotOrigin(distResult.originNormalized);
-            setSpotDest(distResult.destinationNormalized);
+            let dist = parseFloat(spotKm.replace(',', '.')) || 0;
+            let tolls = spotResult?.tolls || 0;
+
+            // Fetch distance IF KM is 0 or empty
+            if (dist <= 0) {
+                const distResult = await estimateDistance(spotOrigin, spotDest, spotVehicle, configAxles);
+                dist = distResult.km;
+                tolls = distResult.estimatedTolls;
+                setSpotKm(dist.toString());
+                setSpotOrigin(distResult.originNormalized);
+                setSpotDest(distResult.destinationNormalized);
+            }
 
             const freteOfertado = parseFloat(spotFreight.replace(',', '.')) || 0;
 
@@ -70,7 +76,7 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                 icmsRate, icmsCheio, creditoPresumido, icmsEfetivo,
                 fedTaxPercent, fedTaxAmount, impostoTotal,
                 ebitda, ebitdaPercent,
-                anttOk, ebitdaOk, canTake, axles,
+                anttOk, ebitdaOk, canTake, axles: configAxles,
                 configFixed: config?.fixed || 0,
                 configVariable: config?.variable || 0,
                 configFactor: config?.factor || 0,
@@ -102,10 +108,10 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                             <input type="text" className="w-full px-6 py-4 bg-blue-50 rounded-2xl font-black text-xl text-blue-700 border-2 border-blue-200 focus:border-blue-400 outline-none" value={spotFreight} onChange={e => setSpotFreight(e.target.value)} placeholder="0,00" />
                         </div>
                         <div>
-                            <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Config. Eixos</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Distância (KM)</label>
                             <div className="flex items-center gap-3">
-                                <input type="number" className="w-24 px-4 py-4 bg-slate-50 rounded-2xl font-black text-center border-2 border-transparent focus:border-blue-200 outline-none" value={spotAxles} onChange={e => setSpotAxles(e.target.value)} />
-                                <span className="text-sm font-bold text-slate-400">Eixos</span>
+                                <input type="text" className="w-full px-4 py-4 bg-slate-50 rounded-2xl font-black text-center border-2 border-transparent focus:border-blue-200 outline-none" value={spotKm} onChange={e => setSpotKm(e.target.value)} placeholder="Auto" />
+                                <span className="text-[10px] font-black text-slate-400 uppercase">KM</span>
                             </div>
                         </div>
                     </div>
