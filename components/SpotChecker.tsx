@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Zap, RotateCcw, CheckCircle, AlertTriangle, Calendar, MapPin, AlertCircle, Handshake, TrendingUp } from 'lucide-react';
+import { Zap, RotateCcw, CheckCircle, AlertTriangle, Calendar, MapPin, AlertCircle, Handshake, TrendingUp, PieChart } from 'lucide-react';
 import { ANTTCoefficients, FederalTaxes } from '../types';
 import { estimateDistance } from '../services/geminiService';
 
@@ -8,9 +8,11 @@ interface SpotCheckerProps {
     vehicleConfigs: Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>;
     fedTaxes: FederalTaxes;
     onAcceptCharge?: (data: { origin: string; dest: string; freight: number; km: number; vehicleType: string }) => void;
+    onSimulated?: () => void;
+    stats?: { simulated: number; converted: number };
 }
 
-export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTaxes, onAcceptCharge }) => {
+export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTaxes, onAcceptCharge, onSimulated, stats }) => {
     const [spotOrigin, setSpotOrigin] = useState('');
     const [spotDest, setSpotDest] = useState('');
     const [spotFreight, setSpotFreight] = useState('');
@@ -94,6 +96,7 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                 configCalcMode: config?.calcMode || 'ANTT',
                 vehicleName: spotVehicle
             });
+            onSimulated?.();
         } catch (err) {
             console.error(err);
         } finally {
@@ -142,12 +145,38 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                     </button>
                 </div>
 
+                {/* Analytics Dashboard */}
+                {stats && (
+                    <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-xl text-white space-y-6">
+                        <div className="flex items-center gap-3">
+                            <PieChart className="w-6 h-6 text-blue-300" />
+                            <h3 className="font-black text-xs uppercase tracking-widest text-blue-200">Funil de Aproveitamento</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-white/10 p-4 rounded-2xl border border-white/10">
+                                <p className="text-[9px] font-bold uppercase text-blue-200 mb-1">Simuladas</p>
+                                <p className="text-2xl font-black">{stats.simulated}</p>
+                            </div>
+                            <div className="bg-emerald-500/20 p-4 rounded-2xl border border-emerald-500/20">
+                                <p className="text-[9px] font-bold uppercase text-emerald-300 mb-1">Geradas</p>
+                                <p className="text-2xl font-black text-emerald-400">{stats.converted}</p>
+                            </div>
+                        </div>
+                        <div className="bg-white/5 p-4 rounded-2xl flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase text-blue-100/60">Taxa de Conversão</span>
+                            <span className="text-lg font-black text-blue-300">
+                                {stats.simulated > 0 ? ((stats.converted / stats.simulated) * 100).toFixed(1) : '0.0'}%
+                            </span>
+                        </div>
+                    </div>
+                )}
+
                 {/* Tax Summary Card */}
                 {spotResult && (
-                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border space-y-3 animate-fade-in">
+                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border space-y-3 animate-fade-in text-center lg:text-left">
                         <h3 className="font-black text-[11px] uppercase text-slate-400 tracking-widest">Resumo Tributário Automatizado</h3>
                         <p className="text-xs text-slate-500 leading-relaxed">
-                            O cálculo considera Alíquotas Interestaduais ({spotResult.icmsRate}%), e o crédito presumido de 20% sobre o ICMS devido.
+                            O cálculo considera Alíquotas Interestaduais (ICMS) e carga federal completa.
                         </p>
                     </div>
                 )}
