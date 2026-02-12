@@ -7,9 +7,10 @@ import { estimateDistance } from '../services/geminiService';
 interface SpotCheckerProps {
     vehicleConfigs: Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>;
     fedTaxes: FederalTaxes;
+    onAcceptCharge?: (data: { origin: string; dest: string; freight: number; km: number; vehicleType: string }) => void;
 }
 
-export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTaxes }) => {
+export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTaxes, onAcceptCharge }) => {
     const [spotOrigin, setSpotOrigin] = useState('');
     const [spotDest, setSpotDest] = useState('');
     const [spotFreight, setSpotFreight] = useState('');
@@ -157,10 +158,10 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                 {spotResult ? (
                     <>
                         {/* Decision Badge */}
-                        <div className={`p-8 rounded-[2.5rem] shadow-xl text-white relative overflow-hidden ${spotResult.canTake ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                        <div className={`p-8 rounded-[2.5rem] shadow-xl text-white relative overflow-hidden ${spotResult.canTake ? 'bg-emerald-500' : 'bg-red-500'}`}>
                             <div className="absolute -right-8 -top-8 w-40 h-40 bg-white/10 rounded-full"></div>
                             <div className="flex items-start gap-6">
-                                <div className={`p-4 rounded-2xl ${spotResult.canTake ? 'bg-emerald-400' : 'bg-amber-400'}`}>
+                                <div className={`p-4 rounded-2xl ${spotResult.canTake ? 'bg-emerald-400' : 'bg-red-400'}`}>
                                     {spotResult.canTake ? <CheckCircle className="w-10 h-10" /> : <AlertTriangle className="w-10 h-10" />}
                                 </div>
                                 <div>
@@ -171,6 +172,52 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                                     <p className="text-sm font-bold opacity-90 mt-1">Margem EBITDA Real: {spotResult.ebitdaPercent.toFixed(1)}%</p>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Strategic Insights Section - MOVED HERE */}
+                        <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-xl text-white space-y-6">
+                            <div className="flex items-center gap-3">
+                                <Handshake className="w-6 h-6 text-blue-300" />
+                                <h3 className="font-black text-xs uppercase tracking-widest text-blue-200">Insights de Negociação</h3>
+                            </div>
+
+                            {spotResult.canTake ? (
+                                <div className="bg-white/10 p-6 rounded-2xl border border-white/10">
+                                    <p className="text-[10px] font-bold uppercase text-blue-200 mb-2">Teto para o Motorista</p>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-3xl font-black">R$ {fmt(spotResult.maxDriverPayment)}</span>
+                                    </div>
+                                    <p className="text-[10px] text-blue-100/60 mt-3 leading-relaxed">
+                                        Para resguardar sua **margem de 15%**, você pode pagar até este valor ao motorista (incluindo pedágios).
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-white/10 p-6 rounded-2xl border border-white/10">
+                                    <p className="text-[10px] font-bold uppercase text-amber-300 mb-2">Frete de Venda Ideal</p>
+                                    <div className="flex items-baseline gap-2 text-amber-400">
+                                        <TrendingUp className="w-5 h-5" />
+                                        <span className="text-3xl font-black">R$ {fmt(spotResult.suggestedSalesFreight)}</span>
+                                    </div>
+                                    <p className="text-[10px] text-blue-100/60 mt-3 leading-relaxed">
+                                        Para atingir a **margem de 15%** e cobrir o piso ANTT (R$ {fmt(spotResult.pisoANTT)}), o valor de venda sugerido para o cliente é este.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* PEGARK CARGA BUTTON */}
+                            <button
+                                onClick={() => onAcceptCharge?.({
+                                    origin: spotOrigin,
+                                    dest: spotDest,
+                                    freight: spotResult.freteOfertado,
+                                    km: spotResult.dist,
+                                    vehicleType: spotVehicle
+                                })}
+                                className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg transition-all flex items-center justify-center gap-2 group"
+                            >
+                                <Zap className="w-4 h-4 fill-white group-hover:scale-110 transition-transform" />
+                                PEGAR CARGA E GERAR COTAÇÃO
+                            </button>
                         </div>
 
                         {/* Formação do Piso ANTT — Formula Breakdown */}
@@ -290,36 +337,6 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                             </div>
                         </div>
 
-                        {/* Strategic Insights Section */}
-                        <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-xl text-white space-y-6">
-                            <div className="flex items-center gap-3">
-                                <Handshake className="w-6 h-6 text-blue-300" />
-                                <h3 className="font-black text-xs uppercase tracking-widest text-blue-200">Insights de Negociação</h3>
-                            </div>
-
-                            {spotResult.canTake ? (
-                                <div className="bg-white/10 p-6 rounded-2xl border border-white/10">
-                                    <p className="text-[10px] font-bold uppercase text-blue-200 mb-2">Teto para o Motorista</p>
-                                    <div className="flex items-baseline gap-2">
-                                        <span className="text-3xl font-black">R$ {fmt(spotResult.maxDriverPayment)}</span>
-                                    </div>
-                                    <p className="text-[10px] text-blue-100/60 mt-3 leading-relaxed">
-                                        Para resguardar sua **margem de 15%**, você pode pagar até este valor ao motorista (incluindo pedágios).
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="bg-white/10 p-6 rounded-2xl border border-white/10">
-                                    <p className="text-[10px] font-bold uppercase text-amber-300 mb-2">Frete de Venda Ideal</p>
-                                    <div className="flex items-baseline gap-2 text-amber-400">
-                                        <TrendingUp className="w-5 h-5" />
-                                        <span className="text-3xl font-black">R$ {fmt(spotResult.suggestedSalesFreight)}</span>
-                                    </div>
-                                    <p className="text-[10px] text-blue-100/60 mt-3 leading-relaxed">
-                                        Para atingir a **margem de 15%** e cobrir o piso ANTT (R$ {fmt(spotResult.pisoANTT)}), o valor de venda sugerido para o cliente é este.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
                     </>
                 ) : (
                     <div className="bg-white p-16 rounded-[2.5rem] shadow-sm border flex flex-col items-center justify-center text-center gap-4">

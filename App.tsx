@@ -162,7 +162,18 @@ const App: React.FC = () => {
 
     const handleLogout = () => {
         setCurrentUser(null);
+        setLoginForm({ username: '', password: '' });
         setShowConfigModal(false);
+    };
+
+    const handleAcceptSpotCharge = (data: { origin: string; dest: string; freight: number; km: number; vehicleType: string }) => {
+        setOrigin(data.origin);
+        setDestination(data.dest);
+        setBaseFreight(data.freight.toString());
+        setDistanceKm(data.km.toString());
+        setVehicleType(data.vehicleType);
+        setActiveTab('new');
+        showFeedback("Carga capturada! Continue a cotação abaixo.");
     };
 
     const formatCur = (val: number | undefined | null) => {
@@ -800,7 +811,7 @@ Disponibilidade: ${disponibilidade}`;
 
                     {activeTab === 'spot' && (
                         <div className="space-y-8 animate-fade-in-up">
-                            <SpotChecker vehicleConfigs={vehicleConfigs} fedTaxes={fedTaxes} />
+                            <SpotChecker vehicleConfigs={vehicleConfigs} fedTaxes={fedTaxes} onAcceptCharge={handleAcceptSpotCharge} />
                         </div>
                     )}
 
