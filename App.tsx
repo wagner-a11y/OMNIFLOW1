@@ -1447,7 +1447,7 @@ Disponibilidade: ${disponibilidade}`;
                                             <h3 className="font-black text-[#344a5e]">Configuração de Frota e ANTT</h3>
                                             <button onClick={() => {
                                                 const name = prompt("Nome do novo tipo de veículo:");
-                                                if (name) handleUpdateVehicleConfig(name, { capacity: 10000, consumption: 2.5, factor: 0, fixed: 0, variable: 0, calcMode: 'ANTT' });
+                                                if (name) handleUpdateVehicleConfig(name, { capacity: 10000, axles: 2, factor: 0, fixed: 0, variable: 0, calcMode: 'ANTT' });
                                             }} className="px-4 py-2 bg-blue-100 text-blue-600 rounded-xl font-black text-[10px] uppercase hover:bg-blue-200 transition-colors">
                                                 + Novo Veículo
                                             </button>
@@ -1464,8 +1464,8 @@ Disponibilidade: ${disponibilidade}`;
                                                         <input type="number" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.capacity} onChange={e => handleUpdateVehicleConfig(key, { ...config, capacity: Number(e.target.value) })} />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Consumo (KM/L)</label>
-                                                        <input type="number" step="0.1" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.consumption} onChange={e => handleUpdateVehicleConfig(key, { ...config, consumption: Number(e.target.value) })} />
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Qtd. Eixos</label>
+                                                        <input type="number" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.axles || 2} onChange={e => handleUpdateVehicleConfig(key, { ...config, axles: Number(e.target.value) })} />
                                                     </div>
                                                     <div>
                                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Modo Cálculo</label>
