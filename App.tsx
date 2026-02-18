@@ -431,7 +431,10 @@ const App: React.FC = () => {
             const config = vehicleConfigs[vehicleType];
             const result = await estimateDistance(origin, destination, vehicleType, config?.axles);
             if (result.error) {
-                showFeedback(`Erro no KM: ${result.error}`, 'error');
+                console.warn('Distance estimation failed:', result.error, result.details);
+                const detailStr = result.details?.google ? ` (Google: ${result.details.google})` : '';
+                showFeedback(`Erro no KM: ${result.error}${detailStr}`, 'error');
+                setDistanceKm('0'); // Reset to 0 on error to avoid confusion
             } else {
                 setDistanceKm(result.km.toString());
                 setOrigin(result.originNormalized);
@@ -1057,9 +1060,23 @@ Disponibilidade: ${disponibilidade}`;
                                             <input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={weight} onChange={e => setWeight(e.target.value)} placeholder="Peso KG" />
                                         </div>
                                         <div className="relative">
-                                            <MapIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                                            <input type="text" className="w-full pl-10 pr-12 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={distanceKm} onChange={e => setDistanceKm(e.target.value)} placeholder="KM" />
-                                            <button onClick={handleFetchDistance} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white text-blue-500 rounded-xl shadow-sm hover:bg-blue-50 transition-all border border-slate-100" title="Recalcular Distância"><RotateCcw className="w-3 h-3" /></button>
+                                            <MapIcon className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${loadingDistance ? 'text-blue-500 animate-pulse' : 'text-slate-300'}`} />
+                                            <input
+                                                type="text"
+                                                className={`w-full pl-10 pr-12 py-4 rounded-2xl font-black outline-none border-2 transition-all ${loadingDistance ? 'bg-blue-50 border-blue-200 text-blue-400' : 'bg-slate-50 border-transparent focus:border-blue-100'}`}
+                                                value={loadingDistance ? "Calculando..." : distanceKm}
+                                                onChange={e => setDistanceKm(e.target.value)}
+                                                placeholder="KM"
+                                                disabled={loadingDistance}
+                                            />
+                                            <button
+                                                onClick={handleFetchDistance}
+                                                disabled={loadingDistance}
+                                                className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white rounded-xl shadow-sm transition-all border border-slate-100 ${loadingDistance ? 'opacity-50 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-50'}`}
+                                                title="Recalcular Distância"
+                                            >
+                                                <RotateCcw className={`w-3 h-3 ${loadingDistance ? 'animate-spin' : ''}`} />
+                                            </button>
                                         </div>
                                         <select className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}><option value="">Selecione Cliente...</option>{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
                                         <select className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={disponibilidade} onChange={e => setDisponibilidade(e.target.value as Disponibilidade)}><option value="Imediato">Imediato</option><option value="Conforme programação">Programado</option></select>

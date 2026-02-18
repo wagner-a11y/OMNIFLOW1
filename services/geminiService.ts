@@ -10,8 +10,26 @@ export const estimateDistance = async (origin: string, destination: string, vehi
 
         if (error) {
             console.error('Supabase Edge Function Invoke Error:', error);
-            // Show feedback or alert for debugging on user side
-            return { km: 0, originNormalized: origin, destinationNormalized: destination, estimatedTolls: 0, error: error.message };
+            // If the error object has details/message, we use them
+            return {
+                km: 0,
+                originNormalized: origin,
+                destinationNormalized: destination,
+                estimatedTolls: 0,
+                error: error.message || 'Erro na comunicação com a Edge Function'
+            };
+        }
+
+        if (data?.error) {
+            console.warn('Edge Function returned internal error:', data.error);
+            return {
+                km: 0,
+                originNormalized: origin,
+                destinationNormalized: destination,
+                estimatedTolls: 0,
+                error: data.error,
+                details: data.details
+            };
         }
 
         console.log(`Route result:`, data);

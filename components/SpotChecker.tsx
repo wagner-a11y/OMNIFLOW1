@@ -35,9 +35,9 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
             if (dist <= 0) {
                 const distResult = await estimateDistance(spotOrigin, spotDest, spotVehicle, configAxles);
                 if (distResult.error) {
-                    // We don't have showFeedback here, we can use a local alert or similar
-                    // But for consistency let's just log and maybe add a UI flag
                     console.error('Spot KM Error:', distResult.error);
+                    // Add a temporary visual indicator of error if needed
+                    // For now, let's keep it simple as this component is less complex than App.tsx
                 } else {
                     dist = distResult.km;
                     tolls = distResult.estimatedTolls;
