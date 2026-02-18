@@ -34,11 +34,17 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
             // Fetch distance IF KM is 0 or empty
             if (dist <= 0) {
                 const distResult = await estimateDistance(spotOrigin, spotDest, spotVehicle, configAxles);
-                dist = distResult.km;
-                tolls = distResult.estimatedTolls;
-                setSpotKm(dist.toString());
-                setSpotOrigin(distResult.originNormalized);
-                setSpotDest(distResult.destinationNormalized);
+                if (distResult.error) {
+                    // We don't have showFeedback here, we can use a local alert or similar
+                    // But for consistency let's just log and maybe add a UI flag
+                    console.error('Spot KM Error:', distResult.error);
+                } else {
+                    dist = distResult.km;
+                    tolls = distResult.estimatedTolls;
+                    setSpotKm(dist.toString());
+                    setSpotOrigin(distResult.originNormalized);
+                    setSpotDest(distResult.destinationNormalized);
+                }
             }
 
             const freteOfertado = parseFloat(spotFreight.replace(',', '.')) || 0;

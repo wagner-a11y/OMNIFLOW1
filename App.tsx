@@ -430,9 +430,19 @@ const App: React.FC = () => {
         try {
             const config = vehicleConfigs[vehicleType];
             const result = await estimateDistance(origin, destination, vehicleType, config?.axles);
-            setDistanceKm(result.km.toString()); setOrigin(result.originNormalized); setDestination(result.destinationNormalized); setTolls(result.estimatedTolls.toString());
-            showFeedback("Rota sincronizada!");
-        } catch (err) { console.error(err); } finally { setLoadingDistance(false); }
+            if (result.error) {
+                showFeedback(`Erro no KM: ${result.error}`, 'error');
+            } else {
+                setDistanceKm(result.km.toString());
+                setOrigin(result.originNormalized);
+                setDestination(result.destinationNormalized);
+                setTolls(result.estimatedTolls.toString());
+                showFeedback("Rota sincronizada!");
+            }
+        } catch (err: any) {
+            console.error(err);
+            showFeedback(`Falha na conexão: ${err.message}`, 'error');
+        } finally { setLoadingDistance(false); }
     };
 
     const historicalAlert = useMemo(() => {
