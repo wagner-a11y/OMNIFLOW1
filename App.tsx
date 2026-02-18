@@ -51,10 +51,7 @@ const App: React.FC = () => {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [fedTaxes, setFedTaxes] = useState<FederalTaxes>({ pis: 0.65, cofins: 3.0, csll: 1.08, irpj: 1.2, insurancePolicyRate: 0.035 });
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
-    const [spotStats, setSpotStats] = useState(() => {
-        const saved = localStorage.getItem('flow_spot_stats');
-        return saved ? JSON.parse(saved) : { simulated: 0, converted: 0 };
-    });
+    const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
     const [activeTab, setActiveTab] = useState<'new' | 'history' | 'reverse' | 'dashboard' | 'crm' | 'spot'>('dashboard');
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals'>('financial');
@@ -109,7 +106,10 @@ const App: React.FC = () => {
             const historyData = await getFreightCalculations();
             setHistory(historyData);
             const configData = await getSystemConfig();
-            if (configData) setFedTaxes(configData);
+            if (configData) {
+                setFedTaxes(configData);
+                if (configData.spotStats) setSpotStats(configData.spotStats);
+            }
             const vehiclesData = await getVehicleConfigs();
             setVehicleConfigs(Object.keys(vehiclesData).length > 0 ? vehiclesData : VEHICLE_CONFIGS);
         } catch (error) {
@@ -118,9 +118,7 @@ const App: React.FC = () => {
         }
     };
 
-    useEffect(() => {
-        localStorage.setItem('flow_spot_stats', JSON.stringify(spotStats));
-    }, [spotStats]);
+    // spotStats persistence moved to database service
 
     const num = (s: string | number) => typeof s === 'string' ? (parseFloat(s.replace(',', '.')) || 0) : s;
 
@@ -174,19 +172,25 @@ const App: React.FC = () => {
         setShowConfigModal(false);
     };
 
-    const handleAcceptSpotCharge = (data: { origin: string; dest: string; freight: number; km: number; vehicleType: string }) => {
+    const handleAcceptSpotCharge = async (data: { origin: string; dest: string; freight: number; km: number; vehicleType: string }) => {
         setOrigin(data.origin);
         setDestination(data.dest);
         setBaseFreight(data.freight.toString());
         setDistanceKm(data.km.toString());
         setVehicleType(data.vehicleType);
-        setSpotStats((prev: { simulated: number; converted: number }) => ({ ...prev, converted: prev.converted + 1 }));
+
+        const newStats = { ...spotStats, converted: spotStats.converted + 1 };
+        setSpotStats(newStats);
+        await updateSystemConfig({ ...fedTaxes, spotStats: newStats });
+
         setActiveTab('new');
         showFeedback("Carga capturada! Continue a cotação abaixo.");
     };
 
-    const handleRecordSimulation = () => {
-        setSpotStats((prev: { simulated: number; converted: number }) => ({ ...prev, simulated: prev.simulated + 1 }));
+    const handleRecordSimulation = async () => {
+        const newStats = { ...spotStats, simulated: spotStats.simulated + 1 };
+        setSpotStats(newStats);
+        await updateSystemConfig({ ...fedTaxes, spotStats: newStats });
     };
 
     const formatCur = (val: number | undefined | null) => {

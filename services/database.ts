@@ -189,7 +189,8 @@ export const getSystemConfig = async (): Promise<FederalTaxes | null> => {
         csll: Number(data.csll),
         irpj: Number(data.irpj),
         insurancePolicyRate: Number(data.insurance_policy_rate),
-        goals: data.goals || {}
+        goals: data.goals || {},
+        spotStats: data.spot_stats || { simulated: 0, converted: 0 }
     };
 };
 
@@ -203,6 +204,7 @@ export const updateSystemConfig = async (config: FederalTaxes): Promise<boolean>
             irpj: config.irpj,
             insurance_policy_rate: config.insurancePolicyRate,
             goals: config.goals || {},
+            spot_stats: config.spotStats || { simulated: 0, converted: 0 },
             updated_at: new Date().toISOString()
         })
         .eq('id', 'default');
@@ -302,7 +304,9 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         updated_by_name: calc.updatedByName || null,
         lost_reason: calc.lostReason || null,
         lost_obs: calc.lostObs || null,
-        lost_file_url: calc.lostFileUrl || null
+        lost_file_url: calc.lostFileUrl || null,
+        real_profit: calc.realProfit || 0,
+        real_margin_percent: calc.realMarginPercent || 0
     };
 
     const { error } = await supabase
@@ -351,7 +355,9 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         updated_by_name: calc.updatedByName || null,
         lost_reason: calc.lostReason || null,
         lost_obs: calc.lostObs || null,
-        lost_file_url: calc.lostFileUrl || null
+        lost_file_url: calc.lostFileUrl || null,
+        real_profit: calc.realProfit || 0,
+        real_margin_percent: calc.realMarginPercent || 0
     };
 
     const { error } = await supabase

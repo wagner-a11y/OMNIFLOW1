@@ -54,6 +54,7 @@ export interface FederalTaxes {
     irpj: number;
     insurancePolicyRate: number;
     goals?: Record<string, number>; // Format: "YYYY-MM": value
+    spotStats?: { simulated: number; converted: number };
 }
 
 export interface FreightCalculation {
