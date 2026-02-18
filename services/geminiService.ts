@@ -1,4 +1,4 @@
-
+// Triggering fresh deploy to verify KM sync
 import { supabase } from './supabase';
 
 export const estimateDistance = async (origin: string, destination: string, vehicleType: string, axles?: number) => {
