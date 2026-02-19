@@ -787,13 +787,13 @@ Disponibilidade: ${disponibilidade}`;
                 </div>
                 <nav className="flex-1 px-4 space-y-3 mt-6 relative z-10">
                     {[
-                        { id: 'dashboard', icon: BarChart3, label: 'Visão Geral' },
+                        { id: 'dashboard', icon: BarChart3, label: 'Visão Geral', adminOnly: true },
                         { id: 'crm', icon: List, label: 'CRM' },
                         { id: 'spot', icon: Zap, label: 'Frete Rápido' },
                         { id: 'new', icon: PlusCircle, label: 'Formação Comercial' },
                         { id: 'reverse', icon: Target, label: 'Frete Cliente' },
                         { id: 'history', icon: History, label: 'Histórico' }
-                    ].map(item => (
+                    ].filter(item => !item.adminOnly || currentUser.role === 'master').map(item => (
                         <button key={item.id} onClick={() => { setActiveTab(item.id as any); if (item.id !== 'history' && item.id !== 'dashboard') resetForm(); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg translate-x-2' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
                             <item.icon className="w-5 h-5" />
                             <span className="font-black uppercase text-[10px] tracking-wider">{item.label}</span>
@@ -1333,7 +1333,16 @@ Disponibilidade: ${disponibilidade}`;
                                                 <p className="text-[9px] font-bold text-slate-400 uppercase">Lucro: R$ {formatCur(profitValue)}</p>
                                             </div>
                                             <div className="w-40 text-right"><p className="text-lg font-black text-[#344a5e]">R$ {formatCur(h.totalFreight)}</p></div>
-                                            <div className="w-20 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all"><button onClick={() => loadQuote(h)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit3 className="w-4 h-4" /></button><button onClick={async () => { if (await deleteFreightCalculation(h.id)) setHistory(prev => prev.filter(i => i.id !== h.id)); }} className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></div>
+                                            <div className="w-20 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                <button onClick={() => loadQuote(h)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg">
+                                                    <Edit3 className="w-4 h-4" />
+                                                </button>
+                                                {currentUser.role === 'master' && (
+                                                    <button onClick={async () => { if (await deleteFreightCalculation(h.id)) setHistory(prev => prev.filter(i => i.id !== h.id)); }} className="p-2 text-red-400 hover:bg-red-50 rounded-lg">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -1467,7 +1476,11 @@ Disponibilidade: ${disponibilidade}`;
                                                             setNewCustomerLogo(c.logoUrl || '');
                                                             setCustomerFilePreview(null);
                                                         }} className="p-2 text-blue-400 hover:bg-blue-50 rounded-lg"><Edit3 className="w-4 h-4" /></button>
-                                                        <button onClick={async () => { if (await deleteCustomer(c.id)) setCustomers(customers.filter(i => i.id !== c.id)); }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                                                        {currentUser.role === 'master' && (
+                                                            <button onClick={async () => { if (await deleteCustomer(c.id)) setCustomers(customers.filter(i => i.id !== c.id)); }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -1518,7 +1531,11 @@ Disponibilidade: ${disponibilidade}`;
                                             <div key={key} className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm">
                                                 <div className="flex justify-between items-center mb-4">
                                                     <h4 className="font-black text-[#344a5e] uppercase flex items-center gap-2"><Truck className="w-4 h-4 text-slate-400" /> {key}</h4>
-                                                    <button onClick={() => handleDeleteVehicleConfig(key)} className="p-2 text-red-300 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                                                    {currentUser.role === 'master' && (
+                                                        <button onClick={() => handleDeleteVehicleConfig(key)} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                                                     <div>
@@ -1641,7 +1658,7 @@ Disponibilidade: ${disponibilidade}`;
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                        {u.role !== 'master' && (
+                                                        {currentUser.role === 'master' && u.id !== currentUser.id && (
                                                             <button onClick={async () => {
                                                                 if (await deleteUser(u.id)) {
                                                                     setUsers(users.filter(i => i.id !== u.id));
