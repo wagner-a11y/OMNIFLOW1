@@ -1118,114 +1118,115 @@ Disponibilidade: ${disponibilidade}`;
                                 </div>
                             </div>
 
-                            <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 hover:shadow-xl transition-all relative">
-                                <div className="lg:col-span-1 flex flex-col">
-                                    <div className="flex justify-between mb-2"><span className="text-[10px] font-black uppercase text-blue-600">{activeTab === 'reverse' ? 'Alvo Cliente' : 'Preço Base'}</span></div>
-                                    {activeTab === 'reverse' ? (
-                                        <input type="text" className="w-full p-4 rounded-xl font-black border-2 bg-blue-50 text-blue-600 border-blue-200 transition-all" placeholder="Alvo Cliente" value={targetFreightClient} onChange={e => setTargetFreightClient(e.target.value)} />
-                                    ) : (
-                                        <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={baseFreight} onChange={e => setBaseFreight(e.target.value)} />
-                                    )}
-                                </div>
-                                <div className="lg:col-span-1 flex flex-col">
-                                    <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Pedágio</span></div>
-                                    <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={tolls} onChange={e => setTolls(e.target.value)} />
-                                </div>
-                                <div className="lg:col-span-1 flex flex-col">
-                                    <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Valor Mercadoria</span></div>
-                                    <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={goodsValue} onChange={e => setGoodsValue(e.target.value)} placeholder="R$ 0,00" />
-                                </div>
-                                <div className="lg:col-span-1 flex flex-col">
-                                    <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Ad Val (%)</span></div>
-                                    <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={insurancePercent} onChange={e => setInsurancePercent(e.target.value)} />
-                                </div>
-                                <div className="lg:col-span-1 flex flex-col">
-                                    <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Margem de Lucro (%)</span></div>
-                                    <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={profitMargin} onChange={e => setProfitMargin(e.target.value)} />
-                                </div>
-                                <div className="lg:col-span-1 flex flex-col">
-                                    <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">ICMS Destino (%)</span></div>
-                                    <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={icmsPercent} onChange={e => setIcmsPercent(e.target.value)} />
-                                </div>
-                            </div>
-
-                            {/* Advanced Extra Costs Management */}
-                            <div className="bg-slate-50/50 p-8 rounded-[2rem] border-2 border-dashed border-slate-200 mt-6 animate-in fade-in slide-in-from-top-4 duration-700">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
-                                    <div>
-                                        <h4 className="text-sm font-black text-[#344a5e] uppercase tracking-wider flex items-center gap-2">
-                                            <PlusCircle className="w-5 h-5 text-blue-500" /> Custos Adicionais Específicos
-                                        </h4>
-                                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Adicione custos como Batedor, Descarga, Licenças ou Agenciamento</p>
+                            <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border hover:shadow-xl transition-all relative">
+                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
+                                    <div className="lg:col-span-1 flex flex-col">
+                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black uppercase text-blue-600">{activeTab === 'reverse' ? 'Alvo Cliente' : 'Preço Base'}</span></div>
+                                        {activeTab === 'reverse' ? (
+                                            <input type="text" className="w-full p-4 rounded-xl font-black border-2 bg-blue-50 text-blue-600 border-blue-200 transition-all" placeholder="Alvo Cliente" value={targetFreightClient} onChange={e => setTargetFreightClient(e.target.value)} />
+                                        ) : (
+                                            <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={baseFreight} onChange={e => setBaseFreight(e.target.value)} />
+                                        )}
                                     </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {['Batedor', 'Descarga', 'Licenças', 'Agenciamento', 'Outros'].map(cat => (
-                                            <button
-                                                key={cat}
-                                                onClick={() => {
-                                                    const id = Date.now().toString();
-                                                    setOtherCosts(prev => [...prev, { id, label: cat, value: 0 }]);
-                                                }}
-                                                className="px-4 py-2 bg-white hover:bg-blue-500 hover:text-white rounded-full text-[10px] font-black uppercase transition-all shadow-sm border border-slate-100 flex items-center gap-2 group"
-                                            >
-                                                <Plus className="w-3 h-3 text-blue-400 group-hover:text-white" /> {cat}
-                                            </button>
-                                        ))}
+                                    <div className="lg:col-span-1 flex flex-col">
+                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Pedágio</span></div>
+                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={tolls} onChange={e => setTolls(e.target.value)} />
+                                    </div>
+                                    <div className="lg:col-span-1 flex flex-col">
+                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Valor Mercadoria</span></div>
+                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={goodsValue} onChange={e => setGoodsValue(e.target.value)} placeholder="R$ 0,00" />
+                                    </div>
+                                    <div className="lg:col-span-1 flex flex-col">
+                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Ad Val (%)</span></div>
+                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={insurancePercent} onChange={e => setInsurancePercent(e.target.value)} />
+                                    </div>
+                                    <div className="lg:col-span-1 flex flex-col">
+                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Margem de Lucro (%)</span></div>
+                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={profitMargin} onChange={e => setProfitMargin(e.target.value)} />
+                                    </div>
+                                    <div className="lg:col-span-1 flex flex-col">
+                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">ICMS Destino (%)</span></div>
+                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={icmsPercent} onChange={e => setIcmsPercent(e.target.value)} />
                                     </div>
                                 </div>
 
-                                {otherCosts.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {otherCosts.map((cost, idx) => (
-                                            <div key={cost.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 group animate-in zoom-in-95 duration-300">
-                                                <div className="flex-1">
-                                                    <div className="flex justify-between mb-1">
-                                                        <input
-                                                            type="text"
-                                                            className="bg-transparent text-[10px] font-black uppercase text-slate-500 outline-none w-full"
-                                                            value={cost.label}
-                                                            onChange={(e) => {
-                                                                const newCosts = [...otherCosts];
-                                                                newCosts[idx].label = e.target.value;
-                                                                setOtherCosts(newCosts);
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <div className="relative">
-                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">R$</span>
-                                                        <input
-                                                            type="text"
-                                                            className="w-full pl-8 pr-4 py-2 bg-slate-50 rounded-xl font-black text-[#344a5e] outline-none border-2 border-transparent focus:border-blue-100 transition-all text-sm"
-                                                            placeholder="0,00"
-                                                            value={cost.value === 0 ? '' : cost.value.toString()}
-                                                            onChange={(e) => {
-                                                                const val = e.target.value === '' ? 0 : parseFloat(e.target.value.replace(',', '.')) || 0;
-                                                                const newCosts = [...otherCosts];
-                                                                newCosts[idx].value = val;
-                                                                setOtherCosts(newCosts);
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </div>
+                                {/* Advanced Extra Costs Management - Unified inside main card */}
+                                <div className="pt-8 border-t border-slate-100 border-dashed animate-in fade-in slide-in-from-top-4 duration-700">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+                                        <div>
+                                            <h4 className="text-sm font-black text-[#344a5e] uppercase tracking-wider flex items-center gap-2">
+                                                <PlusCircle className="w-5 h-5 text-blue-500" /> Custos Adicionais Específicos
+                                            </h4>
+                                            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Batedor, Descarga, Licenças, Agenciamento...</p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {['Batedor', 'Descarga', 'Licenças', 'Agenciamento', 'Outros'].map(cat => (
                                                 <button
-                                                    onClick={() => setOtherCosts(prev => prev.filter(c => c.id !== cost.id))}
-                                                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                    key={cat}
+                                                    onClick={() => {
+                                                        const id = Date.now().toString();
+                                                        setOtherCosts(prev => [...prev, { id, label: cat, value: 0 }]);
+                                                    }}
+                                                    className="px-4 py-2 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-full text-[10px] font-black uppercase transition-all shadow-sm border border-slate-100 flex items-center gap-2 group"
                                                 >
-                                                    <Trash2 className="w-4 h-4" />
+                                                    <Plus className="w-3 h-3 text-blue-400 group-hover:text-white" /> {cat}
                                                 </button>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                ) : (
-                                    <div className="py-10 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-100 rounded-3xl">
-                                        <Activity className="w-8 h-8 mb-2 opacity-20" />
-                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Nenhum custo adicional inserido</p>
-                                    </div>
-                                )}
 
-                                <div className="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center px-4">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Adicionais:</span>
-                                    <span className="text-xl font-black text-blue-600">R$ {formatCur(otherCosts.reduce((acc, c) => acc + c.value, 0))}</span>
+                                    {otherCosts.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            {otherCosts.map((cost, idx) => (
+                                                <div key={cost.id} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex items-center gap-4 group animate-in zoom-in-95 duration-300">
+                                                    <div className="flex-1">
+                                                        <div className="flex justify-between mb-1">
+                                                            <input
+                                                                type="text"
+                                                                className="bg-transparent text-[10px] font-black uppercase text-slate-500 outline-none w-full"
+                                                                value={cost.label}
+                                                                onChange={(e) => {
+                                                                    const newCosts = [...otherCosts];
+                                                                    newCosts[idx].label = e.target.value;
+                                                                    setOtherCosts(newCosts);
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <div className="relative">
+                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">R$</span>
+                                                            <input
+                                                                type="text"
+                                                                className="w-full pl-8 pr-4 py-2 bg-white rounded-xl font-black text-[#344a5e] outline-none border-2 border-transparent focus:border-blue-100 transition-all text-sm"
+                                                                placeholder="0,00"
+                                                                value={cost.value === 0 ? '' : cost.value.toString()}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value.replace(',', '.')) || 0;
+                                                                    const newCosts = [...otherCosts];
+                                                                    newCosts[idx].value = val;
+                                                                    setOtherCosts(newCosts);
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setOtherCosts(prev => prev.filter(c => c.id !== cost.id))}
+                                                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="py-6 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-100 rounded-3xl opacity-60">
+                                            <p className="text-[9px] font-black uppercase tracking-widest">Nenhum custo adicional inserido</p>
+                                        </div>
+                                    )}
+
+                                    <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center px-4">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Adicionais:</span>
+                                        <span className="text-lg font-black text-blue-600">R$ {formatCur(otherCosts.reduce((acc, c) => acc + c.value, 0))}</span>
+                                    </div>
                                 </div>
                             </div>
 
