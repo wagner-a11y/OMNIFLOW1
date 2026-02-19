@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { SpotChecker } from './components/SpotChecker';
-import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade } from './types';
+import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { estimateDistance } from './services/geminiService';
 import {
@@ -81,6 +81,7 @@ const App: React.FC = () => {
     const [tolls, setTolls] = useState<string>('0');
     const [extraCosts, setExtraCosts] = useState<string>('0');
     const [extraCostsDescription, setExtraCostsDescription] = useState('');
+    const [otherCosts, setOtherCosts] = useState<ExtraCostItem[]>([]);
     const [goodsValue, setGoodsValue] = useState<string>('0');
     const [insurancePercent, setInsurancePercent] = useState<string>('0.2');
     const [profitMargin, setProfitMargin] = useState<string>('15');
@@ -407,23 +408,30 @@ const App: React.FC = () => {
             const fedTaxesAmount = finalFreight * (totalFedTaxPercent / 100);
             const netRevenue = finalFreight - icmsAmount - fedTaxesAmount;
             const maxDirectCosts = netRevenue * marginDivisor;
-            const buyerPower = maxDirectCosts - t - ec - adValoremSelling;
-            const realDirectCosts = buyerPower + t + ec + adValoremCost;
+
+            const totalOtherCosts = otherCosts.reduce((acc, curr) => acc + curr.value, 0);
+            const totalEc = ec + totalOtherCosts;
+
+            const buyerPower = maxDirectCosts - t - totalEc - adValoremSelling;
+            const realDirectCosts = buyerPower + t + totalEc + adValoremCost;
             const realProfitAmount = netRevenue - realDirectCosts;
             const realMarginPercent = finalFreight > 0 ? (realProfitAmount / finalFreight) * 100 : 0;
-            return { directCosts: buyerPower + t + ec + adValoremSelling, realDirectCosts, priceAfterMargin: maxDirectCosts, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, buyerPower: Math.max(0, buyerPower) };
+            return { directCosts: buyerPower + t + totalEc + adValoremSelling, realDirectCosts, priceAfterMargin: maxDirectCosts, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, buyerPower: Math.max(0, buyerPower) };
         }
 
-        const directCostsSelling = bf + t + ec + adValoremSelling;
+        const totalOtherCosts = otherCosts.reduce((acc, curr) => acc + curr.value, 0);
+        const totalEc = ec + totalOtherCosts;
+
+        const directCostsSelling = bf + t + totalEc + adValoremSelling;
         const priceWithMargin = marginDivisor > 0 ? directCostsSelling / marginDivisor : directCostsSelling;
         const finalFreight = icmsDivisor > 0 ? priceWithMargin / icmsDivisor : priceWithMargin;
         const icmsAmount = finalFreight * (icmsP / 100);
         const fedTaxesAmount = finalFreight * (totalFedTaxPercent / 100);
-        const realDirectCosts = bf + t + ec + adValoremCost;
+        const realDirectCosts = bf + t + totalEc + adValoremCost;
         const realProfitAmount = finalFreight - icmsAmount - fedTaxesAmount - realDirectCosts;
         const realMarginPercent = finalFreight > 0 ? (realProfitAmount / finalFreight) * 100 : 0;
         return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, buyerPower: 0 };
-    }, [baseFreight, tolls, extraCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes, activeTab, targetFreightClient]);
+    }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes, activeTab, targetFreightClient]);
 
     const handleFetchDistance = async () => {
         if (!origin || !destination) return;
@@ -484,7 +492,8 @@ const App: React.FC = () => {
             tolls: parseFloat(tolls.replace(',', '.')) || 0, extraCosts: parseFloat(extraCosts.replace(',', '.')) || 0, extraCostsDescription, goodsValue: parseFloat(goodsValue.replace(',', '.')) || 0, insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
             pisPercent: fedTaxes.pis, cofinsPercent: fedTaxes.cofins, csllPercent: fedTaxes.csll, irpjPercent: fedTaxes.irpj,
             totalFreight: calcData.finalFreight, createdAt: createdDate, disponibilidade, status, updatedBy: currentUser?.id, updatedByName: currentUser?.name,
-            realProfit: calcData.realProfitAmount, realMarginPercent: calcData.realMarginPercent
+            realProfit: calcData.realProfitAmount, realMarginPercent: calcData.realMarginPercent,
+            otherCosts
         };
 
         console.log("Saving data object:", data);
@@ -526,13 +535,14 @@ const App: React.FC = () => {
         setGoodsValue(quote.goodsValue.toString()); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
         setIcmsPercent(quote.icmsPercent.toString()); setEditingId(quote.id); setDisponibilidade(quote.disponibilidade || "Imediato");
         setMerchandiseType(quote.merchandiseType || '');
+        setOtherCosts(quote.otherCosts || []);
         setActiveTab('new'); showFeedback("Editando...");
     };
 
     const resetForm = () => {
         setOrigin(''); setDestination(''); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
         setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setTargetFreightClient('0'); setEditingId(null);
-        setDisponibilidade("Imediato"); setMerchandiseType('');
+        setDisponibilidade("Imediato"); setMerchandiseType(''); setOtherCosts([]);
     };
 
     const handleCopyQuoteText = () => {
@@ -678,7 +688,16 @@ Disponibilidade: ${disponibilidade}`;
             doc.setFont("helvetica", "bold");
             doc.text("3. Detalhes do Serviço", 15, currentY); currentY += spacing + 1;
             doc.setFont("helvetica", "normal");
-            doc.text(`•   Incluso: Frete, pedágio${num(insurancePercent) > 0 ? ', seguro' : ''} e impostos. Modalidade: Rodoviário dedicado.`, indent, currentY); currentY += spacing + 3;
+
+            let detailsText = `•   Incluso: Frete, pedágio${num(insurancePercent) > 0 ? ', seguro' : ''} e impostos.`;
+            if (otherCosts.length > 0) {
+                detailsText += " Adicionais inclusos: " + otherCosts.map(c => `${c.label} (R$ ${formatCur(c.value)})`).join(', ') + ".";
+            }
+            detailsText += " Modalidade: Rodoviário dedicado.";
+
+            const splitDetails = doc.splitTextToSize(detailsText, 175);
+            doc.text(splitDetails, indent, currentY);
+            currentY += (splitDetails.length * spacing) + 3;
 
             // 4/5. Condições e Diferenciais
             doc.setFont("helvetica", "bold");
@@ -1127,6 +1146,86 @@ Disponibilidade: ${disponibilidade}`;
                                 <div className="lg:col-span-1 flex flex-col">
                                     <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">ICMS Destino (%)</span></div>
                                     <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={icmsPercent} onChange={e => setIcmsPercent(e.target.value)} />
+                                </div>
+                            </div>
+
+                            {/* Advanced Extra Costs Management */}
+                            <div className="bg-slate-50/50 p-8 rounded-[2rem] border-2 border-dashed border-slate-200 mt-6 animate-in fade-in slide-in-from-top-4 duration-700">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+                                    <div>
+                                        <h4 className="text-sm font-black text-[#344a5e] uppercase tracking-wider flex items-center gap-2">
+                                            <PlusCircle className="w-5 h-5 text-blue-500" /> Custos Adicionais Específicos
+                                        </h4>
+                                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Adicione custos como Batedor, Descarga, Licenças ou Agenciamento</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {['Batedor', 'Descarga', 'Licenças', 'Agenciamento', 'Outros'].map(cat => (
+                                            <button
+                                                key={cat}
+                                                onClick={() => {
+                                                    const id = Date.now().toString();
+                                                    setOtherCosts(prev => [...prev, { id, label: cat, value: 0 }]);
+                                                }}
+                                                className="px-4 py-2 bg-white hover:bg-blue-500 hover:text-white rounded-full text-[10px] font-black uppercase transition-all shadow-sm border border-slate-100 flex items-center gap-2 group"
+                                            >
+                                                <Plus className="w-3 h-3 text-blue-400 group-hover:text-white" /> {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {otherCosts.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {otherCosts.map((cost, idx) => (
+                                            <div key={cost.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 group animate-in zoom-in-95 duration-300">
+                                                <div className="flex-1">
+                                                    <div className="flex justify-between mb-1">
+                                                        <input
+                                                            type="text"
+                                                            className="bg-transparent text-[10px] font-black uppercase text-slate-500 outline-none w-full"
+                                                            value={cost.label}
+                                                            onChange={(e) => {
+                                                                const newCosts = [...otherCosts];
+                                                                newCosts[idx].label = e.target.value;
+                                                                setOtherCosts(newCosts);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div className="relative">
+                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">R$</span>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full pl-8 pr-4 py-2 bg-slate-50 rounded-xl font-black text-[#344a5e] outline-none border-2 border-transparent focus:border-blue-100 transition-all text-sm"
+                                                            placeholder="0,00"
+                                                            value={cost.value === 0 ? '' : cost.value.toString()}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value === '' ? 0 : parseFloat(e.target.value.replace(',', '.')) || 0;
+                                                                const newCosts = [...otherCosts];
+                                                                newCosts[idx].value = val;
+                                                                setOtherCosts(newCosts);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setOtherCosts(prev => prev.filter(c => c.id !== cost.id))}
+                                                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="py-10 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-100 rounded-3xl">
+                                        <Activity className="w-8 h-8 mb-2 opacity-20" />
+                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Nenhum custo adicional inserido</p>
+                                    </div>
+                                )}
+
+                                <div className="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center px-4">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Adicionais:</span>
+                                    <span className="text-xl font-black text-blue-600">R$ {formatCur(otherCosts.reduce((acc, c) => acc + c.value, 0))}</span>
                                 </div>
                             </div>
 

@@ -57,6 +57,12 @@ export interface FederalTaxes {
     spotStats?: { simulated: number; converted: number };
 }
 
+export interface ExtraCostItem {
+    id: string;
+    label: string;
+    value: number;
+}
+
 export interface FreightCalculation {
     id: string;
     proposalNumber: string;
@@ -73,6 +79,7 @@ export interface FreightCalculation {
     tolls: number;
     extraCosts: number;
     extraCostsDescription?: string;
+    otherCosts?: ExtraCostItem[];
     goodsValue: number;
     insurancePercent: number;
     adValorem: number;

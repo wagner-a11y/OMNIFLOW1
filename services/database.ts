@@ -266,7 +266,8 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
         updatedAt: item.updated_at,
         lostReason: item.lost_reason,
         lostObs: item.lost_obs,
-        lostFileUrl: item.lost_file_url
+        lostFileUrl: item.lost_file_url,
+        otherCosts: item.other_costs || []
     }));
 };
 
@@ -306,7 +307,8 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         lost_obs: calc.lostObs || null,
         lost_file_url: calc.lostFileUrl || null,
         real_profit: calc.realProfit || 0,
-        real_margin_percent: calc.realMarginPercent || 0
+        real_margin_percent: calc.realMarginPercent || 0,
+        other_costs: calc.otherCosts || []
     };
 
     const { error } = await supabase
@@ -357,7 +359,8 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         lost_obs: calc.lostObs || null,
         lost_file_url: calc.lostFileUrl || null,
         real_profit: calc.realProfit || 0,
-        real_margin_percent: calc.realMarginPercent || 0
+        real_margin_percent: calc.realMarginPercent || 0,
+        other_costs: calc.otherCosts || []
     };
 
     const { error } = await supabase
