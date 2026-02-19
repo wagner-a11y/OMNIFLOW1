@@ -20,6 +20,25 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
     const [spotVehicle, setSpotVehicle] = useState(Object.keys(vehicleConfigs)[0] || 'Truck');
     const [spotResult, setSpotResult] = useState<any>(null);
     const [spotLoading, setSpotLoading] = useState(false);
+    const [loadingDistance, setLoadingDistance] = useState(false);
+
+    const handleFetchDistance = async () => {
+        if (!spotOrigin || !spotDest) return;
+        setLoadingDistance(true);
+        try {
+            const config = vehicleConfigs[spotVehicle];
+            const result = await estimateDistance(spotOrigin, spotDest, spotVehicle, config?.axles);
+            if (!result.error) {
+                setSpotKm(result.km.toString());
+                setSpotOrigin(result.originNormalized);
+                setSpotDest(result.destinationNormalized);
+            }
+        } catch (err) {
+            console.error('Spot KM fetch error:', err);
+        } finally {
+            setLoadingDistance(false);
+        }
+    };
 
     const handleSpotCheck = async () => {
         if (!spotOrigin || !spotDest || !spotFreight) return;
@@ -119,8 +138,8 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border space-y-5">
                     <div>
                         <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Rota (Cidade/UF)</label>
-                        <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none mb-3" value={spotOrigin} onChange={e => setSpotOrigin(e.target.value)} placeholder="Origem — Ex: Serra, ES" />
-                        <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={spotDest} onChange={e => setSpotDest(e.target.value)} placeholder="Destino — Ex: Duque de Caxias, RJ" />
+                        <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none mb-3" value={spotOrigin} onChange={e => setSpotOrigin(e.target.value)} onBlur={handleFetchDistance} placeholder="Origem — Ex: Serra, ES" />
+                        <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={spotDest} onChange={e => setSpotDest(e.target.value)} onBlur={handleFetchDistance} placeholder="Destino — Ex: Duque de Caxias, RJ" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -130,7 +149,7 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                         <div>
                             <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Distância (KM)</label>
                             <div className="flex items-center gap-3">
-                                <input type="text" className="w-full px-4 py-4 bg-slate-50 rounded-2xl font-black text-center border-2 border-transparent focus:border-blue-200 outline-none" value={spotKm} onChange={e => setSpotKm(e.target.value)} placeholder="Auto" />
+                                <input type="text" className="w-full px-4 py-4 bg-slate-50 rounded-2xl font-black text-center border-2 border-transparent focus:border-blue-200 outline-none" value={loadingDistance ? "Calculando..." : spotKm} onChange={e => setSpotKm(e.target.value)} placeholder="Auto" disabled={loadingDistance} />
                                 <span className="text-[10px] font-black text-slate-400 uppercase">KM</span>
                             </div>
                         </div>
