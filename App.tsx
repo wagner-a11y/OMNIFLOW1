@@ -1054,307 +1054,294 @@ Disponibilidade: ${disponibilidade}`;
                     ) : activeTab !== 'history' && activeTab !== 'crm' && activeTab !== 'spot' ? (
                         <div className="space-y-8 animate-fade-in-up">
                             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                                <div className="lg:col-span-3 bg-white p-8 rounded-[2.5rem] shadow-sm border space-y-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="flex items-center gap-3"><Package className="w-5 h-5 text-blue-600" /><h3 className="font-black uppercase text-[11px] text-slate-400">Rota & Equipamento</h3></div>
-                                        {parseFloat(distanceKm) > 0 && (
-                                            <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-50 rounded-full border border-blue-100 animate-fade-in">
-                                                <MapIcon className="w-3 h-3 text-blue-500" />
-                                                <span className="text-[10px] font-black text-blue-600 uppercase">{(parseFloat(distanceKm) || 0).toLocaleString()} KM Sugeridos</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={origin} onChange={e => setOrigin(e.target.value)} onBlur={handleFetchDistance} placeholder="Origem (Cidade, UF)" />
-                                        <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={destination} onChange={e => setDestination(e.target.value)} onBlur={handleFetchDistance} placeholder="Destino (Cidade, UF)" />
-                                    </div>
-                                    {/* Alerta de Histórico */}
-                                    {/* Alerta de Histórico */}
-                                    {historicalAlert}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                                        <div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-blue-50/50 rounded-2xl font-bold border-2 border-blue-100 focus:border-blue-300 outline-none" value={clientReference} onChange={e => setClientReference(e.target.value)} placeholder="Ref Cliente" /></div>
-                                        <select className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>{Object.keys(vehicleConfigs).map(v => <option key={v} value={v}>{v}</option>)}</select>
-                                        <div className="relative col-span-1 md:col-span-2"><Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={merchandiseType} onChange={e => setMerchandiseType(e.target.value)} placeholder="Tipo da Mercadoria (Ex: Peças, Grãos...)" /></div>
-                                        <div className="relative">
-                                            <Scale className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                                            <input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={weight} onChange={e => setWeight(e.target.value)} placeholder="Peso KG" />
-                                        </div>
-                                        <div className="relative">
-                                            <MapIcon className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${loadingDistance ? 'text-blue-500 animate-pulse' : 'text-slate-300'}`} />
-                                            <input
-                                                type="text"
-                                                className={`w-full pl-10 pr-12 py-4 rounded-2xl font-black outline-none border-2 transition-all ${loadingDistance ? 'bg-blue-50 border-blue-200 text-blue-400' : 'bg-slate-50 border-transparent focus:border-blue-100'}`}
-                                                value={loadingDistance ? "Calculando..." : distanceKm}
-                                                onChange={e => setDistanceKm(e.target.value)}
-                                                placeholder="KM"
-                                                disabled={loadingDistance}
-                                            />
-                                            <button
-                                                onClick={handleFetchDistance}
-                                                disabled={loadingDistance}
-                                                className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white rounded-xl shadow-sm transition-all border border-slate-100 ${loadingDistance ? 'opacity-50 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-50'}`}
-                                                title="Recalcular Distância"
-                                            >
-                                                <RotateCcw className={`w-3 h-3 ${loadingDistance ? 'animate-spin' : ''}`} />
-                                            </button>
-                                        </div>
-                                        <select className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}><option value="">Selecione Cliente...</option>{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-                                        <select className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={disponibilidade} onChange={e => setDisponibilidade(e.target.value as Disponibilidade)}><option value="Imediato">Imediato</option><option value="Conforme programação">Programado</option></select>
-                                    </div>
-                                </div>
-                                <div className="lg:col-span-1 bg-[#344a5e] p-8 rounded-[2rem] shadow-xl text-center flex flex-col items-center justify-center text-white relative group overflow-hidden">
-                                    <Scale className="w-6 h-6 text-emerald-400 mb-3" />
-                                    <h4 className="text-[10px] font-black uppercase text-slate-400">Referência ANTT</h4>
-                                    <p className="text-3xl font-black mb-4">R$ {formatCur(suggestedFreightANTT)}</p>
-                                    <button
-                                        onClick={() => {
-                                            setBaseFreight(suggestedFreightANTT.toString());
-                                            showFeedback("Valor ANTT aplicado ao preço base!");
-                                        }}
-                                        className="w-full py-2 bg-white/10 hover:bg-emerald-500 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-2 border border-white/10 hover:border-transparent group-hover:scale-105"
-                                    >
-                                        <Check className="w-3 h-3" /> Aderir ao Preço Base
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border hover:shadow-xl transition-all relative">
-                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
-                                    <div className="lg:col-span-1 flex flex-col">
-                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black uppercase text-blue-600">{activeTab === 'reverse' ? 'Alvo Cliente' : 'Preço Base'}</span></div>
-                                        {activeTab === 'reverse' ? (
-                                            <input type="text" className="w-full p-4 rounded-xl font-black border-2 bg-blue-50 text-blue-600 border-blue-200 transition-all" placeholder="Alvo Cliente" value={targetFreightClient} onChange={e => setTargetFreightClient(e.target.value)} />
-                                        ) : (
-                                            <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={baseFreight} onChange={e => setBaseFreight(e.target.value)} />
-                                        )}
-                                    </div>
-                                    <div className="lg:col-span-1 flex flex-col">
-                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Pedágio</span></div>
-                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={tolls} onChange={e => setTolls(e.target.value)} />
-                                    </div>
-                                    <div className="lg:col-span-1 flex flex-col">
-                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Valor Mercadoria</span></div>
-                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={goodsValue} onChange={e => setGoodsValue(e.target.value)} placeholder="R$ 0,00" />
-                                    </div>
-                                    <div className="lg:col-span-1 flex flex-col">
-                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Ad Val (%)</span></div>
-                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={insurancePercent} onChange={e => setInsurancePercent(e.target.value)} />
-                                    </div>
-                                    <div className="lg:col-span-1 flex flex-col">
-                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Margem de Lucro (%)</span></div>
-                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={profitMargin} onChange={e => setProfitMargin(e.target.value)} />
-                                    </div>
-                                    <div className="lg:col-span-1 flex flex-col">
-                                        <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">ICMS Destino (%)</span></div>
-                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={icmsPercent} onChange={e => setIcmsPercent(e.target.value)} />
-                                    </div>
-                                </div>
-
-                                {/* Advanced Extra Costs Management - Unified inside main card */}
-                                <div className="pt-8 border-t border-slate-100 border-dashed animate-in fade-in slide-in-from-top-4 duration-700">
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
-                                        <div>
-                                            <h4 className="text-sm font-black text-[#344a5e] uppercase tracking-wider flex items-center gap-2">
-                                                <PlusCircle className="w-5 h-5 text-blue-500" /> Custos Adicionais Específicos
-                                            </h4>
-                                            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Batedor, Descarga, Licenças, Agenciamento...</p>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {['Batedor', 'Descarga', 'Licenças', 'Agenciamento', 'Outros'].map(cat => (
-                                                <button
-                                                    key={cat}
-                                                    onClick={() => {
-                                                        const id = Date.now().toString();
-                                                        setOtherCosts(prev => [...prev, { id, label: cat, value: 0 }]);
-                                                    }}
-                                                    className="px-4 py-2 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-full text-[10px] font-black uppercase transition-all shadow-sm border border-slate-100 flex items-center gap-2 group"
-                                                >
-                                                    <Plus className="w-3 h-3 text-blue-400 group-hover:text-white" /> {cat}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {otherCosts.length > 0 ? (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                            {otherCosts.map((cost, idx) => (
-                                                <div key={cost.id} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex items-center gap-4 group animate-in zoom-in-95 duration-300">
-                                                    <div className="flex-1">
-                                                        <div className="flex justify-between mb-1">
-                                                            <input
-                                                                type="text"
-                                                                className="bg-transparent text-[10px] font-black uppercase text-slate-500 outline-none w-full"
-                                                                value={cost.label}
-                                                                onChange={(e) => {
-                                                                    const newCosts = [...otherCosts];
-                                                                    newCosts[idx].label = e.target.value;
-                                                                    setOtherCosts(newCosts);
-                                                                }}
-                                                            />
-                                                        </div>
-                                                        <div className="relative">
-                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">R$</span>
-                                                            <input
-                                                                type="text"
-                                                                className="w-full pl-8 pr-4 py-2 bg-white rounded-xl font-black text-[#344a5e] outline-none border-2 border-transparent focus:border-blue-100 transition-all text-sm"
-                                                                placeholder="0,00"
-                                                                value={cost.value === 0 ? '' : cost.value.toString()}
-                                                                onChange={(e) => {
-                                                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value.replace(',', '.')) || 0;
-                                                                    const newCosts = [...otherCosts];
-                                                                    newCosts[idx].value = val;
-                                                                    setOtherCosts(newCosts);
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => setOtherCosts(prev => prev.filter(c => c.id !== cost.id))}
-                                                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
+                                <div className="lg:col-span-3 space-y-8">
+                                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border space-y-6">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-3"><Package className="w-5 h-5 text-blue-600" /><h3 className="font-black uppercase text-[11px] text-slate-400">Rota & Equipamento</h3></div>
+                                            {parseFloat(distanceKm) > 0 && (
+                                                <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-50 rounded-full border border-blue-100 animate-fade-in">
+                                                    <MapIcon className="w-3 h-3 text-blue-500" />
+                                                    <span className="text-[10px] font-black text-blue-600 uppercase">{(parseFloat(distanceKm) || 0).toLocaleString()} KM Sugeridos</span>
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
-                                    ) : (
-                                        <div className="py-6 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-100 rounded-3xl opacity-60">
-                                            <p className="text-[9px] font-black uppercase tracking-widest">Nenhum custo adicional inserido</p>
+                                        <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                                            <div className="lg:col-span-3">
+                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={origin} onChange={e => setOrigin(e.target.value)} onBlur={handleFetchDistance} placeholder="Origem (Cidade, UF)" />
+                                            </div>
+                                            <div className="lg:col-span-3">
+                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={destination} onChange={e => setDestination(e.target.value)} onBlur={handleFetchDistance} placeholder="Destino (Cidade, UF)" />
+                                            </div>
                                         </div>
-                                    )}
+                                        {/* Alerta de Histórico */}
+                                        {historicalAlert}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                                            <div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-blue-50/50 rounded-2xl font-bold border-2 border-blue-100 focus:border-blue-300 outline-none" value={clientReference} onChange={e => setClientReference(e.target.value)} placeholder="Ref Cliente" /></div>
+                                            <select className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>{Object.keys(vehicleConfigs).map(v => <option key={v} value={v}>{v}</option>)}</select>
+                                            <div className="relative col-span-1 md:col-span-2"><Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={merchandiseType} onChange={e => setMerchandiseType(e.target.value)} placeholder="Tipo da Mercadoria" /></div>
+                                            <div className="relative">
+                                                <Scale className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                                                <input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={weight} onChange={e => setWeight(e.target.value)} placeholder="Peso KG" />
+                                            </div>
+                                            <div className="relative">
+                                                <MapIcon className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${loadingDistance ? 'text-blue-500 animate-pulse' : 'text-slate-300'}`} />
+                                                <input
+                                                    type="text"
+                                                    className={`w-full pl-10 pr-12 py-4 rounded-2xl font-black outline-none border-2 transition-all ${loadingDistance ? 'bg-blue-50 border-blue-200 text-blue-400' : 'bg-slate-50 border-transparent focus:border-blue-100'}`}
+                                                    value={loadingDistance ? "Calculando..." : distanceKm}
+                                                    onChange={e => setDistanceKm(e.target.value)}
+                                                    placeholder="KM"
+                                                    disabled={loadingDistance}
+                                                />
+                                                <button
+                                                    onClick={handleFetchDistance}
+                                                    disabled={loadingDistance}
+                                                    className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white rounded-xl shadow-sm transition-all border border-slate-100 ${loadingDistance ? 'opacity-50 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-50'}`}
+                                                    title="Recalcular Distância"
+                                                >
+                                                    <RotateCcw className={`w-3 h-3 ${loadingDistance ? 'animate-spin' : ''}`} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                                            <div className="lg:col-span-4">
+                                                <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}><option value="">Selecione Cliente...</option>{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                                            </div>
+                                            <div className="lg:col-span-2">
+                                                <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={disponibilidade} onChange={e => setDisponibilidade(e.target.value as Disponibilidade)}><option value="Imediato">Imediato</option><option value="Conforme programação">Programado</option></select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border hover:shadow-xl transition-all relative">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+                                            <div className="flex flex-col">
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black uppercase text-blue-600">{activeTab === 'reverse' ? 'Alvo Cliente' : 'Preço Base'}</span></div>
+                                                {activeTab === 'reverse' ? (
+                                                    <input type="text" className="w-full p-4 rounded-xl font-black border-2 bg-blue-50 text-blue-600 border-blue-200 transition-all" placeholder="Alvo Cliente" value={targetFreightClient} onChange={e => setTargetFreightClient(e.target.value)} />
+                                                ) : (
+                                                    <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={baseFreight} onChange={e => setBaseFreight(e.target.value)} />
+                                                )}
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Pedágio</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={tolls} onChange={e => setTolls(e.target.value)} />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Valor Mercadoria</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={goodsValue} onChange={e => setGoodsValue(e.target.value)} placeholder="R$ 0,00" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Ad Val (%)</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={insurancePercent} onChange={e => setInsurancePercent(e.target.value)} />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Margem de Lucro (%)</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={profitMargin} onChange={e => setProfitMargin(e.target.value)} />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">ICMS Destino (%)</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={icmsPercent} onChange={e => setIcmsPercent(e.target.value)} />
+                                            </div>
+                                        </div>
 
-                                    <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center px-4">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Adicionais:</span>
-                                        <span className="text-lg font-black text-blue-600">R$ {formatCur(otherCosts.reduce((acc, c) => acc + c.value, 0))}</span>
+                                        {/* Advanced Extra Costs Management */}
+                                        <div className="pt-8 border-t border-slate-100 border-dashed animate-in fade-in slide-in-from-top-4 duration-700">
+                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+                                                <div>
+                                                    <h4 className="text-sm font-black text-[#344a5e] uppercase tracking-wider flex items-center gap-2">
+                                                        <PlusCircle className="w-5 h-5 text-blue-500" /> Custos Adicionais Específicos
+                                                    </h4>
+                                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Batedor, Descarga, Licenças, Agenciamento...</p>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {['Batedor', 'Descarga', 'Licenças', 'Agenciamento', 'Outros'].map(cat => (
+                                                        <button
+                                                            key={cat}
+                                                            onClick={() => {
+                                                                const id = Date.now().toString();
+                                                                setOtherCosts(prev => [...prev, { id, label: cat, value: 0 }]);
+                                                            }}
+                                                            className="px-4 py-2 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-full text-[10px] font-black uppercase transition-all shadow-sm border border-slate-100 flex items-center gap-2 group"
+                                                        >
+                                                            <Plus className="w-3 h-3 text-blue-400 group-hover:text-white" /> {cat}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {otherCosts.length > 0 ? (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {otherCosts.map((cost, idx) => (
+                                                        <div key={cost.id} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex items-center gap-4 group animate-in zoom-in-95 duration-300">
+                                                            <div className="flex-1">
+                                                                <div className="flex justify-between mb-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        className="bg-transparent text-[10px] font-black uppercase text-slate-500 outline-none w-full"
+                                                                        value={cost.label}
+                                                                        onChange={(e) => {
+                                                                            const newCosts = [...otherCosts];
+                                                                            newCosts[idx].label = e.target.value;
+                                                                            setOtherCosts(newCosts);
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                                <div className="relative">
+                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">R$</span>
+                                                                    <input
+                                                                        type="text"
+                                                                        className="w-full pl-8 pr-4 py-2 bg-white rounded-xl font-black text-[#344a5e] outline-none border-2 border-transparent focus:border-blue-100 transition-all text-sm"
+                                                                        placeholder="0,00"
+                                                                        value={cost.value === 0 ? '' : cost.value.toString()}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value === '' ? 0 : parseFloat(e.target.value.replace(',', '.')) || 0;
+                                                                            const newCosts = [...otherCosts];
+                                                                            newCosts[idx].value = val;
+                                                                            setOtherCosts(newCosts);
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => setOtherCosts(prev => prev.filter(c => c.id !== cost.id))}
+                                                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="py-6 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-100 rounded-3xl opacity-60">
+                                                    <p className="text-[9px] font-black uppercase tracking-widest">Nenhum custo adicional inserido</p>
+                                                </div>
+                                            )}
+
+                                            <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center px-4">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Adicionais:</span>
+                                                <span className="text-lg font-black text-blue-600">R$ {formatCur(otherCosts.reduce((acc, c) => acc + c.value, 0))}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Extrato Detalhado da Cotação moved inside main column */}
+                                    <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-xl text-white">
+                                        <div className="flex items-center gap-3 mb-8">
+                                            <FileText className="w-5 h-5 text-blue-400" />
+                                            <h3 className="font-black uppercase text-[11px] tracking-widest text-slate-400">Extrato Detalhado da Operação</h3>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center py-3 border-b border-white/10">
+                                                    <span className="text-[10px] font-bold uppercase opacity-60">Frete Base / Poder de Compra</span>
+                                                    <span className="font-black text-sm">R$ {formatCur(activeTab === 'reverse' ? calcData.buyerPower : num(baseFreight))}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-3 border-b border-white/10">
+                                                    <span className="text-[10px] font-bold uppercase opacity-60">Pedágio Programado</span>
+                                                    <span className="font-black text-sm text-blue-300">R$ {formatCur(num(tolls))}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-3 border-b border-white/10">
+                                                    <span className="text-[10px] font-bold uppercase opacity-60">Seguro Ad Valorem ({insurancePercent}%)</span>
+                                                    <span className="font-black text-sm">R$ {formatCur(calcData.adValoremSelling)}</span>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center py-3 border-b border-white/10">
+                                                    <span className="text-[10px] font-bold uppercase opacity-60">Impostos Federais (PIS/COFINS/CSLL)</span>
+                                                    <span className="font-black text-sm">R$ {formatCur(calcData.fedTaxesAmount)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-3 border-b border-white/10">
+                                                    <span className="text-[10px] font-bold uppercase opacity-60">ICMS Destino ({icmsPercent}%)</span>
+                                                    <span className="font-black text-sm">R$ {formatCur(calcData.icmsAmount)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-3 border-b border-white/10">
+                                                    <span className="text-[10px] font-bold uppercase opacity-60">Lucro Projetado (Remuneração)</span>
+                                                    <span className="font-black text-sm text-emerald-400">R$ {formatCur(calcData.realProfitAmount)} ({calcData.realMarginPercent.toFixed(1)}%)</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="mt-8 pt-6 border-t border-white/20 flex flex-wrap items-center justify-between gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="px-5 py-2 bg-white/10 rounded-xl border border-white/10">
+                                                    <p className="text-[8px] font-black uppercase opacity-40 leading-none mb-1">Custo Direto Total</p>
+                                                    <p className="text-sm font-black text-white">R$ {formatCur(calcData.realDirectCosts)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Validação de Viabilidade</p>
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`w-3 h-3 rounded-full ${calcData.realMarginPercent >= 15 ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
+                                                    <span className="text-xs font-black uppercase tracking-widest">
+                                                        {calcData.realMarginPercent >= 15 ? 'Margem Saudável' : 'Revisar Custo'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Cards de Detalhamento Técnico */}
-                            {/* Cards de Detalhamento Técnico - HIDDEN
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-50 shadow-sm relative overflow-hidden group">
-                                    <h5 className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2 relative z-10"><Percent className="w-3 h-3" /> Impostos (ICMS)</h5>
-                                    <p className="text-2xl font-black text-[#344a5e]">R$ {formatCur(calcData.icmsAmount)}</p>
-                                    <p className="text-[9px] font-bold text-slate-400 mt-1">Recolhimento Destino ({icmsPercent}%)</p>
-                                </div>
-                                <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-50 shadow-sm">
-                                    <h5 className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2"><ShieldCheck className="w-3 h-3" /> Ad Valorem (Seguro)</h5>
-                                    <div className="flex justify-between items-end">
-                                        <div>
-                                            <p className="text-2xl font-black text-[#344a5e]">R$ {formatCur(calcData.adValoremSelling)}</p>
-                                            <p className="text-[9px] font-bold text-slate-400 mt-1">Taxa Comercial ({insurancePercent}%)</p>
-                                        </div>
+                                <div className="lg:col-span-1 space-y-8">
+                                    <div className="bg-[#344a5e] p-8 rounded-[2rem] shadow-xl text-center flex flex-col items-center justify-center text-white relative group overflow-hidden">
+                                        <Scale className="w-6 h-6 text-emerald-400 mb-3" />
+                                        <h4 className="text-[10px] font-black uppercase text-slate-400">Referência ANTT</h4>
+                                        <p className="text-3xl font-black mb-4">R$ {formatCur(suggestedFreightANTT)}</p>
+                                        <button
+                                            onClick={() => {
+                                                setBaseFreight(suggestedFreightANTT.toString());
+                                                showFeedback("Valor ANTT aplicado ao preço base!");
+                                            }}
+                                            className="w-full py-2 bg-white/10 hover:bg-emerald-500 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-2 border border-white/10 hover:border-transparent group-hover:scale-105"
+                                        >
+                                            <Check className="w-3 h-3" /> Aderir ao Preço Base
+                                        </button>
                                     </div>
-                                </div>
-                                <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-50 shadow-sm bg-gradient-to-br from-white to-slate-50">
-                                    <h5 className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2"><DollarSign className="w-3 h-3" /> Lucro Bruto Real</h5>
-                                    <p className="text-2xl font-black text-emerald-600">R$ {formatCur(calcData.realProfitAmount)}</p>
-                                    <p className="text-[9px] font-bold text-slate-400 mt-1">Sobra Líquida da Operação</p>
-                                </div>
-                            </div>
-                            */}
 
-
-                            <div className={`p-12 rounded-[4rem] shadow-2xl text-white flex flex-col lg:flex-row items-center gap-12 relative overflow-hidden transition-all duration-500 border-8 border-white/5 ${activeTab === 'reverse' ? 'bg-[#344a5e]' : 'bg-[#005a9c]'}`}>
-                                <div className="lg:w-48 text-center p-6 bg-white/10 rounded-[2.5rem] border border-white/20">
-                                    <TrendingUp className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
-                                    <p className="text-4xl font-black">{calcData.realMarginPercent.toFixed(1)}%</p>
-                                    <p className="text-[9px] font-bold opacity-40 uppercase">Margem Real</p>
-                                </div>
-                                <div className="flex-1 text-center">
-                                    <p className="text-[11px] font-black opacity-50 uppercase tracking-[0.4em] mb-4">
-                                        {activeTab === 'reverse' ? 'PODER DE COMPRA (FRETE BASE)' : 'FRETE FINAL AO CLIENTE'}
-                                    </p>
-                                    <p className="text-9xl font-black tracking-tighter drop-shadow-2xl">
-                                        R$ {formatCur(activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight)}
-                                    </p>
-
-                                    {/* New: Value per Ton Indicators */}
-                                    <div className="flex justify-center gap-8 mt-2 mb-6">
-                                        <div className="text-center">
-                                            <p className="text-[9px] font-black uppercase opacity-60">R$ / Ton (Cobrar)</p>
-                                            <p className="text-lg font-black">
-                                                R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? (activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
+                                    {/* Final Freight Summary - Side Column */}
+                                    <div className={`p-8 rounded-[2.5rem] shadow-2xl text-white flex flex-col items-center gap-6 relative overflow-hidden transition-all duration-500 border-4 border-white/5 ${activeTab === 'reverse' ? 'bg-[#344a5e]' : 'bg-[#005a9c]'}`}>
+                                        <div className="w-full text-center p-4 bg-white/10 rounded-2xl border border-white/20">
+                                            <TrendingUp className="w-6 h-6 mx-auto mb-1 text-emerald-400" />
+                                            <p className="text-2xl font-black">{calcData.realMarginPercent.toFixed(1)}%</p>
+                                            <p className="text-[8px] font-bold opacity-40 uppercase">Margem Real</p>
+                                        </div>
+                                        <div className="text-center w-full">
+                                            <p className="text-[9px] font-black opacity-50 uppercase tracking-[0.2em] mb-2">
+                                                {activeTab === 'reverse' ? 'PODER DE COMPRA' : 'FRETE FINAL'}
                                             </p>
-                                        </div>
-                                        <div className="text-center">
-                                            <p className="text-[9px] font-black uppercase opacity-60">R$ / Ton (Pagar)</p>
-                                            <p className="text-lg font-black text-white/80">
-                                                R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? (activeTab === 'reverse' ? calcData.buyerPower : num(baseFreight)) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
+                                            <p className="text-4xl font-black tracking-tighter drop-shadow-xl">
+                                                R$ {formatCur(activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight)}
                                             </p>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full mt-8">
-                                        <button onClick={() => saveQuote('won')} className="bg-emerald-500 py-6 rounded-[2rem] font-black uppercase text-[10px] flex items-center justify-center gap-2 hover:bg-emerald-600 shadow-lg transition-transform hover:scale-105">
-                                            <ThumbsUp className="w-4 h-4" /> Fechado
-                                        </button>
-                                        <button onClick={() => saveQuote('lost')} className="bg-red-500 py-6 rounded-[2rem] font-black uppercase text-[10px] flex items-center justify-center gap-2 hover:bg-red-600 shadow-lg transition-transform hover:scale-105">
-                                            <ThumbsDown className="w-4 h-4" /> Perdido
-                                        </button>
-                                        <button onClick={() => saveQuote('pending')} className="bg-white/10 py-6 rounded-[2rem] font-black uppercase text-[10px] hover:bg-white/20 border border-white/20 flex items-center justify-center gap-2">
-                                            <Save className="w-4 h-4" /> Salvar
-                                        </button>
-                                        <button onClick={handleCopyQuoteText} className="bg-white py-6 rounded-[2rem] font-black uppercase text-[10px] text-[#005a9c] hover:bg-slate-100 flex items-center justify-center gap-2 shadow-lg">
-                                            <ClipboardCopy className="w-4 h-4" /> Copiar
-                                        </button>
-                                        <button onClick={generatePDF} className="col-span-2 md:col-span-4 bg-slate-800 text-white py-4 rounded-[2rem] font-black uppercase text-[10px] hover:bg-slate-900 border border-slate-700 flex items-center justify-center gap-2 shadow-lg mt-2">
-                                            <FileDown className="w-4 h-4 text-emerald-400" /> Gerar Proposta Comercial (PDF)
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* Extrato Detalhado da Cotação */}
-                            <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-xl text-white">
-                                <div className="flex items-center gap-3 mb-8">
-                                    <FileText className="w-5 h-5 text-blue-400" />
-                                    <h3 className="font-black uppercase text-[11px] tracking-widest text-slate-400">Extrato Detalhado da Operação</h3>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
-                                    <div className="space-y-4">
-                                        <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                            <span className="text-[10px] font-bold uppercase opacity-60">Frete Base / Poder de Compra</span>
-                                            <span className="font-black text-sm">R$ {formatCur(activeTab === 'reverse' ? calcData.buyerPower : num(baseFreight))}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                            <span className="text-[10px] font-bold uppercase opacity-60">Pedágio Programado</span>
-                                            <span className="font-black text-sm text-blue-300">R$ {formatCur(num(tolls))}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                            <span className="text-[10px] font-bold uppercase opacity-60">Seguro Ad Valorem ({insurancePercent}%)</span>
-                                            <span className="font-black text-sm">R$ {formatCur(calcData.adValoremSelling)}</span>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                            <span className="text-[10px] font-bold uppercase opacity-60">Impostos Federais (PIS/COFINS/CSLL)</span>
-                                            <span className="font-black text-sm">R$ {formatCur(calcData.fedTaxesAmount)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                            <span className="text-[10px] font-bold uppercase opacity-60">ICMS Destino ({icmsPercent}%)</span>
-                                            <span className="font-black text-sm">R$ {formatCur(calcData.icmsAmount)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                            <span className="text-[10px] font-bold uppercase opacity-60">Lucro Projetado (Remuneração)</span>
-                                            <span className="font-black text-sm text-emerald-400">R$ {formatCur(calcData.realProfitAmount)} ({calcData.realMarginPercent.toFixed(1)}%)</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="mt-8 pt-6 border-t border-white/20 flex flex-wrap items-center justify-between gap-4">
-                                    <div className="flex items-center gap-4">
-                                        <div className="px-5 py-2 bg-white/10 rounded-xl border border-white/10">
-                                            <p className="text-[8px] font-black uppercase opacity-40 leading-none mb-1">Custo Direto Total</p>
-                                            <p className="text-sm font-black text-white">R$ {formatCur(calcData.realDirectCosts)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Validação de Viabilidade</p>
-                                        <div className="flex items-center gap-2">
-                                            <div className={`w-3 h-3 rounded-full ${calcData.realMarginPercent >= 15 ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
-                                            <span className="text-xs font-black uppercase tracking-widest">
-                                                {calcData.realMarginPercent >= 15 ? 'Margem Saudável' : 'Revisar Custo'}
-                                            </span>
+                                            <div className="flex flex-col gap-3 mt-4 mb-4">
+                                                <div className="text-center bg-white/5 p-2 rounded-xl">
+                                                    <p className="text-[8px] font-black uppercase opacity-60">R$ / Ton (Cobrar)</p>
+                                                    <p className="text-sm font-black">
+                                                        R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? (activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
+                                                    </p>
+                                                </div>
+                                                <div className="text-center bg-white/5 p-2 rounded-xl">
+                                                    <p className="text-[8px] font-black uppercase opacity-60">R$ / Ton (Pagar)</p>
+                                                    <p className="text-sm font-black text-white/80">
+                                                        R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? (activeTab === 'reverse' ? calcData.buyerPower : num(baseFreight)) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2 w-full mt-4">
+                                                <button onClick={() => saveQuote('won')} className="bg-emerald-500 py-4 rounded-xl font-black uppercase text-[8px] flex items-center justify-center gap-1 hover:bg-emerald-600 shadow-md">
+                                                    <ThumbsUp className="w-3 h-3" /> Fechado
+                                                </button>
+                                                <button onClick={() => saveQuote('lost')} className="bg-red-500 py-4 rounded-xl font-black uppercase text-[8px] flex items-center justify-center gap-1 hover:bg-red-600 shadow-md">
+                                                    <ThumbsDown className="w-3 h-3" /> Perdido
+                                                </button>
+                                                <button onClick={() => saveQuote('pending')} className="bg-white/10 py-4 rounded-xl font-black uppercase text-[8px] hover:bg-white/20 border border-white/20 flex items-center justify-center gap-1">
+                                                    <Save className="w-3 h-3" /> Salvar
+                                                </button>
+                                                <button onClick={handleCopyQuoteText} className="bg-white py-4 rounded-xl font-black uppercase text-[8px] text-[#005a9c] hover:bg-slate-100 flex items-center justify-center gap-1 shadow-md">
+                                                    <ClipboardCopy className="w-3 h-3" /> Copiar
+                                                </button>
+                                                <button onClick={generatePDF} className="col-span-2 bg-slate-800 text-white py-3 rounded-xl font-black uppercase text-[8px] hover:bg-slate-900 border border-slate-700 flex items-center justify-center gap-1 shadow-md mt-1">
+                                                    <FileDown className="w-3 h-3 text-emerald-400" /> PDF Comercial
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
