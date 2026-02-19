@@ -174,19 +174,99 @@ const App: React.FC = () => {
         setShowConfigModal(false);
     };
 
-    const handleAcceptSpotCharge = async (data: { origin: string; dest: string; freight: number; km: number; vehicleType: string }) => {
-        setOrigin(data.origin);
-        setDestination(data.dest);
-        setBaseFreight(data.freight.toString());
-        setDistanceKm(data.km.toString());
-        setVehicleType(data.vehicleType);
+    const handleSpotSimulation = async (data: any) => {
+        const newCalc: FreightCalculation = {
+            id: Date.now().toString(),
+            proposalNumber: `SPOT-${Date.now().toString().slice(-6)}`,
+            origin: data.origin || data.originNormalized || data.spotOrigin || '',
+            destination: data.destination || data.destinationNormalized || data.spotDest || '',
+            distanceKm: data.dist || data.km,
+            vehicleType: data.vehicleName || data.vehicleType,
+            merchandiseType: 'Carga Geral',
+            weight: 0,
+            customerId: data.customerId || '',
+            baseFreight: data.freteOfertado || data.freight,
+            tolls: data.tolls || 0,
+            extraCosts: 0,
+            goodsValue: 0,
+            insurancePercent: 0,
+            adValorem: 0,
+            profitMargin: 0,
+            icmsPercent: data.icmsRate || 0,
+            pisPercent: 0,
+            cofinsPercent: 0,
+            csllPercent: 0,
+            irpjPercent: 0,
+            totalFreight: data.freteOfertado || data.freight,
+            createdAt: Date.now(),
+            disponibilidade: 'Imediato',
+            status: 'spot_simulated',
+            realProfit: data.ebitda,
+            realMarginPercent: data.ebitdaPercent,
+            suggestedFreight: data.suggestedSalesFreight || 0
+        };
 
-        const newStats = { ...spotStats, converted: spotStats.converted + 1 };
-        setSpotStats(newStats);
-        await updateSystemConfig({ ...fedTaxes, spotStats: newStats });
+        // Save to DB
+        await createFreightCalculation(newCalc);
+        setHistory(prev => [newCalc, ...prev]);
 
-        setActiveTab('new');
-        showFeedback("Carga capturada! Continue a cotação abaixo.");
+        // Update Stats
+        const currentSimulated = spotStats?.simulated || 0;
+        const newStats = { ...spotStats, simulated: currentSimulated + 1 };
+        setSpotStats(newStats as any);
+        updateSystemConfig({ ...fedTaxes, spotStats: newStats as any });
+
+        if (data.accept) {
+            handleAcceptSpotCharge(newCalc);
+        }
+    };
+
+    const handleAcceptSpotCharge = async (data: FreightCalculation) => {
+        try {
+            // 1. Update Status to Pending (CRM)
+            const updatedCalc = { ...data, status: 'pending' as QuoteStatus };
+            await updateFreightCalculation(updatedCalc);
+
+            // Update local state
+            setHistory(prev => prev.map(h => h.id === data.id ? updatedCalc : h));
+
+            // 2. Conversion Stats
+            const newStats = { ...spotStats, converted: (spotStats.converted || 0) + 1 };
+            setSpotStats(newStats);
+            updateSystemConfig({ ...fedTaxes, spotStats: newStats });
+
+            // 3. Pre-fill Quote Form
+            setOrigin(data.origin || '');
+            setDestination(data.destination || '');
+            setBaseFreight((data.baseFreight || 0).toString());
+            setDistanceKm((data.distanceKm || 0).toString());
+            setVehicleType(data.vehicleType || Object.keys(vehicleConfigs)[0]);
+            if (data.customerId) setSelectedCustomerId(data.customerId);
+
+            // 4. Simulate Email Notification
+            const emailBody = `
+                NOVA CARGA ACEITA - FRETE RÁPIDO
+                --------------------------------
+                ID: ${data.proposalNumber}
+                Cliente: ${customers.find(c => c.id === data.customerId)?.name || 'N/A'}
+                Origem: ${data.origin}
+                Destino: ${data.destination}
+                Veículo: ${data.vehicleType}
+                Valor: R$ ${(data.totalFreight || 0).toFixed(2)}
+                Margem: ${data.realMarginPercent?.toFixed(1) || '0.0'}%
+                
+                Acesse o CRM para mais detalhes.
+            `;
+            // In a real app, this would be an API call.
+            console.log("SENDING EMAIL...", emailBody);
+
+
+            setActiveTab('crm'); // Go to CRM to see the card
+            showFeedback("Carga aceita! Disponível no CRM e notificação enviada.");
+        } catch (error) {
+            console.error("Error accepting spot charge:", error);
+            showFeedback("Erro ao aceitar carga. Tente novamente.", "error");
+        }
     };
 
     const handleRecordSimulation = async () => {
@@ -327,7 +407,7 @@ const App: React.FC = () => {
         // Melhores Rotas
         const routeMap = new Map<string, number>();
         wonQuotes.forEach(h => {
-            const route = `${h.origin.split(',')[0]} ➝ ${h.destination.split(',')[0]}`;
+            const route = `${(h.origin || '').split(',')[0]} ➝ ${(h.destination || '').split(',')[0]}`;
             routeMap.set(route, (routeMap.get(route) || 0) + h.totalFreight);
         });
         const topRoutes = Array.from(routeMap.entries())
@@ -865,8 +945,10 @@ Disponibilidade: ${disponibilidade}`;
                                 vehicleConfigs={vehicleConfigs}
                                 fedTaxes={fedTaxes}
                                 onAcceptCharge={handleAcceptSpotCharge}
-                                onSimulated={handleRecordSimulation}
+                                onSimulate={handleSpotSimulation}
                                 stats={spotStats}
+                                customers={customers}
+                                history={history.filter(h => h.status === 'spot_simulated')}
                             />
                         </div>
                     )}
@@ -1077,7 +1159,13 @@ Disponibilidade: ${disponibilidade}`;
                                         {historicalAlert}
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                                             <div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-blue-50/50 rounded-2xl font-bold border-2 border-blue-100 focus:border-blue-300 outline-none" value={clientReference} onChange={e => setClientReference(e.target.value)} placeholder="Ref Cliente" /></div>
-                                            <select className="p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>{Object.keys(vehicleConfigs).map(v => <option key={v} value={v}>{v}</option>)}</select>
+                                            <div className="relative">
+                                                <Truck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                                                <select className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all appearance-none" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>
+                                                    {Object.keys(vehicleConfigs).map(v => <option key={v} value={v}>{v}</option>)}
+                                                </select>
+                                                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                                            </div>
                                             <div className="relative col-span-1 md:col-span-2"><Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={merchandiseType} onChange={e => setMerchandiseType(e.target.value)} placeholder="Tipo da Mercadoria" /></div>
                                             <div className="relative">
                                                 <Scale className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
@@ -1404,7 +1492,7 @@ Disponibilidade: ${disponibilidade}`;
                                                 {customer && (
                                                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-0.5">{customer.name} {h.merchandiseType && <span className="text-slate-300 ml-2">| {h.merchandiseType}</span>}</p>
                                                 )}
-                                                <p className="text-[9px] font-bold text-slate-400 truncate uppercase mt-0.5">{h.origin.split(',')[0]} ➝ {h.destination.split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
+                                                <p className="text-[9px] font-bold text-slate-400 truncate uppercase mt-0.5">{(h.origin || '').split(',')[0]} ➝ {(h.destination || '').split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
                                             </div>
                                             <div className="w-40 flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center font-black text-xs text-[#344a5e] shadow-sm border border-slate-100">

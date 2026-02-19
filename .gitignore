@@ -7,3 +7,5 @@ dist-ssr
 .idea
 .vscode
 *.log
+.vercel
+.env*.local

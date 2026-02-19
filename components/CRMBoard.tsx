@@ -22,6 +22,7 @@ const COLUMNS: { id: QuoteStatus; label: string; color: string; border: string }
 export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, customers, systemConfig }) => {
     const [draggedId, setDraggedId] = useState<string | null>(null);
     const [showLostModal, setShowLostModal] = useState<string | null>(null);
+    const [selectedQuote, setSelectedQuote] = useState<FreightCalculation | null>(null);
     const [lostForm, setLostForm] = useState({ reason: '' as LostReason, obs: '', fileUrl: '' });
 
     // Filter State
@@ -42,7 +43,7 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
 
         // Columns Logic
         const cols: Record<QuoteStatus, FreightCalculation[]> = {
-            pending: [], respondida: [], aprovada: [], em_operacao: [], won: [], lost: []
+            pending: [], respondida: [], aprovada: [], em_operacao: [], won: [], lost: [], spot_simulated: []
         };
         filteredQuotes.forEach(q => {
             const status = q.status as QuoteStatus;
@@ -127,7 +128,10 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
         setLostForm({ reason: '', obs: '', fileUrl: '' });
     };
 
-    const formatCurrency = (val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const formatCurrency = (val: number | undefined | null) => {
+        if (val === undefined || val === null || isNaN(val)) return 'R$ 0,00';
+        return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    };
 
     return (
         <div className="h-full flex flex-col gap-6">
@@ -226,7 +230,8 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                             key={quote.id}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, quote.id)}
-                                            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 cursor-move hover:shadow-lg hover:-translate-y-1 transition-all active:cursor-grabbing group relative overflow-hidden"
+                                            onClick={() => setSelectedQuote(quote)}
+                                            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all active:cursor-grabbing group relative overflow-hidden"
                                         >
                                             <div className="absolute top-0 left-0 w-1 h-full bg-slate-200 group-hover:bg-blue-400 transition-colors"></div>
                                             <div className="pl-3">
@@ -256,7 +261,7 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                                 {/* Route */}
                                                 <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 mb-3">
                                                     <MapPin className="w-3 h-3 flex-shrink-0" />
-                                                    <span className="truncate">{quote.origin.split(',')[0]} × {quote.destination.split(',')[0]}</span>
+                                                    <span className="truncate">{(quote.origin || '').split(',')[0]} × {(quote.destination || '').split(',')[0]}</span>
                                                 </div>
 
                                                 {/* Value */}
@@ -360,6 +365,144 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                     </div>
                 </div>
             )}
+
+            {/* Quote Details Modal */}
+            {selectedQuote && (() => {
+                const customer = customers.find(c => c.id === selectedQuote.customerId);
+                return (
+                    <div className="fixed inset-0 bg-[#344a5e]/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] shadow-2xl animate-scale-in border-4 border-white/20 relative">
+                            {/* Close Button */}
+                            <button
+                                onClick={() => setSelectedQuote(null)}
+                                className="absolute top-6 right-6 p-2 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors z-10"
+                            >
+                                <X className="w-6 h-6 text-slate-400" />
+                            </button>
+
+                            <div className="p-8 space-y-8">
+                                {/* Header */}
+                                <div className="flex items-start gap-6 pb-8 border-b border-slate-100">
+                                    <div className="w-20 h-20 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                        {customer?.logoUrl ? (
+                                            <img src={customer.logoUrl} className="w-full h-full object-contain" alt={customer.name} />
+                                        ) : (
+                                            <span className="font-black text-slate-300 text-3xl">{(customer?.name || '?').charAt(0)}</span>
+                                        )}
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-1">
+                                            <h2 className="text-2xl font-black text-[#344a5e]">{customer?.name || 'Cliente Avulso'}</h2>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide ${selectedQuote.status === 'won' ? 'bg-emerald-100 text-emerald-600' :
+                                                selectedQuote.status === 'lost' ? 'bg-red-100 text-red-600' :
+                                                    'bg-blue-100 text-blue-600'
+                                                }`}>
+                                                {COLUMNS.find(c => c.id === selectedQuote.status)?.label || selectedQuote.status}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm font-bold text-slate-400">Proposta #{selectedQuote.proposalNumber}</p>
+                                        <p className="text-xs text-slate-400 mt-2 flex items-center gap-2">
+                                            <Calendar className="w-4 h-4" />
+                                            Criado em {new Date(selectedQuote.createdAt).toLocaleDateString()} às {new Date(selectedQuote.createdAt).toLocaleTimeString()}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Route & Vehicle */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="bg-slate-50 p-6 rounded-3xl space-y-4 col-span-2">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm text-blue-500">
+                                                <MapPin className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase text-slate-400">Origem</p>
+                                                <p className="font-bold text-[#344a5e]">{selectedQuote.origin}</p>
+                                            </div>
+                                        </div>
+                                        <div className="pl-5 border-l-2 border-dashed border-slate-200 ml-5 h-8"></div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-[#344a5e] rounded-full flex items-center justify-center shadow-sm text-white">
+                                                <MapPin className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase text-slate-400">Destino</p>
+                                                <p className="font-bold text-[#344a5e]">{selectedQuote.destination}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="bg-blue-50 p-5 rounded-3xl border border-blue-100">
+                                            <div className="flex items-center gap-3 mb-2 text-blue-600">
+                                                <Truck className="w-5 h-5" />
+                                                <span className="text-[10px] font-black uppercase">Veículo</span>
+                                            </div>
+                                            <p className="font-black text-[#344a5e]">{selectedQuote.vehicleType}</p>
+                                        </div>
+                                        <div className="bg-amber-50 p-5 rounded-3xl border border-amber-100">
+                                            <div className="flex items-center gap-3 mb-2 text-amber-600">
+                                                <TrendingUp className="w-5 h-5" />
+                                                <span className="text-[10px] font-black uppercase">Distância</span>
+                                            </div>
+                                            <p className="font-black text-[#344a5e]">{selectedQuote.distanceKm} KM</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Financials */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="bg-slate-50 p-4 rounded-2xl">
+                                        <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Frete Base</p>
+                                        <p className="font-bold text-[#344a5e]">{formatCurrency(selectedQuote.baseFreight)}</p>
+                                    </div>
+                                    <div className="bg-slate-50 p-4 rounded-2xl">
+                                        <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Pedágios</p>
+                                        <p className="font-bold text-[#344a5e]">{formatCurrency(selectedQuote.tolls)}</p>
+                                    </div>
+                                    <div className="bg-slate-50 p-4 rounded-2xl">
+                                        <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Impostos (ICMS)</p>
+                                        <p className="font-bold text-red-500">{selectedQuote.icmsPercent}%</p>
+                                    </div>
+                                    <div className="bg-[#344a5e] p-4 rounded-2xl text-white shadow-lg transform md:scale-110 md:-translate-y-2">
+                                        <p className="text-[10px] font-black uppercase text-slate-300 mb-1">Total Cliente</p>
+                                        <p className="font-black text-xl">{formatCurrency(selectedQuote.totalFreight)}</p>
+                                    </div>
+                                </div>
+
+                                {/* Profitability (Only if available) */}
+                                {(selectedQuote.realProfit !== undefined && selectedQuote.realProfit > 0) && (
+                                    <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600">
+                                                <DollarSign className="w-6 h-6" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase text-emerald-600/70">Lucratividade Real (EBITDA)</p>
+                                                <p className="text-xl font-black text-emerald-600">{formatCurrency(selectedQuote.realProfit)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black uppercase text-emerald-600/70">Margem</p>
+                                            <p className="text-3xl font-black text-emerald-500">{selectedQuote.realMarginPercent?.toFixed(1)}%</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Actions Footer */}
+                                <div className="flex justify-end gap-4 pt-4 border-t border-slate-100">
+                                    <button
+                                        onClick={() => setSelectedQuote(null)}
+                                        className="px-8 py-4 bg-slate-100 text-slate-500 font-bold uppercase text-xs rounded-2xl hover:bg-slate-200 transition-colors"
+                                    >
+                                        Fechar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };

@@ -1,23 +1,26 @@
 
 import React, { useState } from 'react';
 import { Zap, RotateCcw, CheckCircle, AlertTriangle, Calendar, MapPin, AlertCircle, Handshake, TrendingUp, PieChart } from 'lucide-react';
-import { ANTTCoefficients, FederalTaxes } from '../types';
+import { ANTTCoefficients, FederalTaxes, Customer, FreightCalculation } from '../types';
 import { estimateDistance } from '../services/geminiService';
 
 interface SpotCheckerProps {
     vehicleConfigs: Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>;
     fedTaxes: FederalTaxes;
-    onAcceptCharge?: (data: { origin: string; dest: string; freight: number; km: number; vehicleType: string }) => void;
-    onSimulated?: () => void;
+    onAcceptCharge?: (data: FreightCalculation) => void;
+    onSimulate?: (data: any) => void;
     stats?: { simulated: number; converted: number };
+    customers: Customer[];
+    history: FreightCalculation[];
 }
 
-export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTaxes, onAcceptCharge, onSimulated, stats }) => {
+export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTaxes, onAcceptCharge, onSimulate, stats, customers, history }) => {
     const [spotOrigin, setSpotOrigin] = useState('');
     const [spotDest, setSpotDest] = useState('');
     const [spotFreight, setSpotFreight] = useState('');
     const [spotKm, setSpotKm] = useState('');
     const [spotVehicle, setSpotVehicle] = useState(Object.keys(vehicleConfigs)[0] || 'Truck');
+    const [selectedCustomerId, setSelectedCustomerId] = useState('');
     const [spotResult, setSpotResult] = useState<any>(null);
     const [spotLoading, setSpotLoading] = useState(false);
     const [loadingDistance, setLoadingDistance] = useState(false);
@@ -47,7 +50,15 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
             const config = vehicleConfigs[spotVehicle];
             const configAxles = config?.axles || 6;
 
-            let dist = parseFloat(spotKm.replace(',', '.')) || 0;
+            const cleanNum = (s: string) => {
+                if (!s) return 0;
+                // Remove R$, spaces, and handle both . and ,
+                const cleaned = s.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+                const parsed = parseFloat(cleaned);
+                return isNaN(parsed) ? 0 : parsed;
+            };
+
+            let dist = cleanNum(spotKm);
             let tolls = spotResult?.tolls || 0;
 
             // Fetch distance IF KM is 0 or empty
@@ -66,7 +77,7 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                 }
             }
 
-            const freteOfertado = parseFloat(spotFreight.replace(',', '.')) || 0;
+            const freteOfertado = cleanNum(spotFreight);
 
             // ANTT Floor
             let pisoANTT = 0;
@@ -105,23 +116,26 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
             const targetMarginRate = 0.15;
             const retentionRate = 1 - totalTaxRate - targetMarginRate; // Quanto sobra pro motorista após impostos e margem
 
-            const maxDriverPayment = freteOfertado * retentionRate;
-            const suggestedSalesFreight = retentionRate > 0 ? (pisoANTT / retentionRate) : 0;
+            const maxDriverPayment = isNaN(freteOfertado * retentionRate) ? 0 : freteOfertado * retentionRate;
+            const suggestedSalesFreight = (retentionRate > 0 && !isNaN(pisoANTT / retentionRate)) ? (pisoANTT / retentionRate) : 0;
 
-            setSpotResult({
+
+
+            const resultData = {
                 freteOfertado, pisoANTT, dist, tolls,
                 icmsRate, icmsCheio, creditoPresumido, icmsEfetivo,
                 fedTaxPercent, fedTaxAmount, impostoTotal,
                 ebitda, ebitdaPercent,
                 anttOk, ebitdaOk, canTake, axles: configAxles,
                 maxDriverPayment, suggestedSalesFreight,
-                configFixed: config?.fixed || 0,
-                configVariable: config?.variable || 0,
-                configFactor: config?.factor || 0,
                 configCalcMode: config?.calcMode || 'ANTT',
-                vehicleName: spotVehicle
-            });
-            onSimulated?.();
+                vehicleName: spotVehicle,
+                origin: spotOrigin,
+                destination: spotDest
+            };
+
+            setSpotResult(resultData);
+            onSimulate?.({ ...resultData, customerId: selectedCustomerId });
         } catch (err) {
             console.error(err);
         } finally {
@@ -129,7 +143,13 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
         }
     };
 
-    const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmt = (v: any) => {
+        const n = parseFloat(v);
+        if (isNaN(n)) return '0,00';
+        return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    const spotHistory = history.filter(h => h.status === 'spot_simulated');
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -137,6 +157,17 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
             <div className="space-y-6">
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border space-y-5">
                     <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Cliente / Embarcador</label>
+                        <select
+                            className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none mb-3"
+                            value={selectedCustomerId}
+                            onChange={e => setSelectedCustomerId(e.target.value)}
+                        >
+                            <option value="">Selecione o Cliente (Opcional)</option>
+                            {customers.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
                         <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Rota (Cidade/UF)</label>
                         <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none mb-3" value={spotOrigin} onChange={e => setSpotOrigin(e.target.value)} onBlur={handleFetchDistance} placeholder="Origem — Ex: Serra, ES" />
                         <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={spotDest} onChange={e => setSpotDest(e.target.value)} onBlur={handleFetchDistance} placeholder="Destino — Ex: Duque de Caxias, RJ" />
@@ -166,7 +197,7 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                         className="w-full py-5 bg-[#344a5e] text-white rounded-2xl font-black uppercase text-sm shadow-xl hover:bg-[#2a3d4e] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                         {spotLoading ? <RotateCcw className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
-                        {spotLoading ? 'Analisando...' : 'VERIFICAR CARGA'}
+                        {spotLoading ? 'Analisando...' : 'SIMULAR & VERIFICAR'}
                     </button>
                 </div>
 
@@ -260,12 +291,10 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
 
                             {/* PEGARK CARGA BUTTON */}
                             <button
-                                onClick={() => onAcceptCharge?.({
-                                    origin: spotOrigin,
-                                    dest: spotDest,
-                                    freight: spotResult.freteOfertado,
-                                    km: spotResult.dist,
-                                    vehicleType: spotVehicle
+                                onClick={() => onSimulate?.({
+                                    ...spotResult,
+                                    customerId: selectedCustomerId,
+                                    accept: true // Signal to accept immediately
                                 })}
                                 className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg transition-all flex items-center justify-center gap-2 group"
                             >
@@ -399,6 +428,74 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                         </div>
                         <h3 className="font-black text-[#344a5e] text-lg">Frete Rápido</h3>
                         <p className="text-xs text-slate-400 max-w-md leading-relaxed">Preencha a rota, o valor oferecido e o tipo de veículo. O sistema cruzará automaticamente com a tabela ANTT e tributação para dizer se você pode pegar a carga.</p>
+                    </div>
+                )}
+            </div>
+
+            {/* History Section */}
+            <div className="col-span-1 lg:col-span-2 space-y-4 animate-fade-in-up mt-8">
+                <div className="flex items-center gap-4 px-4 mb-4">
+                    <RotateCcw className="w-6 h-6 text-[#344a5e]" />
+                    <h1 className="text-2xl font-black text-[#344a5e] tracking-tight">Histórico de Simulações Spot</h1>
+                </div>
+
+                {spotHistory.length === 0 ? (
+                    <div className="bg-white p-12 rounded-[2.5rem] shadow-sm border flex flex-col items-center justify-center text-center gap-4 opacity-60">
+                        <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center">
+                            <RotateCcw className="w-8 h-8 text-slate-300" />
+                        </div>
+                        <h3 className="font-black text-[#344a5e]">Nenhuma simulação recente</h3>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {spotHistory.map(simulation => {
+                            const customer = customers.find(c => c.id === simulation.customerId);
+                            return (
+                                <div key={simulation.id} className="bg-white p-6 rounded-[2rem] border shadow-sm flex flex-col lg:flex-row lg:items-center gap-6 group hover:border-blue-500 transition-all">
+                                    <div className="flex items-center gap-4 lg:w-1/4">
+                                        <div className={`p-3 rounded-xl ${simulation.realMarginPercent && simulation.realMarginPercent >= 15 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                                            {simulation.realMarginPercent && simulation.realMarginPercent >= 15 ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase text-slate-400">{new Date(simulation.createdAt).toLocaleDateString()} {new Date(simulation.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                            <p className="font-black text-[#344a5e] leading-tight">{customer?.name || 'Cliente Avulso'}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div>
+                                            <p className="text-[9px] font-bold uppercase text-slate-400">Origem</p>
+                                            <p className="font-black text-xs text-[#344a5e] truncate" title={simulation.origin}>{simulation.origin}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-bold uppercase text-slate-400">Destino</p>
+                                            <p className="font-black text-xs text-[#344a5e] truncate" title={simulation.destination}>{simulation.destination}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-bold uppercase text-slate-400">Veículo</p>
+                                            <p className="font-black text-xs text-[#344a5e] truncate">{simulation.vehicleType}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-bold uppercase text-slate-400">Valor Oferta</p>
+                                            <p className="font-black text-xs text-blue-600">R$ {fmt(simulation.totalFreight)}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="lg:w-48 flex items-center justify-end gap-2">
+                                        <div className="text-right mr-4">
+                                            <p className="text-[9px] font-bold uppercase text-slate-400">Margem</p>
+                                            <p className={`font-black ${(simulation.realMarginPercent || 0) >= 15 ? 'text-emerald-500' : 'text-red-500'}`}>{(simulation.realMarginPercent || 0).toFixed(1)}%</p>
+                                        </div>
+                                        <button
+                                            onClick={() => onAcceptCharge?.(simulation)}
+                                            className="bg-[#344a5e] hover:bg-[#2a3d4e] text-white px-6 py-3 rounded-xl font-black uppercase text-[10px] flex items-center gap-2 shadow-lg transition-all"
+                                        >
+                                            <Zap className="w-3 h-3 text-emerald-400" /> Aceitar
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>

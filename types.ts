@@ -14,7 +14,7 @@ export enum VehicleType {
 }
 
 export type Disponibilidade = "Imediato" | "Conforme programação";
-export type QuoteStatus = "pending" | "respondida" | "aprovada" | "em_operacao" | "won" | "lost";
+export type QuoteStatus = "pending" | "respondida" | "aprovada" | "em_operacao" | "won" | "lost" | "spot_simulated";
 export type LostReason = "preco_alto" | "prazo_entrega" | "concorrencia" | "disponibilidade" | "outros" | "";
 
 export const LOST_REASONS: Record<string, string> = {
