@@ -422,7 +422,8 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         .upsert([dbRecord]);
 
     if (error) {
-        console.error('Error updating freight calculation:', error);
+        console.error('CRITICAL: Error updating/upserting freight calculation:', error);
+        console.error('Payload attempted:', dbRecord);
         return false;
     }
     return true;

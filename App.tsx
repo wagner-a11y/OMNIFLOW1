@@ -171,7 +171,13 @@ const App: React.FC = () => {
             .subscribe((status) => {
                 console.log('Supabase Realtime Status:', status);
                 if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                    showFeedback('Erro na conexão em tempo real. Tentando reconectar...', 'error');
+                    // Suppress frequent connection error alerts to avoid "every time" annoyance
+                    const lastAlert = sessionStorage.getItem('last_connection_alert');
+                    const now = Date.now();
+                    if (!lastAlert || (now - parseInt(lastAlert)) > 30000) {
+                        showFeedback('Erro na conexão em tempo real. Tentando reconectar...', 'error');
+                        sessionStorage.setItem('last_connection_alert', now.toString());
+                    }
                 }
             });
 
