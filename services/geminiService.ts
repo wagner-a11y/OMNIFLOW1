@@ -39,3 +39,23 @@ export const estimateDistance = async (origin: string, destination: string, vehi
         return { km: 0, originNormalized: origin, destinationNormalized: destination, estimatedTolls: 0, error: error.message };
     }
 };
+
+export const extractDataFromDoc = async (fileBase64: string, fileType: string) => {
+    console.log('Extracting data from doc with Gemini...');
+    try {
+        const { data, error } = await supabase.functions.invoke('process-document', {
+            body: { fileBase64, fileType },
+        });
+
+        if (error) {
+            console.error('Supabase Edge Function Invoke Error (OCR):', error);
+            return { error: error.message };
+        }
+
+        return data;
+    } catch (error: any) {
+        console.error('extractDataFromDoc catch block:', error);
+        return { error: error.message };
+    }
+};
+

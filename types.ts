@@ -121,4 +121,44 @@ export interface FreightCalculation {
     outrasNecessidades?: string;
     observacoesGerais?: string;
     pipelineStage?: string;
+    motoristaNome?: string;
+    motoristaCPF?: string;
+    motoristaTelefone?: string;
+    placaCavalo?: string;
+    placaCarreta1?: string;
+    placaCarreta2?: string;
+    motoristaDocUrl?: string;
+    placaCavaloDocUrl?: string;
+    placaCarreta1DocUrl?: string;
+    placaCarreta2DocUrl?: string;
+
+    // Advanced GR Fields
+    motoristaRG?: string;
+    motoristaCnhRegistro?: string;
+    motoristaCnhProtocolo?: string;
+    motoristaCnhSeguranca?: string;
+
+    placaCavaloRenavam?: string;
+    placaCavaloChassi?: string;
+    placaCavaloCor?: string;
+    placaCavaloAnoFab?: string;
+    placaCavaloAnoMod?: string;
+    placaCavaloMarca?: string;
+    placaCavaloModelo?: string;
+
+    placaCarreta1Renavam?: string;
+    placaCarreta1Chassi?: string;
+    placaCarreta1Cor?: string;
+    placaCarreta1AnoFab?: string;
+    placaCarreta1AnoMod?: string;
+    placaCarreta1Marca?: string;
+    placaCarreta1Modelo?: string;
+
+    placaCarreta2Renavam?: string;
+    placaCarreta2Chassi?: string;
+    placaCarreta2Cor?: string;
+    placaCarreta2AnoFab?: string;
+    placaCarreta2AnoMod?: string;
+    placaCarreta2Marca?: string;
+    placaCarreta2Modelo?: string;
 }

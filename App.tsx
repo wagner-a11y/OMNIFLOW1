@@ -556,6 +556,21 @@ const App: React.FC = () => {
         }
     };
 
+    const handleUpdatePipelineData = async (id: string, data: Partial<FreightCalculation>) => {
+        const quote = history.find(h => h.id === id);
+        if (!quote) return;
+
+        const updated = { ...quote, ...data };
+        const result = await updateFreightCalculation(updated);
+
+        if (result.success) {
+            setHistory(prev => prev.map(h => h.id === id ? updated : h));
+            showFeedback('Carga atualizada com sucesso!');
+        } else {
+            showFeedback(`Erro ao atualizar carga: ${result.error}`, 'error');
+        }
+    };
+
     const handleWonInfoSubmit = async (wonData: any) => {
         if (!selectedWonQuote) return;
 
@@ -1105,15 +1120,8 @@ Disponibilidade: ${disponibilidade}`;
                         <div className="h-full animate-fade-in">
                             <OperationsPipeline
                                 quotes={history}
-                                onUpdateStatus={(id, stage) => {
-                                    const quote = history.find(h => h.id === id);
-                                    if (quote) {
-                                        const updated = { ...quote, pipelineStage: stage };
-                                        updateFreightCalculation(updated).then(success => {
-                                            if (success) setHistory(prev => prev.map(h => h.id === id ? updated : h));
-                                        });
-                                    }
-                                }}
+                                onUpdateStatus={(id, stage) => handleUpdatePipelineData(id, { pipelineStage: stage })}
+                                onUpdateLoadData={handleUpdatePipelineData}
                             />
                         </div>
                     )}
