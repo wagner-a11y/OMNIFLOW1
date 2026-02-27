@@ -102,19 +102,32 @@ export const HiringInfoModal: React.FC<HiringInfoModalProps> = ({ isOpen, onClos
             // 3. Trigger OCR with Gemini
             setIsProcessingOCR(true);
             const ocrResult = await extractDataFromDoc(base64.split(',')[1], file.type);
+            console.log('Gemini OCR Result:', ocrResult);
 
             if (ocrResult && !ocrResult.error) {
                 // Auto-fill fields based on OCR
                 if (type === 'motorista') {
                     setFormData(prev => ({
                         ...prev,
-                        motoristaNome: ocrResult.nome || prev.motoristaNome,
+                        motoristaNome: ocrResult.nome || ocrResult.nome_completo || prev.motoristaNome,
                         motoristaCPF: ocrResult.cpf || prev.motoristaCPF,
+                        motoristaRG: ocrResult.rg || ocrResult.documento_identidade || prev.motoristaRG,
+                        motoristaCnhRegistro: ocrResult.registro_cnh || ocrResult.cnh_numero || prev.motoristaCnhRegistro,
+                        motoristaCnhSeguranca: ocrResult.seguranca_cnh || ocrResult.codigo_seguranca || prev.motoristaCnhSeguranca,
+                        motoristaCnhProtocolo: ocrResult.protocolo_cnh || ocrResult.protocolo || prev.motoristaCnhProtocolo,
                     }));
                 } else {
+                    const prefix = field.replace('DocUrl', '');
                     setFormData(prev => ({
                         ...prev,
-                        [field.replace('DocUrl', '')]: ocrResult.placa || prev[field.replace('DocUrl', '') as keyof FreightCalculation],
+                        [prefix]: ocrResult.placa || prev[prefix as keyof FreightCalculation],
+                        [`${prefix}Renavam`]: ocrResult.renavam || prev[`${prefix}Renavam` as keyof FreightCalculation],
+                        [`${prefix}Chassi`]: ocrResult.chassi || prev[`${prefix}Chassi` as keyof FreightCalculation],
+                        [`${prefix}Cor`]: ocrResult.cor || prev[`${prefix}Cor` as keyof FreightCalculation],
+                        [`${prefix}AnoFab`]: ocrResult.ano_fab || ocrResult.ano_fabricacao || prev[`${prefix}AnoFab` as keyof FreightCalculation],
+                        [`${prefix}AnoMod`]: ocrResult.ano_mod || ocrResult.ano_modelo || prev[`${prefix}AnoMod` as keyof FreightCalculation],
+                        [`${prefix}Marca`]: ocrResult.marca || ocrResult.marca_modelo || prev[`${prefix}Marca` as keyof FreightCalculation],
+                        [`${prefix}Modelo`]: ocrResult.modelo || prev[`${prefix}Modelo` as keyof FreightCalculation],
                     }));
                 }
             }
