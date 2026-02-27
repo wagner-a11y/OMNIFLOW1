@@ -55,6 +55,7 @@ export interface FederalTaxes {
     insurancePolicyRate: number;
     goals?: Record<string, number>; // Format: "YYYY-MM": value
     spotStats?: { simulated: number; converted: number };
+    icmsRates?: Record<string, number>; // Format: "ORIGIN-DESTINATION": rate (e.g., "ES-RJ": 12)
 }
 
 export interface ExtraCostItem {
@@ -102,4 +103,22 @@ export interface FreightCalculation {
     lostReason?: LostReason;
     lostObs?: string;
     lostFileUrl?: string;
+    // Operation Pipeline Fields
+    coletaDate?: string;
+    entregaDate?: string;
+    clienteNomeOperacao?: string;
+    referenciaClienteOperacao?: string;
+    solicitante?: string;
+    coletaEndereco?: string;
+    entregaEndereco?: string;
+    pesoCargaOperacao?: number;
+    veiculoTipoOperacao?: string;
+    carroceriaTipoOperacao?: string;
+    materialTipo?: string;
+    nossoFrete?: number;
+    freteTerceiro?: number;
+    valorCarga?: number;
+    outrasNecessidades?: string;
+    observacoesGerais?: string;
+    pipelineStage?: string;
 }

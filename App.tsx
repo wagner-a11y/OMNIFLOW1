@@ -3,13 +3,17 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List
+    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { SpotChecker } from './components/SpotChecker';
+import { WonInfoModal } from './components/WonInfoModal';
+import { OperationsPipeline } from './components/OperationsPipeline';
+import { MonitoringPipeline } from './components/MonitoringPipeline';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { estimateDistance } from './services/geminiService';
+import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
     getUsers,
     createUser,
@@ -28,6 +32,7 @@ import {
     upsertVehicleConfig,
     deleteVehicleConfig
 } from './services/database';
+import { supabase } from './services/supabase';
 
 const DefaultLogo: React.FC<{ className?: string }> = ({ className }) => (
     <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -54,11 +59,13 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'reverse' | 'dashboard' | 'crm' | 'spot'>('dashboard');
-    const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals'>('financial');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'reverse' | 'dashboard' | 'crm' | 'spot' | 'operations' | 'monitoring'>('dashboard');
+    const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
     const [showConfigModal, setShowConfigModal] = useState(false);
+    const [isWonModalOpen, setIsWonModalOpen] = useState(false);
+    const [selectedWonQuote, setSelectedWonQuote] = useState<FreightCalculation | null>(null);
     const [newCustomerName, setNewCustomerName] = useState('');
     const [newCustomerLogo, setNewCustomerLogo] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -90,6 +97,10 @@ const App: React.FC = () => {
     const [loadingDistance, setLoadingDistance] = useState(false);
     const [disponibilidade, setDisponibilidade] = useState<Disponibilidade>("Imediato");
     const [merchandiseType, setMerchandiseType] = useState('');
+    const [newIcmsRate, setNewIcmsRate] = useState('');
+    const [icmsSearch, setIcmsSearch] = useState('');
+    const [icmsOriginFilter, setIcmsOriginFilter] = useState('');
+    const [icmsDestFilter, setIcmsDestFilter] = useState('');
 
     // Novo estado para usuários e veículos
     const [newUserForm, setNewUserForm] = useState<Partial<User>>({ name: '', username: '', password: '', role: 'operador' });
@@ -120,6 +131,56 @@ const App: React.FC = () => {
         }
     };
 
+    // --- REALTIME SUBSCRIPTIONS ---
+    useEffect(() => {
+        console.log('--- Real-Time Collaboration: Starting Subscriptions ---');
+
+        const channel = supabase
+            .channel('db-changes-unified')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'freight_calculations' }, (payload) => {
+                console.log('Real-Time Update: freight_calculations', payload.eventType);
+                getFreightCalculations().then(data => {
+                    setHistory(data);
+                    // Force refresh if editing to prevent stale data
+                    if (editingId && payload.eventType === 'UPDATE' && (payload.new as any).id === editingId) {
+                        showFeedback("Este registro foi alterado por outro usuário.");
+                    }
+                });
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
+                console.log('Real-Time Update: customers');
+                getCustomers().then(data => setCustomers(data.length > 0 ? data : INITIAL_CUSTOMERS));
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, () => {
+                console.log('Real-Time Update: system_config');
+                getSystemConfig().then(data => {
+                    if (data) {
+                        setFedTaxes(data);
+                        if (data.spotStats) setSpotStats(data.spotStats);
+                    }
+                });
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+                console.log('Real-Time Update: users');
+                getUsers().then(setUsers);
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_configs' }, () => {
+                console.log('Real-Time Update: vehicle_configs');
+                getVehicleConfigs().then(data => setVehicleConfigs(Object.keys(data).length > 0 ? data : VEHICLE_CONFIGS));
+            })
+            .subscribe((status) => {
+                console.log('Supabase Realtime Status:', status);
+                if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    showFeedback('Erro na conexão em tempo real. Tentando reconectar...', 'error');
+                }
+            });
+
+        return () => {
+            console.log('Cleaning up Real-Time subscriptions');
+            supabase.removeChannel(channel);
+        };
+    }, [editingId]);
+
     // spotStats persistence moved to database service
 
     const num = (s: string | number) => typeof s === 'string' ? (parseFloat(s.replace(',', '.')) || 0) : s;
@@ -140,6 +201,17 @@ const App: React.FC = () => {
             return () => clearTimeout(timer);
         }
     }, [toast]);
+
+
+
+    useEffect(() => {
+        const orgUF = getUF(origin);
+        const dstUF = getUF(destination);
+        if (orgUF && dstUF) {
+            const rate = getIcmsRate(orgUF, dstUF, fedTaxes.icmsRates);
+            setIcmsPercent(rate.toString());
+        }
+    }, [origin, destination, fedTaxes.icmsRates]);
 
     const handleLogin = (e?: React.FormEvent | React.MouseEvent) => {
         if (e) e.preventDefault();
@@ -293,6 +365,13 @@ const App: React.FC = () => {
         }
     };
 
+    const handleUpdateIcmsRates = async (rates: Record<string, number>) => {
+        const updated = { ...fedTaxes, icmsRates: rates };
+        setFedTaxes(updated);
+        await updateSystemConfig(updated);
+        showFeedback('Alíquotas ICMS atualizadas.', 'success');
+    };
+
     const handleUpdateGoals = async (month: string, value: number) => {
         const currentGoals = fedTaxes.goals || {};
         const newGoals = { ...currentGoals, [month]: value };
@@ -428,6 +507,12 @@ const App: React.FC = () => {
         const quote = history.find(h => h.id === id);
         if (!quote) return;
 
+        if (newStatus === 'won') {
+            setSelectedWonQuote(quote);
+            setIsWonModalOpen(true);
+            return;
+        }
+
         const updatedQuote: FreightCalculation = {
             ...quote,
             status: newStatus,
@@ -445,6 +530,37 @@ const App: React.FC = () => {
             showFeedback('Status atualizado!');
         } else {
             showFeedback('Erro ao atualizar status.', 'error');
+        }
+    };
+
+    const handleWonInfoSubmit = async (wonData: any) => {
+        if (!selectedWonQuote) return;
+
+        const updatedQuote: FreightCalculation = {
+            ...selectedWonQuote,
+            ...wonData,
+            status: 'won',
+            updatedAt: new Date().toISOString(),
+            updatedBy: currentUser?.id,
+            updatedByName: currentUser?.name,
+            pipelineStage: 'Nova carga'
+        };
+
+        const success = await updateFreightCalculation(updatedQuote);
+        if (success) {
+            setHistory(prev => prev.map(h => h.id === selectedWonQuote.id ? updatedQuote : h));
+            setIsWonModalOpen(false);
+            setSelectedWonQuote(null);
+            setShowCelebration(true);
+            setTimeout(() => setShowCelebration(false), 4000);
+            showFeedback('Carga confirmada e enviada para operação!');
+
+            // If we were on 'new' or 'crm', maybe move to history or operations?
+            // The prompt doesn't specify, but history seems safe.
+            resetForm();
+            setActiveTab('history');
+        } else {
+            showFeedback('Erro ao salvar informações da carga.', 'error');
         }
     };
 
@@ -561,7 +677,6 @@ const App: React.FC = () => {
         const quoteId = editingId || generateId();
         const existingQuote = history.find(h => h.id === editingId);
         const createdDate = existingQuote?.createdAt ? existingQuote.createdAt : Date.now();
-        console.log("Saving quote with createdDate:", createdDate, "Is edit:", !!editingId);
 
         const data: FreightCalculation = {
             id: quoteId,
@@ -576,30 +691,30 @@ const App: React.FC = () => {
             otherCosts
         };
 
-        console.log("Saving data object:", data);
+        if (status === 'won') {
+            setSelectedWonQuote(data);
+            setIsWonModalOpen(true);
+            return;
+        }
+
         try {
             if (editingId) {
                 const success = await updateFreightCalculation(data);
                 if (success) {
                     setHistory(prev => prev.map(h => h.id === editingId ? data : h));
                     showFeedback("Atualizado!");
-                    if (status === 'won') { setShowCelebration(true); setTimeout(() => setShowCelebration(false), 4000); }
                     setEditingId(null); resetForm(); setActiveTab('history');
                 } else {
-                    console.error("Failed to update quote in DB");
                     showFeedback("Erro ao atualizar no banco.", "error");
                 }
             } else {
                 const saved = await createFreightCalculation(data);
                 if (saved) {
-                    console.log("Quote saved successfully, updating local history state");
                     setHistory(prev => [data, ...prev]);
                     showFeedback("Salvo com sucesso!");
-                    if (status === 'won') { setShowCelebration(true); setTimeout(() => setShowCelebration(false), 4000); }
                     setEditingId(null); resetForm(); setActiveTab('history');
                 } else {
-                    console.error("Failed to create quote in DB (service returned null)");
-                    showFeedback("Erro ao salvar no banco. Verifique conexão.", "error");
+                    showFeedback("Erro ao salvar no banco.", "error");
                 }
             }
         } catch (error) {
@@ -888,6 +1003,8 @@ Disponibilidade: ${disponibilidade}`;
                     {[
                         { id: 'dashboard', icon: BarChart3, label: 'Visão Geral', adminOnly: true },
                         { id: 'crm', icon: List, label: 'CRM' },
+                        { id: 'operations', icon: Activity, label: 'Operações' },
+                        { id: 'monitoring', icon: MapIcon, label: 'Monitoramento' },
                         { id: 'spot', icon: Zap, label: 'Frete Rápido' },
                         { id: 'new', icon: PlusCircle, label: 'Formação Comercial' },
                         { id: 'reverse', icon: Target, label: 'Frete Cliente' },
@@ -914,10 +1031,17 @@ Disponibilidade: ${disponibilidade}`;
                 </div>
             </aside>
 
-            <main className="flex-1 overflow-y-auto pb-20">
-                <header className="bg-white border-b px-8 py-6 sticky top-0 z-10 flex justify-between items-center shadow-sm">
+            <main className="flex-1 overflow-y-auto pb-20 relative z-0">
+                <header className="bg-white border-b px-8 py-6 sticky top-0 z-40 flex justify-between items-center shadow-sm">
                     <h2 className="text-lg font-black text-[#344a5e] uppercase tracking-tight">
-                        {editingId ? 'Editando Registro' : activeTab === 'dashboard' ? 'Visão Geral Executiva' : activeTab === 'crm' ? 'CRM' : activeTab === 'spot' ? 'Frete Rápido' : activeTab === 'new' ? 'Formação Comercial' : activeTab === 'reverse' ? 'Frete Cliente' : 'Histórico'}
+                        {editingId ? 'Editando Registro' :
+                            activeTab === 'dashboard' ? 'Visão Geral Executiva' :
+                                activeTab === 'crm' ? 'CRM' :
+                                    activeTab === 'operations' ? 'Operações Pipeline' :
+                                        activeTab === 'monitoring' ? 'Monitoramento Pipeline' :
+                                            activeTab === 'spot' ? 'Frete Rápido' :
+                                                activeTab === 'new' ? 'Formação Comercial' :
+                                                    activeTab === 'reverse' ? 'Frete Cliente' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
                         <div className="relative w-72">
@@ -949,6 +1073,40 @@ Disponibilidade: ${disponibilidade}`;
                                 stats={spotStats}
                                 customers={customers}
                                 history={history.filter(h => h.status === 'spot_simulated')}
+                            />
+                        </div>
+                    )}
+
+                    {activeTab === 'operations' && (
+                        <div className="h-full animate-fade-in">
+                            <OperationsPipeline
+                                quotes={history}
+                                onUpdateStatus={(id, stage) => {
+                                    const quote = history.find(h => h.id === id);
+                                    if (quote) {
+                                        const updated = { ...quote, pipelineStage: stage };
+                                        updateFreightCalculation(updated).then(success => {
+                                            if (success) setHistory(prev => prev.map(h => h.id === id ? updated : h));
+                                        });
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {activeTab === 'monitoring' && (
+                        <div className="h-full animate-fade-in">
+                            <MonitoringPipeline
+                                quotes={history}
+                                onUpdateStatus={(id, stage) => {
+                                    const quote = history.find(h => h.id === id);
+                                    if (quote) {
+                                        const updated = { ...quote, pipelineStage: stage };
+                                        updateFreightCalculation(updated).then(success => {
+                                            if (success) setHistory(prev => prev.map(h => h.id === id ? updated : h));
+                                        });
+                                    }
+                                }}
                             />
                         </div>
                     )}
@@ -1442,13 +1600,13 @@ Disponibilidade: ${disponibilidade}`;
                                 <History className="w-8 h-8 text-[#344a5e]" />
                                 <h1 className="text-3xl font-black text-[#344a5e] tracking-tight">Histórico de Cotações</h1>
                             </div>
-                            <div className="bg-white p-5 rounded-[2rem] border shadow-sm flex items-center gap-8 px-12 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">
-                                <span className="w-28">Status</span>
-                                <span className="w-32">Data</span>
+                            <div className="bg-white p-4 rounded-[1.5rem] border shadow-sm flex items-center gap-6 px-10 text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                                <span className="w-24">Status</span>
+                                <span className="w-28">Data</span>
                                 <span className="flex-1">Ref / Rota</span>
-                                <span className="w-40">Identificação</span>
-                                <span className="w-32 text-right">Rentabilidade</span>
-                                <span className="w-40 text-right">Valor Final</span>
+                                <span className="w-32">Identificação</span>
+                                <span className="w-28 text-right">Rentabilidade</span>
+                                <span className="w-32 text-right">Valor Final</span>
                                 <span className="w-20"></span>
                             </div>
                             <div className="space-y-3">
@@ -1475,9 +1633,9 @@ Disponibilidade: ${disponibilidade}`;
                                     const customer = customers.find(c => c.id === h.customerId);
 
                                     return (
-                                        <div key={h.id} className="bg-white h-24 px-12 rounded-[2rem] border shadow-sm flex items-center gap-8 group hover:border-blue-500 transition-all">
-                                            <div className="w-28"><span className={`px-4 py-2 rounded-xl text-[9px] font-black text-white uppercase ${h.status === 'won' ? 'bg-emerald-500' : h.status === 'lost' ? 'bg-red-500' : 'bg-amber-400'}`}>{h.status === 'won' ? 'GANHO' : h.status === 'lost' ? 'PERDIDO' : 'PAUTA'}</span></div>
-                                            <span className="w-32 text-xs font-bold text-slate-400">
+                                        <div key={h.id} className="bg-white h-20 px-10 rounded-[1.5rem] border shadow-sm flex items-center gap-6 group hover:border-blue-500 transition-all">
+                                            <div className="w-24"><span className={`px-3 py-1.5 rounded-lg text-[8px] font-black text-white uppercase ${h.status === 'won' ? 'bg-emerald-500' : h.status === 'lost' ? 'bg-red-500' : 'bg-amber-400'}`}>{h.status === 'won' ? 'GANHO' : h.status === 'lost' ? 'PERDIDO' : 'PAUTA'}</span></div>
+                                            <span className="w-28 text-[10px] font-bold text-slate-400">
                                                 {(() => {
                                                     if (!h.createdAt || h.createdAt === 0) return 'S/ Data';
                                                     const d = new Date(h.createdAt);
@@ -1486,28 +1644,28 @@ Disponibilidade: ${disponibilidade}`;
                                             </span>
                                             <div className="flex-1 min-w-0 flex flex-col justify-center">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-black text-[#344a5e] text-sm">{h.proposalNumber}</span>
-                                                    {h.clientReference && <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide">{h.clientReference}</span>}
+                                                    <span className="font-black text-[#344a5e] text-xs">{h.proposalNumber}</span>
+                                                    {h.clientReference && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wide">{h.clientReference}</span>}
                                                 </div>
                                                 {customer && (
-                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-0.5">{customer.name} {h.merchandiseType && <span className="text-slate-300 ml-2">| {h.merchandiseType}</span>}</p>
+                                                    <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-0.5 truncate">{customer.name} {h.merchandiseType && <span className="text-slate-300 ml-1">| {h.merchandiseType}</span>}</p>
                                                 )}
-                                                <p className="text-[9px] font-bold text-slate-400 truncate uppercase mt-0.5">{(h.origin || '').split(',')[0]} ➝ {(h.destination || '').split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
+                                                <p className="text-[8px] font-bold text-slate-400 truncate uppercase mt-0.5">{(h.origin || '').split(',')[0]} ➝ {(h.destination || '').split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
                                             </div>
-                                            <div className="w-40 flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center font-black text-xs text-[#344a5e] shadow-sm border border-slate-100">
+                                            <div className="w-32 flex items-center gap-2">
+                                                <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center font-black text-[10px] text-[#344a5e] shadow-sm border border-slate-100">
                                                     {h.updatedByName?.charAt(0) || 'A'}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-[10px] font-black text-[#344a5e] uppercase truncate">{h.updatedByName || 'Admin'}</p>
-                                                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Responsável</p>
+                                                    <p className="text-[9px] font-black text-[#344a5e] uppercase truncate">{h.updatedByName || 'Admin'}</p>
+                                                    <p className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter">Responsável</p>
                                                 </div>
                                             </div>
-                                            <div className="w-32 text-right">
-                                                <p className={`text-sm font-black ${realMargin < 15 ? 'text-red-500' : 'text-emerald-600'}`}>{realMargin.toFixed(1)}%</p>
-                                                <p className="text-[9px] font-bold text-slate-400 uppercase">Lucro: R$ {formatCur(profitValue)}</p>
+                                            <div className="w-28 text-right">
+                                                <p className={`text-xs font-black ${realMargin < 15 ? 'text-red-500' : 'text-emerald-600'}`}>{realMargin.toFixed(1)}%</p>
+                                                <p className="text-[8px] font-bold text-slate-400 uppercase">Lucro: R$ {formatCur(profitValue)}</p>
                                             </div>
-                                            <div className="w-40 text-right"><p className="text-lg font-black text-[#344a5e]">R$ {formatCur(h.totalFreight)}</p></div>
+                                            <div className="w-32 text-right"><p className="text-base font-black text-[#344a5e]">R$ {formatCur(h.totalFreight)}</p></div>
                                             <div className="w-20 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                                 <button onClick={() => loadQuote(h)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg">
                                                     <Edit3 className="w-4 h-4" />
@@ -1525,387 +1683,545 @@ Disponibilidade: ${disponibilidade}`;
                         </div>
                     )}
                 </div>
-            </main>
+            </main >
 
             {/* Modal de Configurações */}
-            {showConfigModal && (
-                <div className="fixed inset-0 bg-[#1e293b]/80 backdrop-blur-md z-[100] flex items-center justify-center p-6">
-                    <div className="bg-white w-full max-w-5xl h-[85vh] rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden">
-                        <div className="p-8 border-b flex justify-between items-center bg-slate-50">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg"><Settings className="w-6 h-6 animate-spin-slow" /></div>
-                                <div><h3 className="text-xl font-black text-[#344a5e] uppercase tracking-tighter">Painel de Parâmetros</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Configurações globais do sistema</p></div>
+            {
+                showConfigModal && (
+                    <div className="fixed inset-0 bg-[#1e293b]/80 backdrop-blur-md z-[100] flex items-center justify-center p-6">
+                        <div className="bg-white w-full max-w-5xl h-[85vh] rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden">
+                            <div className="p-8 border-b flex justify-between items-center bg-slate-50">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg"><Settings className="w-6 h-6 animate-spin-slow" /></div>
+                                    <div><h3 className="text-xl font-black text-[#344a5e] uppercase tracking-tighter">Painel de Parâmetros</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Configurações globais do sistema</p></div>
+                                </div>
+                                <button onClick={() => setShowConfigModal(false)} className="w-12 h-12 rounded-2xl bg-white border-2 border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 transition-all"><X className="w-6 h-6" /></button>
                             </div>
-                            <button onClick={() => setShowConfigModal(false)} className="w-12 h-12 rounded-2xl bg-white border-2 border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 transition-all"><X className="w-6 h-6" /></button>
-                        </div>
-                        <div className="flex-1 flex overflow-hidden">
-                            <aside className="w-72 bg-slate-50 border-r p-6 space-y-3">
-                                {[
-                                    { id: 'customers', label: 'Clientes', icon: Users },
-                                    { id: 'financial', label: 'Tributação', icon: Percent },
-                                    { id: 'goals', label: 'Metas', icon: Target },
-                                    { id: 'fleet', label: 'Frota/ANTT', icon: Truck },
-                                    { id: 'identity', label: 'Marca', icon: ImageIcon },
-                                    { id: 'users', label: 'Usuários', icon: Users }
-                                ].map(tab => (
-                                    <button key={tab.id} onClick={() => setConfigTab(tab.id as any)} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black uppercase text-[10px] transition-all ${configTab === tab.id ? 'bg-white text-blue-600 shadow-md translate-x-2' : 'text-slate-400 hover:bg-white/50'}`}>
-                                        <tab.icon className="w-4 h-4" /> {tab.label}
-                                    </button>
-                                ))}
-                            </aside>
-                            <div className="flex-1 p-10 overflow-y-auto">
-                                {configTab === 'customers' && (
-                                    <div className="space-y-8">
-                                        <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
-                                            <div className="flex items-center gap-3 mb-6">
-                                                <div className="p-2 bg-blue-100 rounded-xl text-blue-600"><PlusCircle className="w-4 h-4" /></div>
-                                                <h4 className="text-[11px] font-black uppercase text-slate-400 tracking-widest">{editingCustomer ? 'Editar Cliente' : 'Novo Cliente'}</h4>
-                                            </div>
+                            <div className="flex-1 flex overflow-hidden">
+                                <aside className="w-72 bg-slate-50 border-r p-6 space-y-3">
+                                    {[
+                                        { id: 'customers', label: 'Clientes', icon: Users },
+                                        { id: 'financial', label: 'Tributação', icon: Percent },
+                                        { id: 'goals', label: 'Metas', icon: Target },
+                                        { id: 'fleet', label: 'Frota/ANTT', icon: Truck },
+                                        { id: 'icms', label: 'Regras ICMS', icon: FileText },
+                                        { id: 'identity', label: 'Marca', icon: ImageIcon },
+                                        { id: 'users', label: 'Usuários', icon: Users }
+                                    ].map(tab => (
+                                        <button key={tab.id} onClick={() => setConfigTab(tab.id as any)} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black uppercase text-[10px] transition-all ${configTab === tab.id ? 'bg-white text-blue-600 shadow-md translate-x-2' : 'text-slate-400 hover:bg-white/50'}`}>
+                                            <tab.icon className="w-4 h-4" /> {tab.label}
+                                        </button>
+                                    ))}
+                                </aside>
+                                <div className="flex-1 p-10 overflow-y-auto">
+                                    {configTab === 'customers' && (
+                                        <div className="space-y-8">
+                                            <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
+                                                <div className="flex items-center gap-3 mb-6">
+                                                    <div className="p-2 bg-blue-100 rounded-xl text-blue-600"><PlusCircle className="w-4 h-4" /></div>
+                                                    <h4 className="text-[11px] font-black uppercase text-slate-400 tracking-widest">{editingCustomer ? 'Editar Cliente' : 'Novo Cliente'}</h4>
+                                                </div>
 
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-                                                <div className="space-y-4">
-                                                    <div className="flex flex-col gap-2">
-                                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Nome do Cliente</label>
-                                                        <input type="text" className="w-full p-5 bg-white rounded-2xl font-bold outline-none border-2 border-slate-100 focus:border-blue-200 transition-all shadow-inner" placeholder="Ex: Logística Brasil" value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)} />
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                                                    <div className="space-y-4">
+                                                        <div className="flex flex-col gap-2">
+                                                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Nome do Cliente</label>
+                                                            <input type="text" className="w-full p-5 bg-white rounded-2xl font-bold outline-none border-2 border-slate-100 focus:border-blue-200 transition-all shadow-inner" placeholder="Ex: Logística Brasil" value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)} />
+                                                        </div>
+
+                                                        <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border-2 border-dashed border-slate-200">
+                                                            <div className="w-16 h-16 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden border-2 border-white shadow-sm">
+                                                                {(customerFilePreview || newCustomerLogo) ? (
+                                                                    <img src={customerFilePreview || newCustomerLogo} className="w-full h-full object-contain" />
+                                                                ) : <ImageIcon className="w-6 h-6 text-slate-200" />}
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Logotipo do Cliente</p>
+                                                                <label className="bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg text-slate-600 font-black uppercase text-[9px] cursor-pointer transition-colors inline-flex items-center gap-2">
+                                                                    <Download className="w-3 h-3" /> Escolher Imagem
+                                                                    <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                                                                        const file = e.target.files?.[0];
+                                                                        if (file) {
+                                                                            const reader = new FileReader();
+                                                                            reader.onloadend = () => {
+                                                                                setCustomerFilePreview(reader.result as string);
+                                                                                setNewCustomerLogo(reader.result as string);
+                                                                            };
+                                                                            reader.readAsDataURL(file);
+                                                                        }
+                                                                    }} />
+                                                                </label>
+                                                            </div>
+                                                        </div>
                                                     </div>
 
-                                                    <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border-2 border-dashed border-slate-200">
-                                                        <div className="w-16 h-16 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden border-2 border-white shadow-sm">
-                                                            {(customerFilePreview || newCustomerLogo) ? (
-                                                                <img src={customerFilePreview || newCustomerLogo} className="w-full h-full object-contain" />
-                                                            ) : <ImageIcon className="w-6 h-6 text-slate-200" />}
-                                                        </div>
-                                                        <div className="flex-1">
-                                                            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Logotipo do Cliente</p>
-                                                            <label className="bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg text-slate-600 font-black uppercase text-[9px] cursor-pointer transition-colors inline-flex items-center gap-2">
-                                                                <Download className="w-3 h-3" /> Escolher Imagem
-                                                                <input type="file" className="hidden" accept="image/*" onChange={(e) => {
-                                                                    const file = e.target.files?.[0];
-                                                                    if (file) {
-                                                                        const reader = new FileReader();
-                                                                        reader.onloadend = () => {
-                                                                            setCustomerFilePreview(reader.result as string);
-                                                                            setNewCustomerLogo(reader.result as string);
-                                                                        };
-                                                                        reader.readAsDataURL(file);
+                                                    <div className="flex gap-3">
+                                                        <button onClick={async () => {
+                                                            if (newCustomerName) {
+                                                                const logoFinal = customerFilePreview || newCustomerLogo;
+                                                                if (editingCustomer) {
+                                                                    const updated = await updateCustomer({ ...editingCustomer, name: newCustomerName, logoUrl: logoFinal });
+                                                                    if (updated) {
+                                                                        setCustomers(customers.map(c => c.id === editingCustomer.id ? { ...c, name: newCustomerName, logoUrl: logoFinal } : c));
+                                                                        showFeedback("Cliente atualizado!");
                                                                     }
-                                                                }} />
-                                                            </label>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex gap-3">
-                                                    <button onClick={async () => {
-                                                        if (newCustomerName) {
-                                                            const logoFinal = customerFilePreview || newCustomerLogo;
-                                                            if (editingCustomer) {
-                                                                const updated = await updateCustomer({ ...editingCustomer, name: newCustomerName, logoUrl: logoFinal });
-                                                                if (updated) {
-                                                                    setCustomers(customers.map(c => c.id === editingCustomer.id ? { ...c, name: newCustomerName, logoUrl: logoFinal } : c));
-                                                                    showFeedback("Cliente atualizado!");
+                                                                } else {
+                                                                    const created = await createCustomer({ id: Date.now().toString(), name: newCustomerName, logoUrl: logoFinal });
+                                                                    if (created) {
+                                                                        setCustomers([created, ...customers]);
+                                                                        showFeedback("Cliente cadastrado!");
+                                                                    }
                                                                 }
-                                                            } else {
-                                                                const created = await createCustomer({ id: Date.now().toString(), name: newCustomerName, logoUrl: logoFinal });
-                                                                if (created) {
-                                                                    setCustomers([created, ...customers]);
-                                                                    showFeedback("Cliente cadastrado!");
-                                                                }
+                                                                setNewCustomerName('');
+                                                                setNewCustomerLogo('');
+                                                                setCustomerFilePreview(null);
+                                                                setEditingCustomer(null);
                                                             }
-                                                            setNewCustomerName('');
-                                                            setNewCustomerLogo('');
-                                                            setCustomerFilePreview(null);
-                                                            setEditingCustomer(null);
-                                                        }
-                                                    }} className="flex-1 py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-                                                        <Save className="w-4 h-4" /> {editingCustomer ? 'Salvar Alterações' : 'Cadastrar'}
-                                                    </button>
-                                                    {editingCustomer && (
-                                                        <button onClick={() => {
-                                                            setEditingCustomer(null);
-                                                            setNewCustomerName('');
-                                                            setNewCustomerLogo('');
-                                                            setCustomerFilePreview(null);
-                                                        }} className="px-6 bg-slate-200 text-slate-600 rounded-2xl font-black uppercase text-xs hover:bg-slate-300 transition-all">Cancelar</button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                            {customers.map(c => (
-                                                <div key={c.id} className="p-5 bg-white rounded-[2rem] border-2 border-slate-50 flex items-center justify-between group hover:border-blue-100 transition-all shadow-sm">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 rounded-xl bg-slate-50 border flex items-center justify-center overflow-hidden">
-                                                            {c.logoUrl ? <img src={c.logoUrl} className="w-full h-full object-contain" /> : <span className="font-black text-slate-300">{c.name.charAt(0)}</span>}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-black text-[#344a5e] text-xs uppercase tracking-tight">{c.name}</p>
-                                                            <p className="text-[9px] font-bold text-slate-300 uppercase">Cliente Cadastrado</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                        <button onClick={() => {
-                                                            setEditingCustomer(c);
-                                                            setNewCustomerName(c.name);
-                                                            setNewCustomerLogo(c.logoUrl || '');
-                                                            setCustomerFilePreview(null);
-                                                        }} className="p-2 text-blue-400 hover:bg-blue-50 rounded-lg"><Edit3 className="w-4 h-4" /></button>
-                                                        {currentUser.role === 'master' && (
-                                                            <button onClick={async () => { if (await deleteCustomer(c.id)) setCustomers(customers.filter(i => i.id !== c.id)); }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {configTab === 'financial' && (
-                                    <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).filter(([k]) => k !== 'goals').map(([key, val]) => (
-                                        <div key={key} className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">{key}</label>
-                                            <input type="number" step="0.01" className="w-full p-4 bg-white rounded-2xl font-black text-2xl text-[#344a5e]" value={val as number} onChange={e => handleUpdateFedTaxes(key as any, Number(e.target.value))} />
-                                        </div>
-                                    ))}</div>
-                                )}
-                                {configTab === 'goals' && (
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                                        {Array.from({ length: 12 }, (_, i) => {
-                                            const date = new Date(new Date().getFullYear(), i, 1);
-                                            const monthKey = `${date.getFullYear()}-${String(i + 1).padStart(2, '0')}`;
-                                            const label = date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
-                                            return (
-                                                <div key={monthKey} className="bg-slate-50 p-6 rounded-[2rem] border shadow-sm">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase block mb-2 capitalize">{label}</label>
-                                                    <input
-                                                        type="number"
-                                                        className="w-full p-3 bg-white rounded-xl font-bold text-lg text-[#344a5e]"
-                                                        value={fedTaxes.goals?.[monthKey] || ''}
-                                                        onChange={e => handleUpdateGoals(monthKey, Number(e.target.value))}
-                                                        placeholder="R$ 0,00"
-                                                    />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                                {configTab === 'fleet' && (
-                                    <div className="space-y-6">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h3 className="font-black text-[#344a5e]">Configuração de Frota e ANTT</h3>
-                                            <button onClick={() => {
-                                                const name = prompt("Nome do novo tipo de veículo:");
-                                                if (name) handleUpdateVehicleConfig(name, { capacity: 10000, axles: 2, factor: 0, fixed: 0, variable: 0, calcMode: 'ANTT' });
-                                            }} className="px-4 py-2 bg-blue-100 text-blue-600 rounded-xl font-black text-[10px] uppercase hover:bg-blue-200 transition-colors">
-                                                + Novo Veículo
-                                            </button>
-                                        </div>
-                                        {Object.entries(vehicleConfigs).map(([key, config]) => (
-                                            <div key={key} className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm">
-                                                <div className="flex justify-between items-center mb-4">
-                                                    <h4 className="font-black text-[#344a5e] uppercase flex items-center gap-2"><Truck className="w-4 h-4 text-slate-400" /> {key}</h4>
-                                                    {currentUser.role === 'master' && (
-                                                        <button onClick={() => handleDeleteVehicleConfig(key)} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
-                                                            <Trash2 className="w-4 h-4" />
+                                                        }} className="flex-1 py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+                                                            <Save className="w-4 h-4" /> {editingCustomer ? 'Salvar Alterações' : 'Cadastrar'}
                                                         </button>
-                                                    )}
-                                                </div>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                                                    <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Capacidade (KG)</label>
-                                                        <input type="number" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.capacity} onChange={e => handleUpdateVehicleConfig(key, { ...config, capacity: Number(e.target.value) })} />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Qtd. Eixos</label>
-                                                        <input type="number" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.axles || 2} onChange={e => handleUpdateVehicleConfig(key, { ...config, axles: Number(e.target.value) })} />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Modo Cálculo</label>
-                                                        <select className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.calcMode} onChange={e => handleUpdateVehicleConfig(key, { ...config, calcMode: e.target.value as 'KM' | 'ANTT' })}>
-                                                            <option value="KM">KM (Fator)</option>
-                                                            <option value="ANTT">ANTT (Fixo+Var)</option>
-                                                        </select>
-                                                    </div>
-                                                    {config.calcMode === 'KM' ? (
-                                                        <div>
-                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Fator por KM (R$)</label>
-                                                            <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.factor} onChange={e => handleUpdateVehicleConfig(key, { ...config, factor: Number(e.target.value) })} />
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <div>
-                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Custo Fixo (R$)</label>
-                                                                <input type="number" step="1" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.fixed} onChange={e => handleUpdateVehicleConfig(key, { ...config, fixed: Number(e.target.value) })} />
-                                                            </div>
-                                                            <div className="col-span-1">
-                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Custo Var / KM (R$)</label>
-                                                                <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.variable} onChange={e => handleUpdateVehicleConfig(key, { ...config, variable: Number(e.target.value) })} />
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {configTab === 'identity' && (
-                                    <div className="bg-slate-50 p-12 rounded-[3.5rem] flex flex-col items-center gap-8 border">
-                                        <div className="w-48 h-48 bg-white p-6 rounded-[3rem] shadow-2xl flex items-center justify-center overflow-hidden border-4 border-white">{appLogo ? <img src={appLogo} className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full text-[#344a5e]" />}</div>
-                                        <label className="bg-blue-600 px-10 py-5 rounded-2xl text-white font-black uppercase text-xs cursor-pointer"><ImageIcon className="w-5 h-5 inline mr-2" /> Alterar Logo<input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" /></label>
-                                        <button onClick={() => setAppLogo(null)} className="text-red-400 font-black text-[10px] uppercase underline underline-offset-4">Resetar Padrão</button>
-                                    </div>
-                                )}
-                                {configTab === 'users' && (
-                                    <div className="space-y-8">
-                                        {/* User Creation Form */}
-                                        <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
-                                            <div className="flex items-center gap-3 mb-6">
-                                                <Users className="w-5 h-5 text-blue-600" />
-                                                <h3 className="font-black text-[#344a5e] uppercase text-xs">Cadastrar Novo Usuário</h3>
-                                            </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                                <div>
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Nome Completo</label>
-                                                    <input type="text" id="new-user-name" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: João Silva" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Login (Usuário)</label>
-                                                    <input type="text" id="new-user-username" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: joao.silva" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Senha</label>
-                                                    <input type="password" id="new-user-password" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="••••••••" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Perfil</label>
-                                                    <select id="new-user-role" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all">
-                                                        <option value="operador">Operador</option>
-                                                        <option value="master">Master</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={async () => {
-                                                    const nameEl = document.getElementById('new-user-name') as HTMLInputElement;
-                                                    const usernameEl = document.getElementById('new-user-username') as HTMLInputElement;
-                                                    const passwordEl = document.getElementById('new-user-password') as HTMLInputElement;
-                                                    const roleEl = document.getElementById('new-user-role') as HTMLSelectElement;
-                                                    if (!nameEl.value || !usernameEl.value || !passwordEl.value) {
-                                                        showFeedback('Preencha todos os campos.', 'error');
-                                                        return;
-                                                    }
-                                                    const newUser = await createUser({
-                                                        id: crypto.randomUUID(),
-                                                        name: nameEl.value,
-                                                        username: usernameEl.value,
-                                                        password: passwordEl.value,
-                                                        role: roleEl.value as any
-                                                    });
-                                                    if (newUser) {
-                                                        setUsers([...users, newUser]);
-                                                        nameEl.value = '';
-                                                        usernameEl.value = '';
-                                                        passwordEl.value = '';
-                                                        showFeedback('Usuário cadastrado!');
-                                                    } else {
-                                                        showFeedback('Erro ao cadastrar usuário.', 'error');
-                                                    }
-                                                }}
-                                                className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <Save className="w-4 h-4" /> Cadastrar Usuário
-                                            </button>
-                                        </div>
-
-                                        {/* Users List */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                            {users.map(u => (
-                                                <div key={u.id} className="p-5 bg-white rounded-[2rem] border-2 border-slate-50 flex items-center justify-between group hover:border-blue-100 transition-all shadow-sm">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center">
-                                                            <span className="font-black text-blue-400 text-sm">{u.name.charAt(0)}</span>
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-black text-[#344a5e] text-xs uppercase tracking-tight">{u.name}</p>
-                                                            <p className="text-[9px] font-bold text-slate-300 uppercase">@{u.username} • {u.role === 'master' ? 'Master' : 'Operador'}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                        {currentUser.role === 'master' && u.id !== currentUser.id && (
-                                                            <button onClick={async () => {
-                                                                if (await deleteUser(u.id)) {
-                                                                    setUsers(users.filter(i => i.id !== u.id));
-                                                                    showFeedback('Usuário removido!');
-                                                                }
-                                                            }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
+                                                        {editingCustomer && (
+                                                            <button onClick={() => {
+                                                                setEditingCustomer(null);
+                                                                setNewCustomerName('');
+                                                                setNewCustomerLogo('');
+                                                                setCustomerFilePreview(null);
+                                                            }} className="px-6 bg-slate-200 text-slate-600 rounded-2xl font-black uppercase text-xs hover:bg-slate-300 transition-all">Cancelar</button>
                                                         )}
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {configTab === 'goals' && (
-                                    <div className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm space-y-4">
-                                        <h3 className="font-black text-[#344a5e] mb-4">Metas Mensais (R$)</h3>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                            {Array.from({ length: 12 }).map((_, i) => {
-                                                const year = new Date().getFullYear();
-                                                const monthStr = (i + 1).toString().padStart(2, '0');
-                                                const key = `${year}-${monthStr}`;
-                                                const monthName = new Date(year, i).toLocaleString('pt-BR', { month: 'long' });
+                                            </div>
 
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {customers.map(c => (
+                                                    <div key={c.id} className="p-5 bg-white rounded-[2rem] border-2 border-slate-50 flex items-center justify-between group hover:border-blue-100 transition-all shadow-sm">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-12 h-12 rounded-xl bg-slate-50 border flex items-center justify-center overflow-hidden">
+                                                                {c.logoUrl ? <img src={c.logoUrl} className="w-full h-full object-contain" /> : <span className="font-black text-slate-300">{c.name.charAt(0)}</span>}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-black text-[#344a5e] text-xs uppercase tracking-tight">{c.name}</p>
+                                                                <p className="text-[9px] font-bold text-slate-300 uppercase">Cliente Cadastrado</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                            <button onClick={() => {
+                                                                setEditingCustomer(c);
+                                                                setNewCustomerName(c.name);
+                                                                setNewCustomerLogo(c.logoUrl || '');
+                                                                setCustomerFilePreview(null);
+                                                            }} className="p-2 text-blue-400 hover:bg-blue-50 rounded-lg"><Edit3 className="w-4 h-4" /></button>
+                                                            {currentUser.role === 'master' && (
+                                                                <button onClick={async () => { if (await deleteCustomer(c.id)) setCustomers(customers.filter(i => i.id !== c.id)); }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {configTab === 'financial' && (
+                                        <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).filter(([k]) => k !== 'goals').map(([key, val]) => (
+                                            <div key={key} className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">{key}</label>
+                                                <input type="number" step="0.01" className="w-full p-4 bg-white rounded-2xl font-black text-2xl text-[#344a5e]" value={val as number} onChange={e => handleUpdateFedTaxes(key as any, Number(e.target.value))} />
+                                            </div>
+                                        ))}</div>
+                                    )}
+                                    {configTab === 'goals' && (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                                            {Array.from({ length: 12 }, (_, i) => {
+                                                const date = new Date(new Date().getFullYear(), i, 1);
+                                                const monthKey = `${date.getFullYear()}-${String(i + 1).padStart(2, '0')}`;
+                                                const label = date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
                                                 return (
-                                                    <div key={key}>
-                                                        <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 capitalize">{monthName}</label>
+                                                    <div key={monthKey} className="bg-slate-50 p-6 rounded-[2rem] border shadow-sm">
+                                                        <label className="text-[10px] font-black text-slate-400 uppercase block mb-2 capitalize">{label}</label>
                                                         <input
                                                             type="number"
-                                                            className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border"
-                                                            value={fedTaxes.goals?.[key] || ''}
-                                                            placeholder="0,00"
-                                                            onChange={e => {
-                                                                const val = Number(e.target.value);
-                                                                const newGoals = { ...fedTaxes.goals, [key]: val };
-                                                                setFedTaxes({ ...fedTaxes, goals: newGoals });
-                                                                updateSystemConfig({ ...fedTaxes, goals: newGoals });
-                                                            }}
+                                                            className="w-full p-3 bg-white rounded-xl font-bold text-lg text-[#344a5e]"
+                                                            value={fedTaxes.goals?.[monthKey] || ''}
+                                                            onChange={e => handleUpdateGoals(monthKey, Number(e.target.value))}
+                                                            placeholder="R$ 0,00"
                                                         />
                                                     </div>
                                                 );
                                             })}
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                    {configTab === 'fleet' && (
+                                        <div className="space-y-6">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="font-black text-[#344a5e]">Configuração de Frota e ANTT</h3>
+                                                <button onClick={() => {
+                                                    const name = prompt("Nome do novo tipo de veículo:");
+                                                    if (name) handleUpdateVehicleConfig(name, { capacity: 10000, axles: 2, factor: 0, fixed: 0, variable: 0, calcMode: 'ANTT' });
+                                                }} className="px-4 py-2 bg-blue-100 text-blue-600 rounded-xl font-black text-[10px] uppercase hover:bg-blue-200 transition-colors">
+                                                    + Novo Veículo
+                                                </button>
+                                            </div>
+                                            {Object.entries(vehicleConfigs).map(([key, config]) => (
+                                                <div key={key} className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm">
+                                                    <div className="flex justify-between items-center mb-4">
+                                                        <h4 className="font-black text-[#344a5e] uppercase flex items-center gap-2"><Truck className="w-4 h-4 text-slate-400" /> {key}</h4>
+                                                        {currentUser.role === 'master' && (
+                                                            <button onClick={() => handleDeleteVehicleConfig(key)} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                                                        <div>
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Capacidade (KG)</label>
+                                                            <input type="number" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.capacity} onChange={e => handleUpdateVehicleConfig(key, { ...config, capacity: Number(e.target.value) })} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Qtd. Eixos</label>
+                                                            <input type="number" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.axles || 2} onChange={e => handleUpdateVehicleConfig(key, { ...config, axles: Number(e.target.value) })} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Modo Cálculo</label>
+                                                            <select className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.calcMode} onChange={e => handleUpdateVehicleConfig(key, { ...config, calcMode: e.target.value as 'KM' | 'ANTT' })}>
+                                                                <option value="KM">KM (Fator)</option>
+                                                                <option value="ANTT">ANTT (Fixo+Var)</option>
+                                                            </select>
+                                                        </div>
+                                                        {config.calcMode === 'KM' ? (
+                                                            <div>
+                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Fator por KM (R$)</label>
+                                                                <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.factor} onChange={e => handleUpdateVehicleConfig(key, { ...config, factor: Number(e.target.value) })} />
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <div>
+                                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Custo Fixo (R$)</label>
+                                                                    <input type="number" step="1" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.fixed} onChange={e => handleUpdateVehicleConfig(key, { ...config, fixed: Number(e.target.value) })} />
+                                                                </div>
+                                                                <div className="col-span-1">
+                                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Custo Var / KM (R$)</label>
+                                                                    <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.variable} onChange={e => handleUpdateVehicleConfig(key, { ...config, variable: Number(e.target.value) })} />
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {configTab === 'icms' && (
+                                        <div className="space-y-8">
+                                            {/* ICMS Controls & Standard Toggle */}
+                                            <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
+                                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="p-3 bg-blue-100 rounded-2xl text-blue-600 shadow-sm"><Percent className="w-5 h-5" /></div>
+                                                        <div>
+                                                            <h4 className="text-[13px] font-black uppercase text-slate-700 tracking-wider">Gestão de Alíquotas ICMS</h4>
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase">Matriz Completa TOTVS 2026 + Ajustes Manuais</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-4">
+                                                        <button
+                                                            onClick={() => {
+                                                                if (confirm('Deseja restaurar TODAS as alíquotas para o padrão TOTVS 2026? Isso removerá seus ajustes manuais.')) {
+                                                                    const standardRules = getStandardIcmsRules();
+                                                                    handleUpdateIcmsRates(standardRules);
+                                                                    showFeedback("Tabela TOTVS 2026 restaurada com sucesso!");
+                                                                }
+                                                            }}
+                                                            className="px-6 py-4 bg-white border-2 border-slate-100 text-slate-500 hover:border-blue-100 hover:text-blue-600 rounded-2xl font-black text-[10px] uppercase transition-all flex items-center gap-2 shadow-sm"
+                                                        >
+                                                            <RotateCcw className="w-4 h-4" /> Restaurar Padrão
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Matrix Filters */}
+                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                                    <div className="flex flex-col gap-2">
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Busca (Ex: SP-RJ)</label>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full p-4 bg-white rounded-xl font-bold border-2 border-slate-100 focus:border-blue-200 outline-none uppercase text-xs"
+                                                            placeholder="BUSCAR PAR..."
+                                                            value={icmsSearch}
+                                                            onChange={e => setIcmsSearch(e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-col gap-2">
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Origem</label>
+                                                        <input
+                                                            type="text"
+                                                            maxLength={2}
+                                                            className="w-full p-4 bg-white rounded-xl font-bold border-2 border-slate-100 focus:border-blue-200 outline-none uppercase text-xs"
+                                                            placeholder="UF"
+                                                            value={icmsOriginFilter}
+                                                            onChange={e => setIcmsOriginFilter(e.target.value.toUpperCase())}
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-col gap-2">
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Destino</label>
+                                                        <input
+                                                            type="text"
+                                                            maxLength={2}
+                                                            className="w-full p-4 bg-white rounded-xl font-bold border-2 border-slate-100 focus:border-blue-200 outline-none uppercase text-xs"
+                                                            placeholder="UF"
+                                                            value={icmsDestFilter}
+                                                            onChange={e => setIcmsDestFilter(e.target.value.toUpperCase())}
+                                                        />
+                                                    </div>
+                                                    <div className="flex items-end">
+                                                        <button
+                                                            onClick={() => { setIcmsSearch(''); setIcmsOriginFilter(''); setIcmsDestFilter(''); }}
+                                                            className="w-full p-4 bg-slate-100 text-slate-400 hover:text-slate-600 rounded-xl font-black uppercase text-[10px] transition-all"
+                                                        >
+                                                            Limpar Filtros
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Matrix Listing */}
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between px-4">
+                                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alíquotas e Ajustes Manuais</h4>
+                                                    <span className="text-[10px] font-bold text-slate-300 uppercase">Mostrando pares filtrados</span>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 max-h-[500px] overflow-y-auto p-2 scrollbar-hide">
+                                                    {Object.entries(fedTaxes.icmsRates || {})
+                                                        .filter(([pair]) => {
+                                                            const [o, d] = pair.split('-');
+                                                            const matchesSearch = pair.includes(icmsSearch.toUpperCase());
+                                                            const matchesOrigin = icmsOriginFilter ? o === icmsOriginFilter : true;
+                                                            const matchesDest = icmsDestFilter ? d === icmsDestFilter : true;
+                                                            return matchesSearch && matchesOrigin && matchesDest;
+                                                        })
+                                                        .sort(([a], [b]) => a.localeCompare(b))
+                                                        .slice(0, 100) // Performance optimization for UI
+                                                        .map(([pair, rate]) => {
+                                                            const [org, dst] = pair.split('-');
+                                                            return (
+                                                                <div key={pair} className="bg-white p-4 rounded-2xl border-2 border-slate-50 flex items-center justify-between hover:border-blue-200 transition-all shadow-sm group">
+                                                                    <div className="flex flex-col">
+                                                                        <div className="flex items-center gap-1.5 mb-1">
+                                                                            <span className="font-black text-[10px] text-slate-500">{org}</span>
+                                                                            <ArrowRight className="w-2.5 h-2.5 text-slate-300" />
+                                                                            <span className="font-black text-[10px] text-blue-500">{dst}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <input
+                                                                                type="number"
+                                                                                className="w-16 bg-slate-50 border-none p-1 rounded font-black text-sm text-slate-800 focus:bg-white focus:ring-1 focus:ring-blue-400 outline-none"
+                                                                                value={rate}
+                                                                                onChange={(e) => {
+                                                                                    const val = Number(e.target.value);
+                                                                                    const updated = { ...(fedTaxes.icmsRates || {}), [pair]: val };
+                                                                                    handleUpdateIcmsRates(updated);
+                                                                                }}
+                                                                            />
+                                                                            <span className="text-[10px] font-black text-slate-300">%</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <div className="p-1.5 bg-blue-50 text-blue-400 rounded-lg"><Edit3 className="w-3.5 h-3.5" /></div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                </div>
+                                                {Object.keys(fedTaxes.icmsRates || {}).length === 0 && (
+                                                    <div className="p-10 border-2 border-dashed border-slate-100 rounded-[2rem] text-center">
+                                                        <button
+                                                            onClick={() => {
+                                                                const standardRules = getStandardIcmsRules();
+                                                                handleUpdateIcmsRates(standardRules);
+                                                            }}
+                                                            className="text-blue-500 font-black uppercase text-xs hover:underline"
+                                                        >
+                                                            Clique para inicializar a tabela TOTVS 2026
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {configTab === 'identity' && (
+                                        <div className="bg-slate-50 p-12 rounded-[3.5rem] flex flex-col items-center gap-8 border">
+                                            <div className="w-48 h-48 bg-white p-6 rounded-[3rem] shadow-2xl flex items-center justify-center overflow-hidden border-4 border-white">{appLogo ? <img src={appLogo} className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full text-[#344a5e]" />}</div>
+                                            <label className="bg-blue-600 px-10 py-5 rounded-2xl text-white font-black uppercase text-xs cursor-pointer"><ImageIcon className="w-5 h-5 inline mr-2" /> Alterar Logo<input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" /></label>
+                                            <button onClick={() => setAppLogo(null)} className="text-red-400 font-black text-[10px] uppercase underline underline-offset-4">Resetar Padrão</button>
+                                        </div>
+                                    )}
+                                    {configTab === 'users' && (
+                                        <div className="space-y-8">
+                                            {/* User Creation Form */}
+                                            <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
+                                                <div className="flex items-center gap-3 mb-6">
+                                                    <Users className="w-5 h-5 text-blue-600" />
+                                                    <h3 className="font-black text-[#344a5e] uppercase text-xs">Cadastrar Novo Usuário</h3>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                                    <div>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Nome Completo</label>
+                                                        <input type="text" id="new-user-name" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: João Silva" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Login (Usuário)</label>
+                                                        <input type="text" id="new-user-username" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: joao.silva" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Senha</label>
+                                                        <input type="password" id="new-user-password" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="••••••••" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Perfil</label>
+                                                        <select id="new-user-role" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all">
+                                                            <option value="operador">Operador</option>
+                                                            <option value="master">Master</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={async () => {
+                                                        const nameEl = document.getElementById('new-user-name') as HTMLInputElement;
+                                                        const usernameEl = document.getElementById('new-user-username') as HTMLInputElement;
+                                                        const passwordEl = document.getElementById('new-user-password') as HTMLInputElement;
+                                                        const roleEl = document.getElementById('new-user-role') as HTMLSelectElement;
+                                                        if (!nameEl.value || !usernameEl.value || !passwordEl.value) {
+                                                            showFeedback('Preencha todos os campos.', 'error');
+                                                            return;
+                                                        }
+                                                        const newUser = await createUser({
+                                                            id: crypto.randomUUID(),
+                                                            name: nameEl.value,
+                                                            username: usernameEl.value,
+                                                            password: passwordEl.value,
+                                                            role: roleEl.value as any
+                                                        });
+                                                        if (newUser) {
+                                                            setUsers([...users, newUser]);
+                                                            nameEl.value = '';
+                                                            usernameEl.value = '';
+                                                            passwordEl.value = '';
+                                                            showFeedback('Usuário cadastrado!');
+                                                        } else {
+                                                            showFeedback('Erro ao cadastrar usuário.', 'error');
+                                                        }
+                                                    }}
+                                                    className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <Save className="w-4 h-4" /> Cadastrar Usuário
+                                                </button>
+                                            </div>
+
+                                            {/* Users List */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {users.map(u => (
+                                                    <div key={u.id} className="p-5 bg-white rounded-[2rem] border-2 border-slate-50 flex items-center justify-between group hover:border-blue-100 transition-all shadow-sm">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center">
+                                                                <span className="font-black text-blue-400 text-sm">{u.name.charAt(0)}</span>
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-black text-[#344a5e] text-xs uppercase tracking-tight">{u.name}</p>
+                                                                <p className="text-[9px] font-bold text-slate-300 uppercase">@{u.username} • {u.role === 'master' ? 'Master' : 'Operador'}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                            {currentUser.role === 'master' && u.id !== currentUser.id && (
+                                                                <button onClick={async () => {
+                                                                    if (await deleteUser(u.id)) {
+                                                                        setUsers(users.filter(i => i.id !== u.id));
+                                                                        showFeedback('Usuário removido!');
+                                                                    }
+                                                                }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {configTab === 'goals' && (
+                                        <div className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm space-y-4">
+                                            <h3 className="font-black text-[#344a5e] mb-4">Metas Mensais (R$)</h3>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                                {Array.from({ length: 12 }).map((_, i) => {
+                                                    const year = new Date().getFullYear();
+                                                    const monthStr = (i + 1).toString().padStart(2, '0');
+                                                    const key = `${year}-${monthStr}`;
+                                                    const monthName = new Date(year, i).toLocaleString('pt-BR', { month: 'long' });
+
+                                                    return (
+                                                        <div key={key}>
+                                                            <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 capitalize">{monthName}</label>
+                                                            <input
+                                                                type="number"
+                                                                className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border"
+                                                                value={fedTaxes.goals?.[key] || ''}
+                                                                placeholder="0,00"
+                                                                onChange={e => {
+                                                                    const val = Number(e.target.value);
+                                                                    const newGoals = { ...fedTaxes.goals, [key]: val };
+                                                                    setFedTaxes({ ...fedTaxes, goals: newGoals });
+                                                                    updateSystemConfig({ ...fedTaxes, goals: newGoals });
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {toast && (
-                <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[1000] animate-bounce-in">
-                    <div className="bg-[#1e293b] text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-4 font-black uppercase text-[10px]">{toast.message}</div>
-                </div>
-            )}
-
-            {showCelebration && (
-                <div className="fixed inset-0 pointer-events-none z-[2000] flex items-center justify-center overflow-hidden">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-                    {[...Array(50)].map((_, i) => (
-                        <div key={i} className="confetti" style={{ left: `${Math.random() * 100}vw`, animationDelay: `${Math.random() * 2}s`, backgroundColor: ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00bcd4', '#e91e63'][Math.floor(Math.random() * 7)], width: `${Math.random() * 10 + 5}px`, height: `${Math.random() * 20 + 10}px` }} />
-                    ))}
-                    <div className="bg-white p-12 rounded-[3rem] shadow-2xl text-center celebration-text relative z-10 border-4 border-emerald-400 rotate-2">
-                        <div className="text-7xl mb-6">🎉 💸 🚚</div>
-                        <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-green-600 mb-2 uppercase tracking-tighter">Venda Fechada!</h1>
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-2">Parabéns pelo excelente trabalho</p>
+            {
+                toast && (
+                    <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[1000] animate-bounce-in">
+                        <div className="bg-[#1e293b] text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-4 font-black uppercase text-[10px]">{toast.message}</div>
                     </div>
-                </div>
+                )
+            }
+
+            {
+                showCelebration && (
+                    <div className="fixed inset-0 pointer-events-none z-[2000] flex items-center justify-center overflow-hidden">
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+                        {[...Array(50)].map((_, i) => (
+                            <div key={i} className="confetti" style={{ left: `${Math.random() * 100}vw`, animationDelay: `${Math.random() * 2}s`, backgroundColor: ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00bcd4', '#e91e63'][Math.floor(Math.random() * 7)], width: `${Math.random() * 10 + 5}px`, height: `${Math.random() * 20 + 10}px` }} />
+                        ))}
+                        <div className="bg-white p-12 rounded-[3rem] shadow-2xl text-center celebration-text relative z-10 border-4 border-emerald-400 rotate-2">
+                            <div className="text-7xl mb-6">🎉 💸 🚚</div>
+                            <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-green-600 mb-2 uppercase tracking-tighter">Venda Fechada!</h1>
+                            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-2">Parabéns pelo excelente trabalho</p>
+                        </div>
+                    </div>
+                )
+            }
+            {isWonModalOpen && selectedWonQuote && (
+                <WonInfoModal
+                    isOpen={isWonModalOpen}
+                    onClose={() => {
+                        setIsWonModalOpen(false);
+                        setSelectedWonQuote(null);
+                    }}
+                    onSubmit={handleWonInfoSubmit}
+                    quote={selectedWonQuote}
+                    customers={customers}
+                />
             )}
-        </div>
+        </div >
     );
 };
 

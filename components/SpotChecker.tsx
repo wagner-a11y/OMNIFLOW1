@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Zap, RotateCcw, CheckCircle, AlertTriangle, Calendar, MapPin, AlertCircle, Handshake, TrendingUp, PieChart } from 'lucide-react';
 import { ANTTCoefficients, FederalTaxes, Customer, FreightCalculation } from '../types';
 import { estimateDistance } from '../services/geminiService';
+import { getIcmsRate, getUF } from '../utils/icms';
 
 interface SpotCheckerProps {
     vehicleConfigs: Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>;
@@ -90,8 +91,13 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                 }
             }
 
-            // ICMS (interestadual 12% padrão, crédito presumido 20%)
-            const icmsRate = 12;
+            // ICMS (interestadual 12% padrão ou dinâmica por tabela)
+
+
+            const orgUF = getUF(spotOrigin);
+            const dstUF = getUF(spotDest);
+            const icmsRate = getIcmsRate(orgUF || '', dstUF || '', fedTaxes.icmsRates);
+
             const icmsCheio = freteOfertado * (icmsRate / 100);
             const creditoPresumido = icmsCheio * 0.20;
             const icmsEfetivo = icmsCheio - creditoPresumido;
@@ -451,46 +457,46 @@ export const SpotChecker: React.FC<SpotCheckerProps> = ({ vehicleConfigs, fedTax
                         {spotHistory.map(simulation => {
                             const customer = customers.find(c => c.id === simulation.customerId);
                             return (
-                                <div key={simulation.id} className="bg-white p-6 rounded-[2rem] border shadow-sm flex flex-col lg:flex-row lg:items-center gap-6 group hover:border-blue-500 transition-all">
-                                    <div className="flex items-center gap-4 lg:w-1/4">
-                                        <div className={`p-3 rounded-xl ${simulation.realMarginPercent && simulation.realMarginPercent >= 15 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                                            {simulation.realMarginPercent && simulation.realMarginPercent >= 15 ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+                                <div key={simulation.id} className="bg-white py-2.5 px-6 rounded-[1.5rem] border shadow-sm flex flex-col lg:flex-row lg:items-center gap-4 group hover:border-blue-500 transition-all">
+                                    <div className="flex items-center gap-3 lg:w-48">
+                                        <div className={`p-1.5 rounded-lg ${(simulation.realMarginPercent || 0) >= 15 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                                            {(simulation.realMarginPercent || 0) >= 15 ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
                                         </div>
-                                        <div>
-                                            <p className="text-[10px] font-black uppercase text-slate-400">{new Date(simulation.createdAt).toLocaleDateString()} {new Date(simulation.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                            <p className="font-black text-[#344a5e] leading-tight">{customer?.name || 'Cliente Avulso'}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                        <div>
-                                            <p className="text-[9px] font-bold uppercase text-slate-400">Origem</p>
-                                            <p className="font-black text-xs text-[#344a5e] truncate" title={simulation.origin}>{simulation.origin}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-bold uppercase text-slate-400">Destino</p>
-                                            <p className="font-black text-xs text-[#344a5e] truncate" title={simulation.destination}>{simulation.destination}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-bold uppercase text-slate-400">Veículo</p>
-                                            <p className="font-black text-xs text-[#344a5e] truncate">{simulation.vehicleType}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-bold uppercase text-slate-400">Valor Oferta</p>
-                                            <p className="font-black text-xs text-blue-600">R$ {fmt(simulation.totalFreight)}</p>
+                                        <div className="min-w-0">
+                                            <p className="text-[7px] font-black uppercase text-slate-400">{new Date(simulation.createdAt).toLocaleDateString()} {new Date(simulation.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                            <p className="font-black text-[#344a5e] leading-tight truncate text-[10px]">{customer?.name || 'Cliente Avulso'}</p>
                                         </div>
                                     </div>
 
-                                    <div className="lg:w-48 flex items-center justify-end gap-2">
-                                        <div className="text-right mr-4">
-                                            <p className="text-[9px] font-bold uppercase text-slate-400">Margem</p>
-                                            <p className={`font-black ${(simulation.realMarginPercent || 0) >= 15 ? 'text-emerald-500' : 'text-red-500'}`}>{(simulation.realMarginPercent || 0).toFixed(1)}%</p>
+                                    <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-6 px-4">
+                                        <div>
+                                            <p className="text-[7px] font-bold uppercase text-slate-400">Origem</p>
+                                            <p className="font-black text-[9px] text-[#344a5e] truncate" title={simulation.origin}>{simulation.origin.split(',')[0]}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[7px] font-bold uppercase text-slate-400">Destino</p>
+                                            <p className="font-black text-[9px] text-[#344a5e] truncate" title={simulation.destination}>{simulation.destination.split(',')[0]}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[7px] font-bold uppercase text-slate-400">Veículo</p>
+                                            <p className="font-black text-[9px] text-[#344a5e] truncate">{simulation.vehicleType}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[7px] font-bold uppercase text-slate-400">Valor Oferta</p>
+                                            <p className="font-black text-[10px] text-blue-600">R$ {fmt(simulation.totalFreight)}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="lg:w-48 flex items-center justify-end gap-5">
+                                        <div className="text-right">
+                                            <p className="text-[7px] font-bold uppercase text-slate-400">Margem</p>
+                                            <p className={`font-black text-[10px] ${(simulation.realMarginPercent || 0) >= 15 ? 'text-emerald-500' : 'text-red-500'}`}>{(simulation.realMarginPercent || 0).toFixed(1)}%</p>
                                         </div>
                                         <button
                                             onClick={() => onAcceptCharge?.(simulation)}
-                                            className="bg-[#344a5e] hover:bg-[#2a3d4e] text-white px-6 py-3 rounded-xl font-black uppercase text-[10px] flex items-center gap-2 shadow-lg transition-all"
+                                            className="bg-[#344a5e] hover:bg-[#2a3d4e] text-white px-3 py-1.5 rounded-lg font-black uppercase text-[7px] flex items-center gap-1.5 shadow-md transition-all whitespace-nowrap"
                                         >
-                                            <Zap className="w-3 h-3 text-emerald-400" /> Aceitar
+                                            <Zap className="w-2 h-2 text-emerald-400" /> Aceitar
                                         </button>
                                     </div>
                                 </div>

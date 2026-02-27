@@ -190,7 +190,8 @@ export const getSystemConfig = async (): Promise<FederalTaxes | null> => {
         irpj: Number(data.irpj),
         insurancePolicyRate: Number(data.insurance_policy_rate),
         goals: data.goals || {},
-        spotStats: data.spot_stats || { simulated: 0, converted: 0 }
+        spotStats: data.spot_stats || { simulated: 0, converted: 0 },
+        icmsRates: data.icms_rates || {}
     };
 };
 
@@ -205,6 +206,7 @@ export const updateSystemConfig = async (config: FederalTaxes): Promise<boolean>
             insurance_policy_rate: config.insurancePolicyRate,
             goals: config.goals || {},
             spot_stats: config.spotStats || { simulated: 0, converted: 0 },
+            icms_rates: config.icmsRates || {},
             updated_at: new Date().toISOString()
         })
         .eq('id', 'default');
@@ -267,7 +269,24 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
         lostReason: item.lost_reason,
         lostObs: item.lost_obs,
         lostFileUrl: item.lost_file_url,
-        otherCosts: item.other_costs || []
+        otherCosts: item.other_costs || [],
+        coletaDate: item.coleta_date,
+        entregaDate: item.entrega_date,
+        clienteNomeOperacao: item.cliente_nome_operacao,
+        referenciaClienteOperacao: item.referencia_cliente_operacao,
+        solicitante: item.solicitante,
+        coletaEndereco: item.coleta_endereco,
+        entregaEndereco: item.entrega_endereco,
+        pesoCargaOperacao: item.peso_carga_operacao ? Number(item.peso_carga_operacao) : undefined,
+        veiculoTipoOperacao: item.veiculo_tipo_operacao,
+        carroceriaTipoOperacao: item.carroceria_tipo_operacao,
+        materialTipo: item.material_tipo,
+        nossoFrete: item.nosso_frete ? Number(item.nosso_frete) : undefined,
+        freteTerceiro: item.frete_terceiro ? Number(item.frete_terceiro) : undefined,
+        valorCarga: item.valor_carga ? Number(item.valor_carga) : undefined,
+        outras_necessidades: item.outras_necessidades,
+        observacoesGerais: item.observacoes_gerais,
+        pipelineStage: item.pipeline_stage
     }));
 };
 
@@ -308,7 +327,24 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         lost_file_url: calc.lostFileUrl || null,
         real_profit: calc.realProfit || 0,
         real_margin_percent: calc.realMarginPercent || 0,
-        other_costs: calc.otherCosts || []
+        other_costs: calc.otherCosts || [],
+        coleta_date: calc.coletaDate || null,
+        entrega_date: calc.entregaDate || null,
+        cliente_nome_operacao: calc.clienteNomeOperacao || null,
+        referencia_cliente_operacao: calc.referenciaClienteOperacao || null,
+        solicitante: calc.solicitante || null,
+        coleta_endereco: calc.coletaEndereco || null,
+        entrega_endereco: calc.entregaEndereco || null,
+        peso_carga_operacao: calc.pesoCargaOperacao || null,
+        veiculo_tipo_operacao: calc.veiculoTipoOperacao || null,
+        carroceria_tipo_operacao: calc.carroceriaTipoOperacao || null,
+        material_tipo: calc.materialTipo || null,
+        nosso_frete: calc.nossoFrete || null,
+        frete_terceiro: calc.freteTerceiro || null,
+        valor_carga: calc.valorCarga || null,
+        outras_necessidades: calc.outrasNecessidades || null,
+        observacoes_gerais: calc.observacoesGerais || null,
+        pipeline_stage: calc.pipelineStage || 'Nova carga'
     };
 
     const { error } = await supabase
@@ -360,7 +396,24 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         lost_file_url: calc.lostFileUrl || null,
         real_profit: calc.realProfit || 0,
         real_margin_percent: calc.realMarginPercent || 0,
-        other_costs: calc.otherCosts || []
+        other_costs: calc.otherCosts || [],
+        coleta_date: calc.coletaDate || null,
+        entrega_date: calc.entregaDate || null,
+        cliente_nome_operacao: calc.clienteNomeOperacao || null,
+        referencia_cliente_operacao: calc.referenciaClienteOperacao || null,
+        solicitante: calc.solicitante || null,
+        coleta_endereco: calc.coletaEndereco || null,
+        entrega_endereco: calc.entregaEndereco || null,
+        peso_carga_operacao: calc.pesoCargaOperacao || null,
+        veiculo_tipo_operacao: calc.veiculoTipoOperacao || null,
+        carroceria_tipo_operacao: calc.carroceriaTipoOperacao || null,
+        material_tipo: calc.materialTipo || null,
+        nosso_frete: calc.nossoFrete || null,
+        frete_terceiro: calc.freteTerceiro || null,
+        valor_carga: calc.valorCarga || null,
+        outras_necessidades: calc.outrasNecessidades || null,
+        observacoes_gerais: calc.observacoesGerais || null,
+        pipeline_stage: calc.pipelineStage || 'Nova carga'
     };
 
     const { error } = await supabase
