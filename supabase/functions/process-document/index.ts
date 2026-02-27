@@ -1,5 +1,4 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,85 +6,90 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  // Handle CORS pre-flight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    console.log('--- Edge Function: process-document started ---');
+    console.log('--- Edge Function: process-document (REST) started ---');
     
-    // Check API Key
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
-      console.error('OCR Error: GEMINI_API_KEY is not set in environment variables');
-      throw new Error('Chave API do Gemini não configurada no servidor.');
+      throw new Error('GEMINI_API_KEY missing in Supabase secrets');
     }
 
     const { fileBase64, fileType } = await req.json();
-    if (!fileBase64) {
-      throw new Error('Nenhum dado de arquivo (base64) foi recebido.');
-    }
+    if (!fileBase64) throw new Error('No file data provided');
 
-    console.log(`Processing file type: ${fileType}`);
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    console.log(`Payload received: ${fileType}, data length: ${fileBase64.length}`);
 
     const prompt = `
-      Você é um especialista em OCR de documentos de transporte brasileiro (CNH e CRLV).
-      Analise o documento fornecido e extraia o máximo de informações possíveis.
-      Retorne APENAS um objeto JSON válido com as seguintes chaves (use null se não encontrar):
+      Você é um especialista em OCR de documentos de transporte brasileiro.
+      Analise o documento (CNH ou CRLV) e retorne APENAS um JSON:
       
-      Para CNH (Motorista):
-      - nome: Nome completo
-      - cpf: CPF (formatado com pontos e traço)
-      - rg: Número do RG
-      - registro_cnh: Número do registro da CNH
-      - codigo_seguranca: Código de segurança da CNH
-      - protocolo: Número do protocolo/formulário (geralmente impresso na vertical)
+      Para CNH: { "nome": str, "cpf": str, "rg": str, "registro_cnh": str, "codigo_seguranca": str, "protocolo": str }
+      Para CRLV: { "placa": str, "renavam": str, "chassi": str, "cor": str, "ano_fab": str, "ano_mod": str, "marca": str, "modelo": str }
       
-      Para CRLV (Veículo):
-      - placa: Placa do veículo
-      - renavam: Número do RENAVAM
-      - chassi: Número do Chassi
-      - cor: Cor predominante
-      - ano_fab: Ano de fabricação
-      - ano_mod: Ano do modelo
-      - marca: Marca do fabricante
-      - modelo: Modelo do veículo
-      
-      Importante: Remova espaços extras e retorne apenas o JSON puro.
+      Retorne null para campos não encontrados. Não inclua markdown no retorno.
     `;
 
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          data: fileBase64,
-          mimeType: fileType,
-        },
-      },
-    ]);
+    // Direct REST call to Gemini
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    
+    const body = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          {
+            inline_data: {
+              mime_type: fileType,
+              data: fileBase64
+            }
+          }
+        ]
+      }],
+      generationConfig: {
+        response_mime_type: "application/json"
+      }
+    };
 
-    const response = await result.response;
-    const text = response.text();
-    console.log('Gemini raw response text:', text);
+    console.log('Sending request to Gemini API...');
+    const geminiRes = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
 
-    // Limpeza básica caso a IA coloque blocos de código markdown
-    const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const data = JSON.parse(jsonStr);
+    if (!geminiRes.ok) {
+      const errorText = await geminiRes.text();
+      console.error('Gemini API Error:', errorText);
+      throw new Error(`Gemini API returned ${geminiRes.status}: ${errorText}`);
+    }
 
-    console.log('Parsed JSON data:', data);
+    const result = await geminiRes.json();
+    console.log('Gemini API Success');
+
+    const textPayload = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textPayload) {
+      throw new Error('Gemini returned empty response');
+    }
+
+    // Since we requested application/json in generationConfig, textPayload should be pure JSON
+    const data = JSON.parse(textPayload);
+    console.log('Final Data:', data);
 
     return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+
   } catch (error) {
-    console.error('Edge Function Error:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('CRITICAL EDGE FUNCTION ERROR:', error.message);
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      stack: error.stack 
+    }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
