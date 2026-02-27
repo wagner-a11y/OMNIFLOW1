@@ -284,7 +284,7 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
         nossoFrete: item.nosso_frete ? Number(item.nosso_frete) : undefined,
         freteTerceiro: item.frete_terceiro ? Number(item.frete_terceiro) : undefined,
         valorCarga: item.valor_carga ? Number(item.valor_carga) : undefined,
-        outras_necessidades: item.outras_necessidades,
+        outrasNecessidades: item.outras_necessidades,
         observacoesGerais: item.observacoes_gerais,
         pipelineStage: item.pipeline_stage
     }));
@@ -362,6 +362,7 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
 
 export const updateFreightCalculation = async (calc: FreightCalculation): Promise<boolean> => {
     const dbRecord = {
+        id: calc.id,
         proposal_number: calc.proposalNumber,
         client_reference: calc.clientReference || null,
         origin: calc.origin,
@@ -418,8 +419,7 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
 
     const { error } = await supabase
         .from('freight_calculations')
-        .update(dbRecord)
-        .eq('id', calc.id);
+        .upsert([dbRecord]);
 
     if (error) {
         console.error('Error updating freight calculation:', error);
