@@ -290,7 +290,7 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
     }));
 };
 
-export const createFreightCalculation = async (calc: FreightCalculation): Promise<FreightCalculation | null> => {
+export const createFreightCalculation = async (calc: FreightCalculation): Promise<{ success: boolean; data?: FreightCalculation; error?: string }> => {
     const dbRecord = {
         id: calc.id,
         proposal_number: calc.proposalNumber,
@@ -352,41 +352,46 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         .insert([dbRecord]);
 
     if (error) {
-        console.error('CRITICAL: Error creating freight calculation in Supabase!', error);
-        console.error('Payload attempted:', dbRecord);
-        return null;
+        console.error('CRITICAL: Error in createFreightCalculation:', error);
+        return { success: false, error: error.message };
     }
-    console.log('Successfully saved to Supabase:', calc.proposalNumber);
-    return calc;
+    return { success: true, data: calc };
 };
 
-export const updateFreightCalculation = async (calc: FreightCalculation): Promise<boolean> => {
+export const updateFreightCalculation = async (calc: FreightCalculation): Promise<{ success: boolean; error?: string }> => {
+    // Sanitize numeric fields to prevent NaN or invalid types
+    const sanitize = (val: any) => {
+        if (val === undefined || val === null) return null;
+        const n = Number(val);
+        return isNaN(n) ? null : n;
+    };
+
     const dbRecord = {
         id: calc.id,
         proposal_number: calc.proposalNumber,
         client_reference: calc.clientReference || null,
         origin: calc.origin,
         destination: calc.destination,
-        distance_km: calc.distanceKm,
+        distance_km: sanitize(calc.distanceKm) || 0,
         vehicle_type: calc.vehicleType,
         merchandise_type: calc.merchandiseType || null,
-        weight: calc.weight,
+        weight: sanitize(calc.weight) || 0,
         customer_id: calc.customerId || null,
-        suggested_freight: calc.suggestedFreight || 0,
-        base_freight: calc.baseFreight || 0,
-        tolls: calc.tolls || 0,
-        extra_costs: calc.extraCosts || 0,
+        suggested_freight: sanitize(calc.suggestedFreight) || 0,
+        base_freight: sanitize(calc.baseFreight) || 0,
+        tolls: sanitize(calc.tolls) || 0,
+        extra_costs: sanitize(calc.extraCosts) || 0,
         extra_costs_description: calc.extraCostsDescription || null,
-        goods_value: calc.goodsValue || 0,
-        insurance_percent: calc.insurancePercent || 0,
-        ad_valorem: calc.adValorem || 0,
-        profit_margin: calc.profitMargin || 0,
-        icms_percent: calc.icmsPercent || 0,
-        pis_percent: calc.pisPercent || 0,
-        cofins_percent: calc.cofinsPercent || 0,
-        csll_percent: calc.csllPercent || 0,
-        irpj_percent: calc.irpjPercent || 0,
-        total_freight: calc.totalFreight || 0,
+        goods_value: sanitize(calc.goodsValue) || 0,
+        insurance_percent: sanitize(calc.insurancePercent) || 0,
+        ad_valorem: sanitize(calc.adValorem) || 0,
+        profit_margin: sanitize(calc.profitMargin) || 0,
+        icms_percent: sanitize(calc.icmsPercent) || 0,
+        pis_percent: sanitize(calc.pisPercent) || 0,
+        cofins_percent: sanitize(calc.cofinsPercent) || 0,
+        csll_percent: sanitize(calc.csllPercent) || 0,
+        irpj_percent: sanitize(calc.irpjPercent) || 0,
+        total_freight: sanitize(calc.totalFreight) || 0,
         disponibilidade: calc.disponibilidade,
         status: calc.status,
         updated_at: new Date().toISOString(),
@@ -395,8 +400,8 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         lost_reason: calc.lostReason || null,
         lost_obs: calc.lostObs || null,
         lost_file_url: calc.lostFileUrl || null,
-        real_profit: calc.realProfit || 0,
-        real_margin_percent: calc.realMarginPercent || 0,
+        real_profit: sanitize(calc.realProfit) || 0,
+        real_margin_percent: sanitize(calc.realMarginPercent) || 0,
         other_costs: calc.otherCosts || [],
         coleta_date: calc.coletaDate || null,
         entrega_date: calc.entregaDate || null,
@@ -405,13 +410,13 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         solicitante: calc.solicitante || null,
         coleta_endereco: calc.coletaEndereco || null,
         entrega_endereco: calc.entregaEndereco || null,
-        peso_carga_operacao: calc.pesoCargaOperacao || null,
+        peso_carga_operacao: sanitize(calc.pesoCargaOperacao),
         veiculo_tipo_operacao: calc.veiculoTipoOperacao || null,
         carroceria_tipo_operacao: calc.carroceriaTipoOperacao || null,
         material_tipo: calc.materialTipo || null,
-        nosso_frete: calc.nossoFrete || null,
-        frete_terceiro: calc.freteTerceiro || null,
-        valor_carga: calc.valorCarga || null,
+        nosso_frete: sanitize(calc.nossoFrete),
+        frete_terceiro: sanitize(calc.freteTerceiro),
+        valor_carga: sanitize(calc.valorCarga),
         outras_necessidades: calc.outrasNecessidades || null,
         observacoes_gerais: calc.observacoesGerais || null,
         pipeline_stage: calc.pipelineStage || 'Nova carga'
@@ -424,9 +429,9 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
     if (error) {
         console.error('CRITICAL: Error updating/upserting freight calculation:', error);
         console.error('Payload attempted:', dbRecord);
-        return false;
+        return { success: false, error: error.message };
     }
-    return true;
+    return { success: true };
 };
 
 export const deleteFreightCalculation = async (id: string): Promise<boolean> => {

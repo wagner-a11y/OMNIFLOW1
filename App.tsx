@@ -185,7 +185,7 @@ const App: React.FC = () => {
             console.log('Cleaning up Real-Time subscriptions');
             supabase.removeChannel(channel);
         };
-    }, [editingId]);
+    }, []);
 
     // spotStats persistence moved to database service
 
@@ -547,12 +547,12 @@ const App: React.FC = () => {
             updatedByName: currentUser?.name
         };
 
-        const success = await updateFreightCalculation(updatedQuote);
-        if (success) {
+        const result = await updateFreightCalculation(updatedQuote);
+        if (result.success) {
             setHistory(prev => prev.map(h => h.id === id ? updatedQuote : h));
             showFeedback('Status atualizado!');
         } else {
-            showFeedback('Erro ao atualizar status.', 'error');
+            showFeedback(`Erro ao atualizar status: ${result.error}`, 'error');
         }
     };
 
@@ -569,8 +569,8 @@ const App: React.FC = () => {
             pipelineStage: 'Nova carga'
         };
 
-        const success = await updateFreightCalculation(updatedQuote);
-        if (success) {
+        const result = await updateFreightCalculation(updatedQuote);
+        if (result.success) {
             setHistory(prev => prev.map(h => h.id === selectedWonQuote.id ? updatedQuote : h));
             setIsWonModalOpen(false);
             setSelectedWonQuote(null);
@@ -583,7 +583,8 @@ const App: React.FC = () => {
             resetForm();
             setActiveTab('history');
         } else {
-            showFeedback('Erro ao salvar informações da carga.', 'error');
+            console.error('Detailed Save Error:', result.error);
+            showFeedback(`Erro ao salvar carga: ${result.error || 'Erro desconhecido'}`, 'error');
         }
     };
 
@@ -722,22 +723,22 @@ const App: React.FC = () => {
 
         try {
             if (editingId) {
-                const success = await updateFreightCalculation(data);
-                if (success) {
+                const result = await updateFreightCalculation(data);
+                if (result.success) {
                     setHistory(prev => prev.map(h => h.id === editingId ? data : h));
                     showFeedback("Atualizado!");
                     setEditingId(null); resetForm(); setActiveTab('history');
                 } else {
-                    showFeedback("Erro ao atualizar no banco.", "error");
+                    showFeedback(`Erro ao atualizar no banco: ${result.error}`, "error");
                 }
             } else {
-                const saved = await createFreightCalculation(data);
-                if (saved) {
+                const result = await createFreightCalculation(data);
+                if (result.success) {
                     setHistory(prev => [data, ...prev]);
                     showFeedback("Salvo com sucesso!");
                     setEditingId(null); resetForm(); setActiveTab('history');
                 } else {
-                    showFeedback("Erro ao salvar no banco.", "error");
+                    showFeedback(`Erro ao salvar no banco: ${result.error}`, "error");
                 }
             }
         } catch (error) {
