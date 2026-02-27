@@ -1111,7 +1111,7 @@ Disponibilidade: ${disponibilidade}`;
                         </div>
                     )}
 
-                    {activeTab === 'dashboard' ? (
+                    {activeTab === 'dashboard' && (
                         <div className="space-y-8 animate-fade-in-up">
                             {/* Filtro de Período */}
                             <div className="flex justify-between items-end bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
@@ -1291,7 +1291,9 @@ Disponibilidade: ${disponibilidade}`;
                                 </div>
                             </div>
                         </div>
-                    ) : activeTab !== 'history' && activeTab !== 'crm' && activeTab !== 'spot' ? (
+                    )}
+
+                    {(activeTab === 'new' || activeTab === 'reverse') && (
                         <div className="space-y-8 animate-fade-in-up">
                             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                                 <div className="lg:col-span-3 space-y-8">
@@ -1594,7 +1596,9 @@ Disponibilidade: ${disponibilidade}`;
                             </div>
 
                         </div>
-                    ) : (
+                    )}
+
+                    {activeTab === 'history' && (
                         <div className="space-y-4 animate-fade-in-up">
                             <div className="flex items-center gap-4 px-4 mb-4">
                                 <History className="w-8 h-8 text-[#344a5e]" />
