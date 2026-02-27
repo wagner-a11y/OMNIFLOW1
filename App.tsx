@@ -183,7 +183,24 @@ const App: React.FC = () => {
 
     // spotStats persistence moved to database service
 
-    const num = (s: string | number) => typeof s === 'string' ? (parseFloat(s.replace(',', '.')) || 0) : s;
+    const num = (s: string | number | undefined | null) => {
+        if (s === undefined || s === null) return 0;
+        if (typeof s === 'number') return s;
+        // Remove R$, whitespace, and dots used as thousands separators. Replace comma with dot for decimal.
+        const clean = s.replace(/R\$\s?/, '').replace(/\./g, '').replace(',', '.').trim();
+        return parseFloat(clean) || 0;
+    };
+
+    const maskCurrency = (val: string | number) => {
+        let value = typeof val === 'number' ? val.toFixed(2) : val;
+        value = value.replace(/\D/g, '');
+        const numberValue = parseInt(value) / 100;
+        if (isNaN(numberValue)) return 'R$ 0,00';
+        return new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+        }).format(numberValue);
+    };
 
     useEffect(() => {
         if (appLogo) localStorage.setItem('flow_app_logo', appLogo);
@@ -1365,18 +1382,18 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="flex flex-col">
                                                 <div className="flex justify-between mb-2"><span className="text-[10px] font-black uppercase text-blue-600">{activeTab === 'reverse' ? 'Alvo Cliente' : 'Preço Base'}</span></div>
                                                 {activeTab === 'reverse' ? (
-                                                    <input type="text" className="w-full p-4 rounded-xl font-black border-2 bg-blue-50 text-blue-600 border-blue-200 transition-all" placeholder="Alvo Cliente" value={targetFreightClient} onChange={e => setTargetFreightClient(e.target.value)} />
+                                                    <input type="text" className="w-full p-4 rounded-xl font-black border-2 bg-blue-50 text-blue-600 border-blue-200 transition-all" placeholder="Alvo Cliente" value={maskCurrency(targetFreightClient)} onChange={e => setTargetFreightClient(maskCurrency(e.target.value))} />
                                                 ) : (
-                                                    <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={baseFreight} onChange={e => setBaseFreight(e.target.value)} />
+                                                    <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={maskCurrency(baseFreight)} onChange={e => setBaseFreight(maskCurrency(e.target.value))} />
                                                 )}
                                             </div>
                                             <div className="flex flex-col">
                                                 <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Pedágio</span></div>
-                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={tolls} onChange={e => setTolls(e.target.value)} />
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={maskCurrency(tolls)} onChange={e => setTolls(maskCurrency(e.target.value))} />
                                             </div>
                                             <div className="flex flex-col">
                                                 <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Valor Mercadoria</span></div>
-                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={goodsValue} onChange={e => setGoodsValue(e.target.value)} placeholder="R$ 0,00" />
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={maskCurrency(goodsValue)} onChange={e => setGoodsValue(maskCurrency(e.target.value))} placeholder="R$ 0,00" />
                                             </div>
                                             <div className="flex flex-col">
                                                 <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Ad Val (%)</span></div>
@@ -1439,12 +1456,11 @@ Disponibilidade: ${disponibilidade}`;
                                                                     <input
                                                                         type="text"
                                                                         className="w-full pl-8 pr-4 py-2 bg-white rounded-xl font-black text-[#344a5e] outline-none border-2 border-transparent focus:border-blue-100 transition-all text-sm"
-                                                                        placeholder="0,00"
-                                                                        value={cost.value === 0 ? '' : cost.value.toString()}
+                                                                        placeholder="R$ 0,00"
+                                                                        value={maskCurrency(cost.value)}
                                                                         onChange={(e) => {
-                                                                            const val = e.target.value === '' ? 0 : parseFloat(e.target.value.replace(',', '.')) || 0;
                                                                             const newCosts = [...otherCosts];
-                                                                            newCosts[idx].value = val;
+                                                                            newCosts[idx].value = num(maskCurrency(e.target.value));
                                                                             setOtherCosts(newCosts);
                                                                         }}
                                                                     />

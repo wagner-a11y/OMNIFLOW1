@@ -12,6 +12,24 @@ interface WonInfoModalProps {
 }
 
 export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onSubmit, quote, customers }) => {
+    const num = (s: string | number | undefined | null) => {
+        if (s === undefined || s === null) return 0;
+        if (typeof s === 'number') return s;
+        const clean = s.replace(/R\$\s?/, '').replace(/\./g, '').replace(',', '.').trim();
+        return parseFloat(clean) || 0;
+    };
+
+    const maskCurrency = (val: string | number) => {
+        let value = typeof val === 'number' ? val.toFixed(2) : val;
+        value = value.replace(/\D/g, '');
+        const numberValue = parseInt(value) / 100;
+        if (isNaN(numberValue)) return 'R$ 0,00';
+        return new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+        }).format(numberValue);
+    };
+
     const [formData, setFormData] = useState<Partial<FreightCalculation>>({
         coletaDate: quote.coletaDate || '',
         entregaDate: quote.entregaDate || '',
@@ -35,9 +53,11 @@ export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onS
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
+        const isCurrency = name === 'nossoFrete' || name === 'freteTerceiro' || name === 'valorCarga';
+
         setFormData(prev => ({
             ...prev,
-            [name]: name.includes('peso') || name.includes('Frete') || name.includes('valor') ? parseFloat(value) || 0 : value
+            [name]: isCurrency ? num(value) : (name.includes('peso') ? parseFloat(value) || 0 : value)
         }));
     };
 
@@ -161,15 +181,15 @@ export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onS
                             <div className="space-y-3">
                                 <div>
                                     <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Nosso Frete (Venda)</label>
-                                    <input type="number" name="nossoFrete" value={formData.nossoFrete} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" step="0.01" required />
+                                    <input type="text" name="nossoFrete" value={maskCurrency(formData.nossoFrete || 0)} onChange={e => setFormData(prev => ({ ...prev, nossoFrete: num(maskCurrency(e.target.value)) }))} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" required />
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Frete Terceiro (Compra)</label>
-                                    <input type="number" name="freteTerceiro" value={formData.freteTerceiro} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" step="0.01" required />
+                                    <input type="text" name="freteTerceiro" value={maskCurrency(formData.freteTerceiro || 0)} onChange={e => setFormData(prev => ({ ...prev, freteTerceiro: num(maskCurrency(e.target.value)) }))} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" required />
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Valor da Carga</label>
-                                    <input type="number" name="valorCarga" value={formData.valorCarga} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" step="0.01" />
+                                    <input type="text" name="valorCarga" value={maskCurrency(formData.valorCarga || 0)} onChange={e => setFormData(prev => ({ ...prev, valorCarga: num(maskCurrency(e.target.value)) }))} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
                                 </div>
                             </div>
                         </div>
