@@ -605,7 +605,7 @@ const App: React.FC = () => {
         return (
             <div className={`col-span-1 md:col-span-2 px-6 py-3 rounded-xl flex items-center gap-3 animate-fade-in ${checkWon ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                 {checkWon ? <CheckCircle className="w-4 h-4 shrink-0" /> : <Info className="w-4 h-4 shrink-0" />}
-                <span className="text-[10px] font-black uppercase">
+                <span className="text-[10px] font-medium uppercase">
                     Histórico desta rota: {routeMatches.length} cotação(ões)
                     {vehicleMatches.length > 0
                         ? ` • ${vehicleMatches.length} com ${vehicleType}`
@@ -974,18 +974,18 @@ Disponibilidade: ${disponibilidade}`;
 
     if (!currentUser) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-[#344a5e] p-6">
-                <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-12 space-y-10 border-8 border-white/10">
+            <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa] p-6">
+                <div className="bg-white w-full max-w-md rounded-xl border border-[#e5e7eb] shadow-sm p-10 space-y-8">
                     <div className="flex flex-col items-center">
-                        <div className="w-24 h-24 bg-[#344a5e] p-4 rounded-[2rem] shadow-2xl mb-6 flex items-center justify-center overflow-hidden">
-                            {appLogo ? <img src={appLogo} alt="Logo" className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full brightness-0 invert" />}
+                        <div className="w-20 h-20 bg-[#f9fafb] border border-[#e5e7eb] p-4 rounded-xl mb-5 flex items-center justify-center overflow-hidden">
+                            {appLogo ? <img src={appLogo} alt="Logo" className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full" />}
                         </div>
-                        <h1 className="text-4xl font-black text-[#344a5e] tracking-tighter text-center leading-none">OMNI<br />FLOW</h1>
+                        <h1 className="text-2xl font-medium text-[#111827] tracking-tight text-center leading-none">OMNIFLOW</h1>
                     </div>
-                    <form onSubmit={handleLogin} className="space-y-6">
-                        <input type="text" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-bold outline-none" placeholder="Usuário" value={loginForm.username} onChange={e => setLoginForm({ ...loginForm, username: e.target.value })} required />
-                        <input type="password" className="w-full px-6 py-5 bg-slate-50 rounded-2xl font-bold outline-none" placeholder="Senha" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required />
-                        <button type="submit" onClick={handleLogin} className="w-full py-5 bg-[#005a9c] text-white rounded-3xl font-black uppercase text-xs cursor-pointer active:scale-95 transition-all shadow-lg hover:shadow-xl disabled:opacity-50" disabled={users.length === 0}>
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <input type="text" className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" placeholder="Usuário" value={loginForm.username} onChange={e => setLoginForm({ ...loginForm, username: e.target.value })} required />
+                        <input type="password" className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" placeholder="Senha" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required />
+                        <button type="submit" onClick={handleLogin} className="w-full py-3 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm cursor-pointer hover:bg-[#1a5f9e] active:scale-[0.99] transition-all disabled:opacity-50" disabled={users.length === 0}>
                             {users.length === 0 ? 'Conectando...' : 'Acessar'}
                         </button>
                     </form>
@@ -995,46 +995,45 @@ Disponibilidade: ${disponibilidade}`;
     }
 
     return (
-        <div className="min-h-screen flex flex-col md:flex-row bg-[#f1f5f9]">
-            <aside className="w-full md:w-64 bg-slate-800 text-white flex flex-col sticky top-0 md:h-screen z-10 shadow-2xl overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-b from-slate-800 to-slate-900 z-0"></div>
-                <div className="p-8 flex flex-col items-center relative z-10">
-                    <div className="w-20 h-20 bg-white p-3 rounded-[2rem] shadow-2xl mb-4 flex items-center justify-center overflow-hidden">
-                        {appLogo ? <img src={appLogo} alt="Logo" className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full text-[#344a5e]" />}
+        <div className="min-h-screen flex flex-col md:flex-row bg-[#f8f9fa]">
+            <aside className="w-full md:w-64 bg-white border-r border-[#e5e7eb] text-[#111827] flex flex-col sticky top-0 md:h-screen z-10">
+                <div className="p-6 flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#f9fafb] border border-[#e5e7eb] p-1.5 rounded-lg flex items-center justify-center overflow-hidden">
+                        {appLogo ? <img src={appLogo} alt="Logo" className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full" />}
                     </div>
-                    <h1 className="text-2xl font-black tracking-tighter text-center leading-none">OMNI<br /><span className="text-blue-400">FLOW</span></h1>
+                    <h1 className="text-lg font-medium tracking-tight leading-none text-[#111827]">Omni<span className="text-[#1d6fb8]">Flow</span></h1>
                 </div>
-                <nav className="flex-1 px-4 space-y-3 mt-6 relative z-10">
+                <nav className="flex-1 px-3 space-y-1 mt-2">
                     {[
                         { id: 'dashboard', icon: BarChart3, label: 'Dashboard', adminOnly: true },
                         { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
                         { id: 'history', icon: History, label: 'Histórico' },
                         { id: 'crm', icon: List, label: 'CRM' }
                     ].filter(item => !item.adminOnly || currentUser.role === 'master').map(item => (
-                        <button key={item.id} onClick={() => { setActiveTab(item.id as any); if (item.id !== 'history' && item.id !== 'dashboard') resetForm(); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg translate-x-2' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
-                            <item.icon className="w-5 h-5" />
-                            <span className="font-black uppercase text-[10px] tracking-wider">{item.label}</span>
+                        <button key={item.id} onClick={() => { setActiveTab(item.id as any); if (item.id !== 'history' && item.id !== 'dashboard') resetForm(); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeTab === item.id ? 'bg-[#eff6ff] text-[#1d6fb8]' : 'text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827]'}`}>
+                            <item.icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                            <span className="font-medium text-sm">{item.label}</span>
                         </button>
                     ))}
                 </nav>
-                <div className="p-4 mt-auto space-y-3 relative z-10">
+                <div className="p-3 mt-auto space-y-1 border-t border-[#e5e7eb]">
                     {currentUser.role === 'master' && (
-                        <button onClick={() => setShowConfigModal(true)} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-slate-400 hover:text-white transition-all hover:bg-white/5">
-                            <Settings className="w-5 h-5" />
-                            <span className="font-black uppercase text-[10px] tracking-wider">Parâmetros</span>
+                        <button onClick={() => setShowConfigModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
+                            <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                            <span className="font-medium text-sm">Configurações</span>
                         </button>
                     )}
-                    <div className="bg-slate-900/50 p-3 rounded-[1.5rem] flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center font-black text-xs">{currentUser.name.charAt(0)}</div>
-                        <div className="flex-1 min-w-0"><p className="text-[10px] font-black truncate">{currentUser.name}</p></div>
-                        <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-400"><LogOut className="w-4 h-4" /></button>
+                    <div className="flex items-center gap-3 px-3 py-2">
+                        <div className="w-8 h-8 rounded-full bg-[#1d6fb8] flex items-center justify-center font-medium text-xs text-white">{currentUser.name.charAt(0)}</div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-medium text-[#111827] truncate">{currentUser.name}</p></div>
+                        <button onClick={handleLogout} className="p-1.5 text-[#6b7280] hover:text-red-500 rounded-md hover:bg-[#f9fafb] transition-colors"><LogOut className="w-4 h-4" strokeWidth={1.75} /></button>
                     </div>
                 </div>
             </aside>
 
             <main className="flex-1 overflow-y-auto pb-20 relative z-0">
-                <header className="bg-white border-b px-8 py-6 sticky top-0 z-40 flex justify-between items-center shadow-sm">
-                    <h2 className="text-lg font-black text-[#344a5e] uppercase tracking-tight">
+                <header className="bg-white border-b border-[#e5e7eb] px-8 py-5 sticky top-0 z-40 flex justify-between items-center">
+                    <h2 className="text-base font-medium text-[#111827]">
                         {editingId ? 'Editando Registro' :
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
                                 activeTab === 'crm' ? 'CRM' :
@@ -1042,8 +1041,8 @@ Disponibilidade: ${disponibilidade}`;
                     </h2>
                     {activeTab === 'history' && (
                         <div className="relative w-72">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <input type="text" placeholder="Buscar..." className="w-full pl-10 pr-4 py-2.5 bg-slate-100 rounded-full text-xs font-bold outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6b7280]" strokeWidth={1.75} />
+                            <input type="text" placeholder="Buscar..." className="w-full pl-9 pr-4 py-2 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                         </div>
                     )}
                 </header>
@@ -1065,15 +1064,15 @@ Disponibilidade: ${disponibilidade}`;
                             {/* Filtro de Período */}
                             <div className="flex justify-between items-end bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
                                 <div>
-                                    <h3 className="text-sm font-black uppercase text-[#344a5e] flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-500" /> Período Analítico</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 mt-1">Análise baseada na data de fechamento da proposta.</p>
+                                    <h3 className="text-sm font-medium uppercase text-[#111827] flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-500" /> Período Analítico</h3>
+                                    <p className="text-[10px] font-medium text-[#6b7280] mt-1">Análise baseada na data de fechamento da proposta.</p>
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <div className="text-right mr-2">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase">Cotações no mês</p>
-                                        <p className="text-lg font-black text-[#344a5e]">{dashboardData.filteredCount}</p>
+                                        <p className="text-[10px] font-medium text-[#6b7280] uppercase">Cotações no mês</p>
+                                        <p className="text-lg font-medium text-[#111827]">{dashboardData.filteredCount}</p>
                                     </div>
-                                    <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2 font-black text-[#344a5e] outline-none focus:border-blue-500 transition-colors uppercase text-xs" />
+                                    <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2 font-medium text-[#111827] outline-none focus:border-blue-500 transition-colors uppercase text-xs" />
                                 </div>
                             </div>
 
@@ -1082,55 +1081,55 @@ Disponibilidade: ${disponibilidade}`;
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 bg-gradient-to-br from-white to-emerald-50/30">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600"><DollarSign className="w-6 h-6" /></div>
-                                        <span className="text-[10px] font-black uppercase text-emerald-600 tracking-wider bg-emerald-100 px-2 py-1 rounded-lg">Faturamento</span>
+                                        <span className="text-[10px] font-medium uppercase text-emerald-600 tracking-wider bg-emerald-100 px-2 py-1 rounded-lg">Faturamento</span>
                                     </div>
-                                    <h3 className="text-2xl font-black text-[#344a5e]">R$ {formatCur(dashboardData.totalWon)}</h3>
-                                    <p className="text-[9px] font-bold text-slate-400 mt-1">{dashboardData.countWon} Vendas Confirmadas</p>
+                                    <h3 className="text-2xl font-medium text-[#111827]">R$ {formatCur(dashboardData.totalWon)}</h3>
+                                    <p className="text-[9px] font-medium text-[#6b7280] mt-1">{dashboardData.countWon} Vendas Confirmadas</p>
                                 </div>
 
-                                <div className="bg-[#344a5e] p-6 rounded-[2rem] shadow-xl text-white">
+                                <div className="bg-[#344a5e] p-6 rounded-[2rem] shadow-sm text-white">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="p-3 bg-white/10 rounded-2xl text-emerald-400"><TrendingUp className="w-6 h-6" /></div>
-                                        <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider bg-white/5 px-2 py-1 rounded-lg">Lucro Real</span>
+                                        <span className="text-[10px] font-medium uppercase text-emerald-400 tracking-wider bg-white/5 px-2 py-1 rounded-lg">Lucro Real</span>
                                     </div>
-                                    <h3 className="text-2xl font-black text-white">R$ {formatCur(dashboardData.totalProfit)}</h3>
-                                    <p className="text-[9px] font-bold opacity-50 mt-1">Resultado Líquido do Mês</p>
+                                    <h3 className="text-2xl font-medium text-white">R$ {formatCur(dashboardData.totalProfit)}</h3>
+                                    <p className="text-[9px] font-medium opacity-50 mt-1">Resultado Líquido do Mês</p>
                                 </div>
 
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="p-3 bg-blue-50 rounded-2xl text-blue-600"><Activity className="w-6 h-6" /></div>
-                                        <span className="text-[10px] font-black uppercase text-blue-600 tracking-wider bg-blue-50 px-2 py-1 rounded-lg">Margem Méd.</span>
+                                        <span className="text-[10px] font-medium uppercase text-blue-600 tracking-wider bg-blue-50 px-2 py-1 rounded-lg">Margem Méd.</span>
                                     </div>
-                                    <h3 className="text-2xl font-black text-[#344a5e]">{dashboardData.avgMargin.toFixed(1)}%</h3>
-                                    <p className="text-[9px] font-bold text-slate-400 mt-1">Eficiência Operacional</p>
+                                    <h3 className="text-2xl font-medium text-[#111827]">{dashboardData.avgMargin.toFixed(1)}%</h3>
+                                    <p className="text-[9px] font-medium text-[#6b7280] mt-1">Eficiência Operacional</p>
                                 </div>
 
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="p-3 bg-amber-50 rounded-2xl text-amber-600"><Clock className="w-6 h-6" /></div>
-                                        <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider bg-amber-50 px-2 py-1 rounded-lg">Em Pauta</span>
+                                        <span className="text-[10px] font-medium uppercase text-amber-600 tracking-wider bg-amber-50 px-2 py-1 rounded-lg">Em Pauta</span>
                                     </div>
-                                    <h3 className="text-2xl font-black text-[#344a5e]">R$ {formatCur(dashboardData.totalPending)}</h3>
-                                    <p className="text-[9px] font-bold text-slate-400 mt-1">{dashboardData.countPending} Propostas Pendentes</p>
+                                    <h3 className="text-2xl font-medium text-[#111827]">R$ {formatCur(dashboardData.totalPending)}</h3>
+                                    <p className="text-[9px] font-medium text-[#6b7280] mt-1">{dashboardData.countPending} Propostas Pendentes</p>
                                 </div>
 
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="p-3 bg-slate-50 rounded-2xl text-slate-600"><Scale className="w-6 h-6" /></div>
-                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider bg-slate-50 px-2 py-1 rounded-lg">Volume</span>
+                                        <span className="text-[10px] font-medium uppercase text-[#6b7280] tracking-wider bg-slate-50 px-2 py-1 rounded-lg">Volume</span>
                                     </div>
-                                    <h3 className="text-xl font-black text-[#344a5e]">{(dashboardData.totalWeight / 1000).toFixed(1)} <span className="text-xs font-bold text-slate-400">Ton</span></h3>
-                                    <p className="text-[9px] font-bold text-slate-400 mt-1">{dashboardData.totalKm.toLocaleString()} KM Rodados</p>
+                                    <h3 className="text-xl font-medium text-[#111827]">{(dashboardData.totalWeight / 1000).toFixed(1)} <span className="text-xs font-medium text-[#6b7280]">Ton</span></h3>
+                                    <p className="text-[9px] font-medium text-[#6b7280] mt-1">{dashboardData.totalKm.toLocaleString()} KM Rodados</p>
                                 </div>
 
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="p-3 bg-purple-50 rounded-2xl text-purple-600"><Zap className="w-6 h-6" /></div>
-                                        <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider bg-purple-50 px-2 py-1 rounded-lg">Conversão</span>
+                                        <span className="text-[10px] font-medium uppercase text-purple-600 tracking-wider bg-purple-50 px-2 py-1 rounded-lg">Conversão</span>
                                     </div>
-                                    <h3 className="text-2xl font-black text-[#344a5e]">{dashboardData.filteredCount > 0 ? ((dashboardData.countWon / dashboardData.filteredCount) * 100).toFixed(1) : 0}%</h3>
-                                    <p className="text-[9px] font-bold text-slate-400 mt-1">{dashboardData.countLost} Fretes Perdidos</p>
+                                    <h3 className="text-2xl font-medium text-[#111827]">{dashboardData.filteredCount > 0 ? ((dashboardData.countWon / dashboardData.filteredCount) * 100).toFixed(1) : 0}%</h3>
+                                    <p className="text-[9px] font-medium text-[#6b7280] mt-1">{dashboardData.countLost} Fretes Perdidos</p>
                                 </div>
                             </div>
 
@@ -1140,19 +1139,19 @@ Disponibilidade: ${disponibilidade}`;
                                     <div className="flex items-center justify-between mb-8">
                                         <div className="flex items-center gap-3">
                                             <Award className="w-5 h-5 text-blue-600" />
-                                            <h3 className="font-black uppercase text-[11px] text-slate-400 tracking-widest">Top 5 Clientes por Receita</h3>
+                                            <h3 className="font-medium uppercase text-[11px] text-[#6b7280] tracking-widest">Top 5 Clientes por Receita</h3>
                                         </div>
                                     </div>
                                     <div className="space-y-6 flex-1">
                                         {dashboardData.topClients.length > 0 ? dashboardData.topClients.map((client, idx) => (
                                             <div key={idx} className="flex items-center gap-6 group">
-                                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xs bg-slate-50 overflow-hidden border-2 border-slate-50 group-hover:border-blue-100 transition-all">
+                                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-medium text-xs bg-slate-50 overflow-hidden border-2 border-slate-50 group-hover:border-blue-100 transition-all">
                                                     {client.logo ? <img src={client.logo} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-blue-50 text-blue-400 flex items-center justify-center">{client.name.charAt(0)}</div>}
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="flex justify-between mb-2">
-                                                        <span className="text-sm font-black text-[#344a5e]">{client.name}</span>
-                                                        <span className="text-sm font-black text-[#005a9c]">R$ {formatCur(client.value)}</span>
+                                                        <span className="text-sm font-medium text-[#111827]">{client.name}</span>
+                                                        <span className="text-sm font-medium text-[#005a9c]">R$ {formatCur(client.value)}</span>
                                                     </div>
                                                     <div className="h-2.5 w-full bg-slate-50 rounded-full overflow-hidden">
                                                         <div className="h-full bg-blue-500 rounded-full transition-all duration-1000" style={{ width: `${(client.value / dashboardData.totalWon) * 100}%` }}></div>
@@ -1162,7 +1161,7 @@ Disponibilidade: ${disponibilidade}`;
                                         )) : (
                                             <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
                                                 <Users className="w-12 h-12 opacity-20" />
-                                                <p className="font-black uppercase text-[10px] tracking-widest">Nenhum dado no período</p>
+                                                <p className="font-medium uppercase text-[10px] tracking-widest">Nenhum dado no período</p>
                                             </div>
                                         )}
                                     </div>
@@ -1173,7 +1172,7 @@ Disponibilidade: ${disponibilidade}`;
                                     <div className="flex items-center justify-between w-full mb-8">
                                         <div className="flex items-center gap-3">
                                             <PieChart className="w-5 h-5 text-purple-600" />
-                                            <h3 className="font-black uppercase text-[11px] text-slate-400 tracking-widest">Status das Propostas</h3>
+                                            <h3 className="font-medium uppercase text-[11px] text-[#6b7280] tracking-widest">Status das Propostas</h3>
                                         </div>
                                     </div>
                                     <div className="relative h-56 w-56 mx-auto mb-8 rounded-full flex items-center justify-center shadow-inner" style={{
@@ -1181,26 +1180,26 @@ Disponibilidade: ${disponibilidade}`;
                                             ? `conic-gradient(#10b981 0% ${((dashboardData.countWon / dashboardData.filteredCount) * 100)}%, #ef4444 ${((dashboardData.countWon / dashboardData.filteredCount) * 100)}% ${((dashboardData.countWon + dashboardData.countLost) / dashboardData.filteredCount * 100)}%, #f59e0b ${((dashboardData.countWon + dashboardData.countLost) / dashboardData.filteredCount * 100)}% 100%)`
                                             : '#f1f5f9'
                                     }}>
-                                        <div className="absolute inset-5 bg-white rounded-full flex flex-col items-center justify-center shadow-xl">
-                                            <span className="text-4xl font-black text-[#344a5e]">{dashboardData.filteredCount}</span>
-                                            <span className="text-[10px] font-black text-slate-300 uppercase">Total</span>
+                                        <div className="absolute inset-5 bg-white rounded-full flex flex-col items-center justify-center shadow-sm">
+                                            <span className="text-4xl font-medium text-[#111827]">{dashboardData.filteredCount}</span>
+                                            <span className="text-[10px] font-medium text-slate-300 uppercase">Total</span>
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-3 gap-2 w-full mt-auto">
                                         <div className="text-center">
                                             <div className="w-2 h-2 rounded-full bg-emerald-500 mx-auto mb-1"></div>
-                                            <p className="text-[9px] font-black text-slate-400 uppercase">Ganhos</p>
-                                            <p className="text-xs font-black text-[#344a5e]">{dashboardData.countWon}</p>
+                                            <p className="text-[9px] font-medium text-[#6b7280] uppercase">Ganhos</p>
+                                            <p className="text-xs font-medium text-[#111827]">{dashboardData.countWon}</p>
                                         </div>
                                         <div className="text-center">
                                             <div className="w-2 h-2 rounded-full bg-red-500 mx-auto mb-1"></div>
-                                            <p className="text-[9px] font-black text-slate-400 uppercase">Perdas</p>
-                                            <p className="text-xs font-black text-[#344a5e]">{dashboardData.countLost}</p>
+                                            <p className="text-[9px] font-medium text-[#6b7280] uppercase">Perdas</p>
+                                            <p className="text-xs font-medium text-[#111827]">{dashboardData.countLost}</p>
                                         </div>
                                         <div className="text-center">
                                             <div className="w-2 h-2 rounded-full bg-amber-400 mx-auto mb-1"></div>
-                                            <p className="text-[9px] font-black text-slate-400 uppercase">Pauta</p>
-                                            <p className="text-xs font-black text-[#344a5e]">{dashboardData.countPending}</p>
+                                            <p className="text-[9px] font-medium text-[#6b7280] uppercase">Pauta</p>
+                                            <p className="text-xs font-medium text-[#111827]">{dashboardData.countPending}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1211,13 +1210,13 @@ Disponibilidade: ${disponibilidade}`;
                                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
                                     <div className="flex items-center gap-3 mb-6">
                                         <Truck className="w-5 h-5 text-amber-500" />
-                                        <h3 className="font-black uppercase text-[11px] text-slate-400 tracking-widest">Faturamento por Equipamento</h3>
+                                        <h3 className="font-medium uppercase text-[11px] text-[#6b7280] tracking-widest">Faturamento por Equipamento</h3>
                                     </div>
                                     <div className="space-y-4">
                                         {dashboardData.topVehicles.map((v, i) => (
                                             <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl hover:bg-amber-50 transition-colors">
-                                                <span className="text-xs font-black text-[#344a5e] uppercase">{v.name}</span>
-                                                <span className="text-xs font-black text-amber-600">R$ {formatCur(v.value)}</span>
+                                                <span className="text-xs font-medium text-[#111827] uppercase">{v.name}</span>
+                                                <span className="text-xs font-medium text-amber-600">R$ {formatCur(v.value)}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -1227,13 +1226,13 @@ Disponibilidade: ${disponibilidade}`;
                                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
                                     <div className="flex items-center gap-3 mb-6">
                                         <MapIcon className="w-5 h-5 text-purple-500" />
-                                        <h3 className="font-black uppercase text-[11px] text-slate-400 tracking-widest">Rotas mais Ativas (Ganhos)</h3>
+                                        <h3 className="font-medium uppercase text-[11px] text-[#6b7280] tracking-widest">Rotas mais Ativas (Ganhos)</h3>
                                     </div>
                                     <div className="space-y-4">
                                         {dashboardData.topRoutes.map((r, i) => (
                                             <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl hover:bg-purple-50 transition-colors">
-                                                <span className="text-xs font-black text-[#344a5e] uppercase">{r.name}</span>
-                                                <span className="text-xs font-black text-purple-600">R$ {formatCur(r.value)}</span>
+                                                <span className="text-xs font-medium text-[#111827] uppercase">{r.name}</span>
+                                                <span className="text-xs font-medium text-purple-600">R$ {formatCur(r.value)}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -1248,51 +1247,51 @@ Disponibilidade: ${disponibilidade}`;
                                 <div className="lg:col-span-3 space-y-8">
                                     <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border space-y-6">
                                         <div className="flex items-center justify-between mb-4">
-                                            <div className="flex items-center gap-3"><Package className="w-5 h-5 text-blue-600" /><h3 className="font-black uppercase text-[11px] text-slate-400">Rota & Equipamento</h3></div>
+                                            <div className="flex items-center gap-3"><Package className="w-5 h-5 text-blue-600" /><h3 className="font-medium uppercase text-[11px] text-[#6b7280]">Rota & Equipamento</h3></div>
                                             <div className="flex items-center gap-2">
                                                 {(isTimerRunning || elapsedSeconds > 0) && (
                                                     <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full border animate-fade-in ${isTimerRunning ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`} title="Tempo de elaboração da cotação">
-                                                        <Clock className={`w-3 h-3 ${isTimerRunning ? 'text-emerald-500 animate-pulse' : 'text-slate-400'}`} />
-                                                        <span className={`text-[10px] font-black uppercase tabular-nums ${isTimerRunning ? 'text-emerald-600' : 'text-slate-500'}`}>{formatElapsed(elapsedSeconds)}</span>
+                                                        <Clock className={`w-3 h-3 ${isTimerRunning ? 'text-emerald-500 animate-pulse' : 'text-[#6b7280]'}`} />
+                                                        <span className={`text-[10px] font-medium uppercase tabular-nums ${isTimerRunning ? 'text-emerald-600' : 'text-[#6b7280]'}`}>{formatElapsed(elapsedSeconds)}</span>
                                                     </div>
                                                 )}
                                                 {parseFloat(distanceKm) > 0 && (
                                                     <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-50 rounded-full border border-blue-100 animate-fade-in">
                                                         <MapIcon className="w-3 h-3 text-blue-500" />
-                                                        <span className="text-[10px] font-black text-blue-600 uppercase">{(parseFloat(distanceKm) || 0).toLocaleString()} KM Sugeridos</span>
+                                                        <span className="text-[10px] font-medium text-blue-600 uppercase">{(parseFloat(distanceKm) || 0).toLocaleString()} KM Sugeridos</span>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={origin} onChange={e => { startTimer(); setOrigin(e.target.value); }} onBlur={handleFetchDistance} placeholder="Origem (Cidade, UF)" />
+                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-medium border-2 border-transparent focus:border-blue-200 outline-none" value={origin} onChange={e => { startTimer(); setOrigin(e.target.value); }} onBlur={handleFetchDistance} placeholder="Origem (Cidade, UF)" />
                                             </div>
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={destination} onChange={e => { startTimer(); setDestination(e.target.value); }} onBlur={handleFetchDistance} placeholder="Destino (Cidade, UF)" />
+                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-medium border-2 border-transparent focus:border-blue-200 outline-none" value={destination} onChange={e => { startTimer(); setDestination(e.target.value); }} onBlur={handleFetchDistance} placeholder="Destino (Cidade, UF)" />
                                             </div>
                                         </div>
                                         {/* Alerta de Histórico */}
                                         {historicalAlert}
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                                            <div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-blue-50/50 rounded-2xl font-bold border-2 border-blue-100 focus:border-blue-300 outline-none" value={clientReference} onChange={e => setClientReference(e.target.value)} placeholder="Ref Cliente" /></div>
+                                            <div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-blue-50/50 rounded-2xl font-medium border-2 border-blue-100 focus:border-blue-300 outline-none" value={clientReference} onChange={e => setClientReference(e.target.value)} placeholder="Ref Cliente" /></div>
                                             <div className="relative">
                                                 <Truck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                                                <select className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all appearance-none" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>
+                                                <select className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-medium outline-none border-2 border-transparent focus:border-blue-100 transition-all appearance-none" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>
                                                     {Object.keys(vehicleConfigs).map(v => <option key={v} value={v}>{v}</option>)}
                                                 </select>
                                                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
                                             </div>
-                                            <div className="relative col-span-1 md:col-span-2"><Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={merchandiseType} onChange={e => setMerchandiseType(e.target.value)} placeholder="Tipo da Mercadoria" /></div>
+                                            <div className="relative col-span-1 md:col-span-2"><Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-medium border-2 border-transparent focus:border-blue-200 outline-none" value={merchandiseType} onChange={e => setMerchandiseType(e.target.value)} placeholder="Tipo da Mercadoria" /></div>
                                             <div className="relative">
                                                 <Scale className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                                                <input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={weight} onChange={e => setWeight(e.target.value)} placeholder="Peso KG" />
+                                                <input type="text" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-medium outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={weight} onChange={e => setWeight(e.target.value)} placeholder="Peso KG" />
                                             </div>
                                             <div className="relative">
                                                 <MapIcon className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${loadingDistance ? 'text-blue-500 animate-pulse' : 'text-slate-300'}`} />
                                                 <input
                                                     type="text"
-                                                    className={`w-full pl-10 pr-12 py-4 rounded-2xl font-black outline-none border-2 transition-all ${loadingDistance ? 'bg-blue-50 border-blue-200 text-blue-400' : 'bg-slate-50 border-transparent focus:border-blue-100'}`}
+                                                    className={`w-full pl-10 pr-12 py-4 rounded-2xl font-medium outline-none border-2 transition-all ${loadingDistance ? 'bg-blue-50 border-blue-200 text-blue-400' : 'bg-slate-50 border-transparent focus:border-blue-100'}`}
                                                     value={loadingDistance ? "Calculando..." : distanceKm}
                                                     onChange={e => setDistanceKm(e.target.value)}
                                                     placeholder="KM"
@@ -1310,38 +1309,38 @@ Disponibilidade: ${disponibilidade}`;
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                                             <div className="lg:col-span-4">
-                                                <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}><option value="">Selecione Cliente...</option>{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                                                <select className="w-full p-4 bg-slate-50 rounded-2xl font-medium outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}><option value="">Selecione Cliente...</option>{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
                                             </div>
                                             <div className="lg:col-span-2">
-                                                <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={disponibilidade} onChange={e => setDisponibilidade(e.target.value as Disponibilidade)}><option value="Imediato">Imediato</option><option value="Conforme programação">Programado</option></select>
+                                                <select className="w-full p-4 bg-slate-50 rounded-2xl font-medium outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={disponibilidade} onChange={e => setDisponibilidade(e.target.value as Disponibilidade)}><option value="Imediato">Imediato</option><option value="Conforme programação">Programado</option></select>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border hover:shadow-xl transition-all relative">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+                                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border hover:shadow-sm transition-all relative">
+                                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black uppercase text-blue-600">Preço Base</span></div>
-                                                <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={maskCurrency(baseFreight)} onChange={e => { startTimer(); setBaseFreight(maskCurrency(e.target.value)); }} />
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium uppercase text-blue-600">Preço Base</span></div>
+                                                <input type="text" className="w-full p-4 rounded-xl font-medium text-[#111827] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={maskCurrency(baseFreight)} onChange={e => { startTimer(); setBaseFreight(maskCurrency(e.target.value)); }} />
                                             </div>
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Pedágio</span></div>
-                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={maskCurrency(tolls)} onChange={e => setTolls(maskCurrency(e.target.value))} />
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium text-[#6b7280] uppercase">Pedágio</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-medium border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={maskCurrency(tolls)} onChange={e => setTolls(maskCurrency(e.target.value))} />
                                             </div>
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Valor Mercadoria</span></div>
-                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={maskCurrency(goodsValue)} onChange={e => { startTimer(); setGoodsValue(maskCurrency(e.target.value)); }} placeholder="R$ 0,00" />
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium text-[#6b7280] uppercase">Valor Mercadoria</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-medium border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={maskCurrency(goodsValue)} onChange={e => { startTimer(); setGoodsValue(maskCurrency(e.target.value)); }} placeholder="R$ 0,00" />
                                             </div>
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Ad Val (%)</span></div>
-                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={insurancePercent} onChange={e => setInsurancePercent(e.target.value)} />
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium text-[#6b7280] uppercase">Ad Val (%)</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-medium border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={insurancePercent} onChange={e => setInsurancePercent(e.target.value)} />
                                             </div>
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Margem de Lucro (%)</span></div>
-                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={profitMargin} onChange={e => setProfitMargin(e.target.value)} />
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter">Margem de Lucro (%)</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-medium border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={profitMargin} onChange={e => setProfitMargin(e.target.value)} />
                                             </div>
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">ICMS Destino (%)</span></div>
-                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={icmsPercent} onChange={e => setIcmsPercent(e.target.value)} />
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium text-[#6b7280] uppercase">ICMS Destino (%)</span></div>
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-medium border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={icmsPercent} onChange={e => setIcmsPercent(e.target.value)} />
                                             </div>
                                         </div>
 
@@ -1349,10 +1348,10 @@ Disponibilidade: ${disponibilidade}`;
                                         <div className="pt-8 border-t border-slate-100 border-dashed animate-in fade-in slide-in-from-top-4 duration-700">
                                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
                                                 <div>
-                                                    <h4 className="text-sm font-black text-[#344a5e] uppercase tracking-wider flex items-center gap-2">
+                                                    <h4 className="text-sm font-medium text-[#111827] uppercase tracking-wider flex items-center gap-2">
                                                         <PlusCircle className="w-5 h-5 text-blue-500" /> Custos Adicionais Específicos
                                                     </h4>
-                                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Batedor, Descarga, Licenças, Agenciamento...</p>
+                                                    <p className="text-[10px] font-medium text-[#6b7280] mt-1 uppercase tracking-tight">Batedor, Descarga, Licenças, Agenciamento...</p>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
                                                     {['Batedor', 'Descarga', 'Licenças', 'Agenciamento', 'Outros'].map(cat => (
@@ -1362,7 +1361,7 @@ Disponibilidade: ${disponibilidade}`;
                                                                 const id = Date.now().toString();
                                                                 setOtherCosts(prev => [...prev, { id, label: cat, value: 0 }]);
                                                             }}
-                                                            className="px-4 py-2 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-full text-[10px] font-black uppercase transition-all shadow-sm border border-slate-100 flex items-center gap-2 group"
+                                                            className="px-4 py-2 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-full text-[10px] font-medium uppercase transition-all shadow-sm border border-slate-100 flex items-center gap-2 group"
                                                         >
                                                             <Plus className="w-3 h-3 text-blue-400 group-hover:text-white" /> {cat}
                                                         </button>
@@ -1378,7 +1377,7 @@ Disponibilidade: ${disponibilidade}`;
                                                                 <div className="flex justify-between mb-1">
                                                                     <input
                                                                         type="text"
-                                                                        className="bg-transparent text-[10px] font-black uppercase text-slate-500 outline-none w-full"
+                                                                        className="bg-transparent text-[10px] font-medium uppercase text-[#6b7280] outline-none w-full"
                                                                         value={cost.label}
                                                                         onChange={(e) => {
                                                                             const newCosts = [...otherCosts];
@@ -1388,10 +1387,10 @@ Disponibilidade: ${disponibilidade}`;
                                                                     />
                                                                 </div>
                                                                 <div className="relative">
-                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">R$</span>
+                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-[#6b7280]">R$</span>
                                                                     <input
                                                                         type="text"
-                                                                        className="w-full pl-8 pr-4 py-2 bg-white rounded-xl font-black text-[#344a5e] outline-none border-2 border-transparent focus:border-blue-100 transition-all text-sm"
+                                                                        className="w-full pl-8 pr-4 py-2 bg-white rounded-xl font-medium text-[#111827] outline-none border-2 border-transparent focus:border-blue-100 transition-all text-sm"
                                                                         placeholder="R$ 0,00"
                                                                         value={maskCurrency(cost.value)}
                                                                         onChange={(e) => {
@@ -1413,65 +1412,65 @@ Disponibilidade: ${disponibilidade}`;
                                                 </div>
                                             ) : (
                                                 <div className="py-6 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-100 rounded-3xl opacity-60">
-                                                    <p className="text-[9px] font-black uppercase tracking-widest">Nenhum custo adicional inserido</p>
+                                                    <p className="text-[9px] font-medium uppercase tracking-widest">Nenhum custo adicional inserido</p>
                                                 </div>
                                             )}
 
                                             <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center px-4">
-                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Adicionais:</span>
-                                                <span className="text-lg font-black text-blue-600">R$ {formatCur(otherCosts.reduce((acc, c) => acc + c.value, 0))}</span>
+                                                <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-widest">Total Adicionais:</span>
+                                                <span className="text-lg font-medium text-blue-600">R$ {formatCur(otherCosts.reduce((acc, c) => acc + c.value, 0))}</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Extrato Detalhado da Cotação moved inside main column */}
-                                    <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-xl text-white">
+                                    <div className="bg-[#344a5e] p-8 rounded-[2.5rem] shadow-sm text-white">
                                         <div className="flex items-center gap-3 mb-8">
                                             <FileText className="w-5 h-5 text-blue-400" />
-                                            <h3 className="font-black uppercase text-[11px] tracking-widest text-slate-400">Extrato Detalhado da Operação</h3>
+                                            <h3 className="font-medium uppercase text-[11px] tracking-widest text-[#6b7280]">Extrato Detalhado da Operação</h3>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
                                             <div className="space-y-4">
                                                 <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                                    <span className="text-[10px] font-bold uppercase opacity-60">Frete Base / Poder de Compra</span>
-                                                    <span className="font-black text-sm">R$ {formatCur(num(baseFreight))}</span>
+                                                    <span className="text-[10px] font-medium uppercase opacity-60">Frete Base / Poder de Compra</span>
+                                                    <span className="font-medium text-sm">R$ {formatCur(num(baseFreight))}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                                    <span className="text-[10px] font-bold uppercase opacity-60">Pedágio Programado</span>
-                                                    <span className="font-black text-sm text-blue-300">R$ {formatCur(num(tolls))}</span>
+                                                    <span className="text-[10px] font-medium uppercase opacity-60">Pedágio Programado</span>
+                                                    <span className="font-medium text-sm text-blue-300">R$ {formatCur(num(tolls))}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                                    <span className="text-[10px] font-bold uppercase opacity-60">Seguro Ad Valorem ({insurancePercent}%)</span>
-                                                    <span className="font-black text-sm">R$ {formatCur(calcData.adValoremSelling)}</span>
+                                                    <span className="text-[10px] font-medium uppercase opacity-60">Seguro Ad Valorem ({insurancePercent}%)</span>
+                                                    <span className="font-medium text-sm">R$ {formatCur(calcData.adValoremSelling)}</span>
                                                 </div>
                                             </div>
                                             <div className="space-y-4">
                                                 <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                                    <span className="text-[10px] font-bold uppercase opacity-60">Impostos Federais (PIS/COFINS/CSLL)</span>
-                                                    <span className="font-black text-sm">R$ {formatCur(calcData.fedTaxesAmount)}</span>
+                                                    <span className="text-[10px] font-medium uppercase opacity-60">Impostos Federais (PIS/COFINS/CSLL)</span>
+                                                    <span className="font-medium text-sm">R$ {formatCur(calcData.fedTaxesAmount)}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                                    <span className="text-[10px] font-bold uppercase opacity-60">ICMS Destino ({icmsPercent}%)</span>
-                                                    <span className="font-black text-sm">R$ {formatCur(calcData.icmsAmount)}</span>
+                                                    <span className="text-[10px] font-medium uppercase opacity-60">ICMS Destino ({icmsPercent}%)</span>
+                                                    <span className="font-medium text-sm">R$ {formatCur(calcData.icmsAmount)}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center py-3 border-b border-white/10">
-                                                    <span className="text-[10px] font-bold uppercase opacity-60">Lucro Projetado (Remuneração)</span>
-                                                    <span className="font-black text-sm text-emerald-400">R$ {formatCur(calcData.realProfitAmount)} ({calcData.realMarginPercent.toFixed(1)}%)</span>
+                                                    <span className="text-[10px] font-medium uppercase opacity-60">Lucro Projetado (Remuneração)</span>
+                                                    <span className="font-medium text-sm text-emerald-400">R$ {formatCur(calcData.realProfitAmount)} ({calcData.realMarginPercent.toFixed(1)}%)</span>
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="mt-8 pt-6 border-t border-white/20 flex flex-wrap items-center justify-between gap-4">
                                             <div className="flex items-center gap-4">
                                                 <div className="px-5 py-2 bg-white/10 rounded-xl border border-white/10">
-                                                    <p className="text-[8px] font-black uppercase opacity-40 leading-none mb-1">Custo Direto Total</p>
-                                                    <p className="text-sm font-black text-white">R$ {formatCur(calcData.realDirectCosts)}</p>
+                                                    <p className="text-[8px] font-medium uppercase opacity-40 leading-none mb-1">Custo Direto Total</p>
+                                                    <p className="text-sm font-medium text-white">R$ {formatCur(calcData.realDirectCosts)}</p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Validação de Viabilidade</p>
+                                                <p className="text-[9px] font-medium uppercase text-[#6b7280] mb-1">Validação de Viabilidade</p>
                                                 <div className="flex items-center gap-2">
                                                     <div className={`w-3 h-3 rounded-full ${calcData.realMarginPercent >= marginThreshold ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
-                                                    <span className="text-xs font-black uppercase tracking-widest">
+                                                    <span className="text-xs font-medium uppercase tracking-widest">
                                                         {calcData.realMarginPercent >= marginThreshold ? 'Margem Saudável' : 'Revisar Custo'}
                                                     </span>
                                                 </div>
@@ -1481,46 +1480,46 @@ Disponibilidade: ${disponibilidade}`;
                                 </div>
 
                                 <div className="lg:col-span-1 space-y-8">
-                                    <div className="bg-[#344a5e] p-8 rounded-[2rem] shadow-xl text-center flex flex-col items-center justify-center text-white relative group overflow-hidden">
+                                    <div className="bg-[#344a5e] p-8 rounded-[2rem] shadow-sm text-center flex flex-col items-center justify-center text-white relative group overflow-hidden">
                                         <Scale className="w-6 h-6 text-emerald-400 mb-3" />
-                                        <h4 className="text-[10px] font-black uppercase text-slate-400">Referência ANTT</h4>
-                                        <p className="text-3xl font-black mb-4">R$ {formatCur(suggestedFreightANTT)}</p>
+                                        <h4 className="text-[10px] font-medium uppercase text-[#6b7280]">Referência ANTT</h4>
+                                        <p className="text-3xl font-medium mb-4">R$ {formatCur(suggestedFreightANTT)}</p>
                                         <button
                                             onClick={() => {
                                                 setBaseFreight(maskCurrency(suggestedFreightANTT));
                                                 showFeedback("Valor ANTT aplicado ao preço base!");
                                             }}
-                                            className="w-full py-2 bg-white/10 hover:bg-emerald-500 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-2 border border-white/10 hover:border-transparent group-hover:scale-105"
+                                            className="w-full py-2 bg-white/10 hover:bg-emerald-500 rounded-xl text-[9px] font-medium uppercase transition-all flex items-center justify-center gap-2 border border-white/10 hover:border-transparent group-hover:scale-105"
                                         >
                                             <Check className="w-3 h-3" /> Aderir ao Preço Base
                                         </button>
                                     </div>
 
                                     {/* Final Freight Summary - Side Column */}
-                                    <div className="p-8 rounded-[2.5rem] shadow-2xl text-white flex flex-col items-center gap-6 relative overflow-hidden transition-all duration-500 border-4 border-white/5 bg-[#005a9c]">
+                                    <div className="p-8 rounded-[2.5rem] shadow-sm text-white flex flex-col items-center gap-6 relative overflow-hidden transition-all duration-500 border-4 border-white/5 bg-[#005a9c]">
                                         <div className="w-full text-center p-4 bg-white/10 rounded-2xl border border-white/20">
                                             <TrendingUp className="w-6 h-6 mx-auto mb-1 text-emerald-400" />
-                                            <p className="text-2xl font-black">{calcData.realMarginPercent.toFixed(1)}%</p>
-                                            <p className="text-[8px] font-bold opacity-40 uppercase">Margem Real</p>
+                                            <p className="text-2xl font-medium">{calcData.realMarginPercent.toFixed(1)}%</p>
+                                            <p className="text-[8px] font-medium opacity-40 uppercase">Margem Real</p>
                                         </div>
                                         <div className="text-center w-full">
-                                            <p className="text-[9px] font-black opacity-50 uppercase tracking-[0.2em] mb-2">
+                                            <p className="text-[9px] font-medium opacity-50 uppercase tracking-[0.2em] mb-2">
                                                 FRETE FINAL
                                             </p>
-                                            <p className="text-4xl font-black tracking-tighter drop-shadow-xl">
+                                            <p className="text-4xl font-medium tracking-tighter drop-shadow-sm">
                                                 R$ {formatCur(calcData.finalFreight)}
                                             </p>
 
                                             <div className="flex flex-col gap-3 mt-4 mb-4">
                                                 <div className="text-center bg-white/5 p-2 rounded-xl">
-                                                    <p className="text-[8px] font-black uppercase opacity-60">R$ / Ton (Cobrar)</p>
-                                                    <p className="text-sm font-black">
+                                                    <p className="text-[8px] font-medium uppercase opacity-60">R$ / Ton (Cobrar)</p>
+                                                    <p className="text-sm font-medium">
                                                         R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? calcData.finalFreight / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
                                                     </p>
                                                 </div>
                                                 <div className="text-center bg-white/5 p-2 rounded-xl">
-                                                    <p className="text-[8px] font-black uppercase opacity-60">R$ / Ton (Pagar)</p>
-                                                    <p className="text-sm font-black text-white/80">
+                                                    <p className="text-[8px] font-medium uppercase opacity-60">R$ / Ton (Pagar)</p>
+                                                    <p className="text-sm font-medium text-white/80">
                                                         R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? num(baseFreight) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
                                                     </p>
                                                 </div>
@@ -1531,7 +1530,7 @@ Disponibilidade: ${disponibilidade}`;
                                                 className={`w-full mt-4 flex items-center justify-between gap-2 px-4 py-3 rounded-xl border transition-all ${openCostToClient ? 'bg-emerald-500/20 border-emerald-400/40' : 'bg-white/5 border-white/15 hover:bg-white/10'}`}
                                                 title="Inclui a composição detalhada do custo na cópia e no PDF"
                                             >
-                                                <span className="flex items-center gap-2 text-[8px] font-black uppercase tracking-wider">
+                                                <span className="flex items-center gap-2 text-[8px] font-medium uppercase tracking-wider">
                                                     <Layers className="w-3 h-3 text-emerald-400" /> Abrir composição ao cliente
                                                 </span>
                                                 <span className={`w-8 h-4 rounded-full relative transition-all ${openCostToClient ? 'bg-emerald-400' : 'bg-white/20'}`}>
@@ -1540,22 +1539,22 @@ Disponibilidade: ${disponibilidade}`;
                                             </button>
 
                                             <div className="grid grid-cols-2 gap-2 w-full mt-3">
-                                                <button onClick={() => saveQuote('won')} className="bg-emerald-500 py-4 rounded-xl font-black uppercase text-[8px] flex items-center justify-center gap-1 hover:bg-emerald-600 shadow-md">
+                                                <button onClick={() => saveQuote('won')} className="bg-emerald-500 py-4 rounded-xl font-medium uppercase text-[8px] flex items-center justify-center gap-1 hover:bg-emerald-600 shadow-md">
                                                     <ThumbsUp className="w-3 h-3" /> Fechado
                                                 </button>
-                                                <button onClick={() => saveQuote('lost')} className="bg-red-500 py-4 rounded-xl font-black uppercase text-[8px] flex items-center justify-center gap-1 hover:bg-red-600 shadow-md">
+                                                <button onClick={() => saveQuote('lost')} className="bg-red-500 py-4 rounded-xl font-medium uppercase text-[8px] flex items-center justify-center gap-1 hover:bg-red-600 shadow-md">
                                                     <ThumbsDown className="w-3 h-3" /> Perdido
                                                 </button>
-                                                <button onClick={() => saveQuote('pending')} className="bg-white/10 py-4 rounded-xl font-black uppercase text-[8px] hover:bg-white/20 border border-white/20 flex items-center justify-center gap-1">
+                                                <button onClick={() => saveQuote('pending')} className="bg-white/10 py-4 rounded-xl font-medium uppercase text-[8px] hover:bg-white/20 border border-white/20 flex items-center justify-center gap-1">
                                                     <Save className="w-3 h-3" /> Salvar
                                                 </button>
-                                                <button onClick={handleCopyQuoteText} className="bg-white py-4 rounded-xl font-black uppercase text-[8px] text-[#005a9c] hover:bg-slate-100 flex items-center justify-center gap-1 shadow-md">
+                                                <button onClick={handleCopyQuoteText} className="bg-white py-4 rounded-xl font-medium uppercase text-[8px] text-[#005a9c] hover:bg-slate-100 flex items-center justify-center gap-1 shadow-md">
                                                     <ClipboardCopy className="w-3 h-3" /> Copiar
                                                 </button>
-                                                <button onClick={handleQuickSend} className="col-span-2 bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[8px] hover:bg-emerald-700 border border-emerald-500 flex items-center justify-center gap-1 shadow-md mt-1">
+                                                <button onClick={handleQuickSend} className="col-span-2 bg-emerald-600 text-white py-3 rounded-xl font-medium uppercase text-[8px] hover:bg-emerald-700 border border-emerald-500 flex items-center justify-center gap-1 shadow-md mt-1">
                                                     <Zap className="w-3 h-3 text-white" /> Envio Rápido (Copiar + CRM)
                                                 </button>
-                                                <button onClick={generatePDF} className="col-span-2 bg-slate-800 text-white py-3 rounded-xl font-black uppercase text-[8px] hover:bg-slate-900 border border-slate-700 flex items-center justify-center gap-1 shadow-md">
+                                                <button onClick={generatePDF} className="col-span-2 bg-slate-800 text-white py-3 rounded-xl font-medium uppercase text-[8px] hover:bg-slate-900 border border-slate-700 flex items-center justify-center gap-1 shadow-md">
                                                     <FileDown className="w-3 h-3 text-emerald-400" /> PDF Comercial
                                                 </button>
                                             </div>
@@ -1570,10 +1569,10 @@ Disponibilidade: ${disponibilidade}`;
                     {activeTab === 'history' && (
                         <div className="space-y-4 animate-fade-in-up">
                             <div className="flex items-center gap-4 px-4 mb-4">
-                                <History className="w-8 h-8 text-[#344a5e]" />
-                                <h1 className="text-3xl font-black text-[#344a5e] tracking-tight">Histórico de Cotações</h1>
+                                <History className="w-8 h-8 text-[#111827]" />
+                                <h1 className="text-3xl font-medium text-[#111827] tracking-tight">Histórico de Cotações</h1>
                             </div>
-                            <div className="bg-white p-4 rounded-[1.5rem] border shadow-sm flex items-center gap-6 px-10 text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                            <div className="bg-white p-4 rounded-[1.5rem] border shadow-sm flex items-center gap-6 px-10 text-[9px] font-medium text-[#6b7280] uppercase tracking-widest mb-4">
                                 <span className="w-24">Status</span>
                                 <span className="w-28">Data</span>
                                 <span className="flex-1">Ref / Rota</span>
@@ -1607,8 +1606,8 @@ Disponibilidade: ${disponibilidade}`;
 
                                     return (
                                         <div key={h.id} className="bg-white h-20 px-10 rounded-[1.5rem] border shadow-sm flex items-center gap-6 group hover:border-blue-500 transition-all">
-                                            <div className="w-24"><span className={`px-3 py-1.5 rounded-lg text-[8px] font-black text-white uppercase ${h.status === 'won' ? 'bg-emerald-500' : h.status === 'lost' ? 'bg-red-500' : 'bg-amber-400'}`}>{h.status === 'won' ? 'GANHO' : h.status === 'lost' ? 'PERDIDO' : 'PAUTA'}</span></div>
-                                            <span className="w-28 text-[10px] font-bold text-slate-400">
+                                            <div className="w-24"><span className={`px-3 py-1.5 rounded-lg text-[8px] font-medium text-white uppercase ${h.status === 'won' ? 'bg-emerald-500' : h.status === 'lost' ? 'bg-red-500' : 'bg-amber-400'}`}>{h.status === 'won' ? 'GANHO' : h.status === 'lost' ? 'PERDIDO' : 'PAUTA'}</span></div>
+                                            <span className="w-28 text-[10px] font-medium text-[#6b7280]">
                                                 {(() => {
                                                     if (!h.createdAt || h.createdAt === 0) return 'S/ Data';
                                                     const d = new Date(h.createdAt);
@@ -1617,28 +1616,28 @@ Disponibilidade: ${disponibilidade}`;
                                             </span>
                                             <div className="flex-1 min-w-0 flex flex-col justify-center">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-black text-[#344a5e] text-xs">{h.proposalNumber}</span>
-                                                    {h.clientReference && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wide">{h.clientReference}</span>}
+                                                    <span className="font-medium text-[#111827] text-xs">{h.proposalNumber}</span>
+                                                    {h.clientReference && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[8px] font-medium uppercase tracking-wide">{h.clientReference}</span>}
                                                 </div>
                                                 {customer && (
-                                                    <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-0.5 truncate">{customer.name} {h.merchandiseType && <span className="text-slate-300 ml-1">| {h.merchandiseType}</span>}</p>
+                                                    <p className="text-[9px] font-medium text-blue-600 uppercase tracking-widest mt-0.5 truncate">{customer.name} {h.merchandiseType && <span className="text-slate-300 ml-1">| {h.merchandiseType}</span>}</p>
                                                 )}
-                                                <p className="text-[8px] font-bold text-slate-400 truncate uppercase mt-0.5">{(h.origin || '').split(',')[0]} ➝ {(h.destination || '').split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
+                                                <p className="text-[8px] font-medium text-[#6b7280] truncate uppercase mt-0.5">{(h.origin || '').split(',')[0]} ➝ {(h.destination || '').split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
                                             </div>
                                             <div className="w-32 flex items-center gap-2">
-                                                <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center font-black text-[10px] text-[#344a5e] shadow-sm border border-slate-100">
+                                                <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center font-medium text-[10px] text-[#111827] shadow-sm border border-slate-100">
                                                     {h.updatedByName?.charAt(0) || 'A'}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-[9px] font-black text-[#344a5e] uppercase truncate">{h.updatedByName || 'Admin'}</p>
-                                                    <p className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter">Responsável</p>
+                                                    <p className="text-[9px] font-medium text-[#111827] uppercase truncate">{h.updatedByName || 'Admin'}</p>
+                                                    <p className="text-[7px] font-medium text-[#6b7280] uppercase tracking-tighter">Responsável</p>
                                                 </div>
                                             </div>
                                             <div className="w-28 text-right">
-                                                <p className={`text-xs font-black ${realMargin < 15 ? 'text-red-500' : 'text-emerald-600'}`}>{realMargin.toFixed(1)}%</p>
-                                                <p className="text-[8px] font-bold text-slate-400 uppercase">Lucro: R$ {formatCur(profitValue)}</p>
+                                                <p className={`text-xs font-medium ${realMargin < 15 ? 'text-red-500' : 'text-emerald-600'}`}>{realMargin.toFixed(1)}%</p>
+                                                <p className="text-[8px] font-medium text-[#6b7280] uppercase">Lucro: R$ {formatCur(profitValue)}</p>
                                             </div>
-                                            <div className="w-32 text-right"><p className="text-base font-black text-[#344a5e]">R$ {formatCur(h.totalFreight)}</p></div>
+                                            <div className="w-32 text-right"><p className="text-base font-medium text-[#111827]">R$ {formatCur(h.totalFreight)}</p></div>
                                             <div className="w-20 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                                 <button onClick={() => loadQuote(h)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg">
                                                     <Edit3 className="w-4 h-4" />
@@ -1661,39 +1660,39 @@ Disponibilidade: ${disponibilidade}`;
             {/* Modal de Validação de Margem */}
             {showMarginModal && (
                 <div className="fixed inset-0 bg-[#1e293b]/80 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-fade-in">
-                    <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden">
+                    <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-sm overflow-hidden">
                         <div className="p-8 bg-gradient-to-br from-red-500 to-red-600 text-white flex items-center gap-4">
                             <div className="p-3 bg-white/15 rounded-2xl"><AlertTriangle className="w-7 h-7" /></div>
                             <div>
-                                <h3 className="text-lg font-black uppercase tracking-tight leading-none">Margem abaixo do limiar</h3>
-                                <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest mt-1">Confirmação necessária</p>
+                                <h3 className="text-lg font-medium uppercase tracking-tight leading-none">Margem abaixo do limiar</h3>
+                                <p className="text-[10px] font-medium opacity-80 uppercase tracking-widest mt-1">Confirmação necessária</p>
                             </div>
                         </div>
                         <div className="p-8 space-y-6">
                             <div className="flex items-center justify-around gap-4">
                                 <div className="text-center">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Margem desta cotação</p>
-                                    <p className="text-3xl font-black text-red-500">{calcData.realMarginPercent.toFixed(1)}%</p>
+                                    <p className="text-[9px] font-medium text-[#6b7280] uppercase tracking-widest mb-1">Margem desta cotação</p>
+                                    <p className="text-3xl font-medium text-red-500">{calcData.realMarginPercent.toFixed(1)}%</p>
                                 </div>
                                 <ArrowRight className="w-5 h-5 text-slate-300" />
                                 <div className="text-center">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Limiar mínimo</p>
-                                    <p className="text-3xl font-black text-[#344a5e]">{marginThreshold.toFixed(1)}%</p>
+                                    <p className="text-[9px] font-medium text-[#6b7280] uppercase tracking-widest mb-1">Limiar mínimo</p>
+                                    <p className="text-3xl font-medium text-[#111827]">{marginThreshold.toFixed(1)}%</p>
                                 </div>
                             </div>
-                            <p className="text-xs font-bold text-slate-500 text-center leading-relaxed">
+                            <p className="text-xs font-medium text-[#6b7280] text-center leading-relaxed">
                                 Esta cotação está com a margem real abaixo do mínimo configurado. Deseja prosseguir mesmo assim?
                             </p>
                             <div className="grid grid-cols-2 gap-3 pt-2">
                                 <button
                                     onClick={() => { setShowMarginModal(false); setPendingSaveStatus(null); setPendingStayOnForm(false); }}
-                                    className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all"
+                                    className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-medium uppercase text-[10px] hover:bg-slate-200 transition-all"
                                 >
                                     Revisar Custo
                                 </button>
                                 <button
                                     onClick={() => { const s = pendingSaveStatus; const stay = pendingStayOnForm; setShowMarginModal(false); setPendingSaveStatus(null); setPendingStayOnForm(false); if (s) saveQuote(s, true, stay); }}
-                                    className="py-4 bg-red-500 text-white rounded-2xl font-black uppercase text-[10px] hover:bg-red-600 transition-all shadow-lg shadow-red-200"
+                                    className="py-4 bg-red-500 text-white rounded-2xl font-medium uppercase text-[10px] hover:bg-red-600 transition-all shadow-sm shadow-red-200"
                                 >
                                     Prosseguir Assim
                                 </button>
@@ -1707,13 +1706,13 @@ Disponibilidade: ${disponibilidade}`;
             {
                 showConfigModal && (
                     <div className="fixed inset-0 bg-[#1e293b]/80 backdrop-blur-md z-[100] flex items-center justify-center p-6">
-                        <div className="bg-white w-full max-w-5xl h-[85vh] rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden">
+                        <div className="bg-white w-full max-w-5xl h-[85vh] rounded-[3.5rem] shadow-sm flex flex-col overflow-hidden">
                             <div className="p-8 border-b flex justify-between items-center bg-slate-50">
                                 <div className="flex items-center gap-4">
-                                    <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg"><Settings className="w-6 h-6 animate-spin-slow" /></div>
-                                    <div><h3 className="text-xl font-black text-[#344a5e] uppercase tracking-tighter">Painel de Parâmetros</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Configurações globais do sistema</p></div>
+                                    <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-sm"><Settings className="w-6 h-6 animate-spin-slow" /></div>
+                                    <div><h3 className="text-xl font-medium text-[#111827] uppercase tracking-tighter">Painel de Parâmetros</h3><p className="text-[10px] font-medium text-[#6b7280] uppercase tracking-widest">Configurações globais do sistema</p></div>
                                 </div>
-                                <button onClick={() => setShowConfigModal(false)} className="w-12 h-12 rounded-2xl bg-white border-2 border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 transition-all"><X className="w-6 h-6" /></button>
+                                <button onClick={() => setShowConfigModal(false)} className="w-12 h-12 rounded-2xl bg-white border-2 border-slate-100 flex items-center justify-center text-[#6b7280] hover:text-red-500 hover:border-red-100 transition-all"><X className="w-6 h-6" /></button>
                             </div>
                             <div className="flex-1 flex overflow-hidden">
                                 <aside className="w-72 bg-slate-50 border-r p-6 space-y-3">
@@ -1726,7 +1725,7 @@ Disponibilidade: ${disponibilidade}`;
                                         { id: 'identity', label: 'Marca', icon: ImageIcon },
                                         { id: 'users', label: 'Usuários', icon: Users }
                                     ].map(tab => (
-                                        <button key={tab.id} onClick={() => setConfigTab(tab.id as any)} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black uppercase text-[10px] transition-all ${configTab === tab.id ? 'bg-white text-blue-600 shadow-md translate-x-2' : 'text-slate-400 hover:bg-white/50'}`}>
+                                        <button key={tab.id} onClick={() => setConfigTab(tab.id as any)} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-medium uppercase text-[10px] transition-all ${configTab === tab.id ? 'bg-white text-blue-600 shadow-md translate-x-2' : 'text-[#6b7280] hover:bg-white/50'}`}>
                                             <tab.icon className="w-4 h-4" /> {tab.label}
                                         </button>
                                     ))}
@@ -1737,14 +1736,14 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
                                                 <div className="flex items-center gap-3 mb-6">
                                                     <div className="p-2 bg-blue-100 rounded-xl text-blue-600"><PlusCircle className="w-4 h-4" /></div>
-                                                    <h4 className="text-[11px] font-black uppercase text-slate-400 tracking-widest">{editingCustomer ? 'Editar Cliente' : 'Novo Cliente'}</h4>
+                                                    <h4 className="text-[11px] font-medium uppercase text-[#6b7280] tracking-widest">{editingCustomer ? 'Editar Cliente' : 'Novo Cliente'}</h4>
                                                 </div>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
                                                     <div className="space-y-4">
                                                         <div className="flex flex-col gap-2">
-                                                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Nome do Cliente</label>
-                                                            <input type="text" className="w-full p-5 bg-white rounded-2xl font-bold outline-none border-2 border-slate-100 focus:border-blue-200 transition-all shadow-inner" placeholder="Ex: Logística Brasil" value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)} />
+                                                            <label className="text-[10px] font-medium text-[#6b7280] uppercase ml-2">Nome do Cliente</label>
+                                                            <input type="text" className="w-full p-5 bg-white rounded-2xl font-medium outline-none border-2 border-slate-100 focus:border-blue-200 transition-all shadow-inner" placeholder="Ex: Logística Brasil" value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)} />
                                                         </div>
 
                                                         <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border-2 border-dashed border-slate-200">
@@ -1754,8 +1753,8 @@ Disponibilidade: ${disponibilidade}`;
                                                                 ) : <ImageIcon className="w-6 h-6 text-slate-200" />}
                                                             </div>
                                                             <div className="flex-1">
-                                                                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Logotipo do Cliente</p>
-                                                                <label className="bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg text-slate-600 font-black uppercase text-[9px] cursor-pointer transition-colors inline-flex items-center gap-2">
+                                                                <p className="text-[10px] font-medium text-[#6b7280] uppercase mb-2">Logotipo do Cliente</p>
+                                                                <label className="bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg text-slate-600 font-medium uppercase text-[9px] cursor-pointer transition-colors inline-flex items-center gap-2">
                                                                     <Download className="w-3 h-3" /> Escolher Imagem
                                                                     <input type="file" className="hidden" accept="image/*" onChange={(e) => {
                                                                         const file = e.target.files?.[0];
@@ -1795,7 +1794,7 @@ Disponibilidade: ${disponibilidade}`;
                                                                 setCustomerFilePreview(null);
                                                                 setEditingCustomer(null);
                                                             }
-                                                        }} className="flex-1 py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+                                                        }} className="flex-1 py-5 bg-blue-600 text-white rounded-2xl font-medium uppercase text-xs shadow-sm shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
                                                             <Save className="w-4 h-4" /> {editingCustomer ? 'Salvar Alterações' : 'Cadastrar'}
                                                         </button>
                                                         {editingCustomer && (
@@ -1804,7 +1803,7 @@ Disponibilidade: ${disponibilidade}`;
                                                                 setNewCustomerName('');
                                                                 setNewCustomerLogo('');
                                                                 setCustomerFilePreview(null);
-                                                            }} className="px-6 bg-slate-200 text-slate-600 rounded-2xl font-black uppercase text-xs hover:bg-slate-300 transition-all">Cancelar</button>
+                                                            }} className="px-6 bg-slate-200 text-slate-600 rounded-2xl font-medium uppercase text-xs hover:bg-slate-300 transition-all">Cancelar</button>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1815,11 +1814,11 @@ Disponibilidade: ${disponibilidade}`;
                                                     <div key={c.id} className="p-5 bg-white rounded-[2rem] border-2 border-slate-50 flex items-center justify-between group hover:border-blue-100 transition-all shadow-sm">
                                                         <div className="flex items-center gap-4">
                                                             <div className="w-12 h-12 rounded-xl bg-slate-50 border flex items-center justify-center overflow-hidden">
-                                                                {c.logoUrl ? <img src={c.logoUrl} className="w-full h-full object-contain" /> : <span className="font-black text-slate-300">{c.name.charAt(0)}</span>}
+                                                                {c.logoUrl ? <img src={c.logoUrl} className="w-full h-full object-contain" /> : <span className="font-medium text-slate-300">{c.name.charAt(0)}</span>}
                                                             </div>
                                                             <div>
-                                                                <p className="font-black text-[#344a5e] text-xs uppercase tracking-tight">{c.name}</p>
-                                                                <p className="text-[9px] font-bold text-slate-300 uppercase">Cliente Cadastrado</p>
+                                                                <p className="font-medium text-[#111827] text-xs uppercase tracking-tight">{c.name}</p>
+                                                                <p className="text-[9px] font-medium text-slate-300 uppercase">Cliente Cadastrado</p>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
@@ -1850,9 +1849,9 @@ Disponibilidade: ${disponibilidade}`;
                                             const isThreshold = key === 'marginThreshold';
                                             return (
                                                 <div key={key} className={`p-6 rounded-[2.5rem] border shadow-sm ${isThreshold ? 'bg-blue-50/60 border-blue-100' : 'bg-slate-50'}`}>
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">{labels[key] || key}</label>
-                                                    <input type="number" step="0.01" className={`w-full p-4 bg-white rounded-2xl font-black text-2xl ${isThreshold ? 'text-blue-600' : 'text-[#344a5e]'}`} value={val as number} onChange={e => handleUpdateFedTaxes(key as any, Number(e.target.value))} />
-                                                    {isThreshold && <p className="text-[9px] font-bold text-blue-400 mt-2 uppercase tracking-tight">Abaixo disso, fechar/salvar exige confirmação.</p>}
+                                                    <label className="text-[10px] font-medium text-[#6b7280] uppercase block mb-2">{labels[key] || key}</label>
+                                                    <input type="number" step="0.01" className={`w-full p-4 bg-white rounded-2xl font-medium text-2xl ${isThreshold ? 'text-blue-600' : 'text-[#111827]'}`} value={val as number} onChange={e => handleUpdateFedTaxes(key as any, Number(e.target.value))} />
+                                                    {isThreshold && <p className="text-[9px] font-medium text-blue-400 mt-2 uppercase tracking-tight">Abaixo disso, fechar/salvar exige confirmação.</p>}
                                                 </div>
                                             );
                                         })}</div>
@@ -1865,10 +1864,10 @@ Disponibilidade: ${disponibilidade}`;
                                                 const label = date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
                                                 return (
                                                     <div key={monthKey} className="bg-slate-50 p-6 rounded-[2rem] border shadow-sm">
-                                                        <label className="text-[10px] font-black text-slate-400 uppercase block mb-2 capitalize">{label}</label>
+                                                        <label className="text-[10px] font-medium text-[#6b7280] uppercase block mb-2 capitalize">{label}</label>
                                                         <input
                                                             type="number"
-                                                            className="w-full p-3 bg-white rounded-xl font-bold text-lg text-[#344a5e]"
+                                                            className="w-full p-3 bg-white rounded-xl font-medium text-lg text-[#111827]"
                                                             value={fedTaxes.goals?.[monthKey] || ''}
                                                             onChange={e => handleUpdateGoals(monthKey, Number(e.target.value))}
                                                             placeholder="R$ 0,00"
@@ -1881,18 +1880,18 @@ Disponibilidade: ${disponibilidade}`;
                                     {configTab === 'fleet' && (
                                         <div className="space-y-6">
                                             <div className="flex items-center justify-between mb-4">
-                                                <h3 className="font-black text-[#344a5e]">Configuração de Frota e ANTT</h3>
+                                                <h3 className="font-medium text-[#111827]">Configuração de Frota e ANTT</h3>
                                                 <button onClick={() => {
                                                     const name = prompt("Nome do novo tipo de veículo:");
                                                     if (name) handleUpdateVehicleConfig(name, { capacity: 10000, axles: 2, factor: 0, fixed: 0, variable: 0, calcMode: 'ANTT' });
-                                                }} className="px-4 py-2 bg-blue-100 text-blue-600 rounded-xl font-black text-[10px] uppercase hover:bg-blue-200 transition-colors">
+                                                }} className="px-4 py-2 bg-blue-100 text-blue-600 rounded-xl font-medium text-[10px] uppercase hover:bg-blue-200 transition-colors">
                                                     + Novo Veículo
                                                 </button>
                                             </div>
                                             {Object.entries(vehicleConfigs).map(([key, config]) => (
                                                 <div key={key} className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm">
                                                     <div className="flex justify-between items-center mb-4">
-                                                        <h4 className="font-black text-[#344a5e] uppercase flex items-center gap-2"><Truck className="w-4 h-4 text-slate-400" /> {key}</h4>
+                                                        <h4 className="font-medium text-[#111827] uppercase flex items-center gap-2"><Truck className="w-4 h-4 text-[#6b7280]" /> {key}</h4>
                                                         {currentUser.role === 'master' && (
                                                             <button onClick={() => handleDeleteVehicleConfig(key)} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
                                                                 <Trash2 className="w-4 h-4" />
@@ -1901,34 +1900,34 @@ Disponibilidade: ${disponibilidade}`;
                                                     </div>
                                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                                                         <div>
-                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Capacidade (KG)</label>
-                                                            <input type="number" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.capacity} onChange={e => handleUpdateVehicleConfig(key, { ...config, capacity: Number(e.target.value) })} />
+                                                            <label className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tighter">Capacidade (KG)</label>
+                                                            <input type="number" className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.capacity} onChange={e => handleUpdateVehicleConfig(key, { ...config, capacity: Number(e.target.value) })} />
                                                         </div>
                                                         <div>
-                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Qtd. Eixos</label>
-                                                            <input type="number" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.axles || 2} onChange={e => handleUpdateVehicleConfig(key, { ...config, axles: Number(e.target.value) })} />
+                                                            <label className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tighter">Qtd. Eixos</label>
+                                                            <input type="number" className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.axles || 2} onChange={e => handleUpdateVehicleConfig(key, { ...config, axles: Number(e.target.value) })} />
                                                         </div>
                                                         <div>
-                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Modo Cálculo</label>
-                                                            <select className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.calcMode} onChange={e => handleUpdateVehicleConfig(key, { ...config, calcMode: e.target.value as 'KM' | 'ANTT' })}>
+                                                            <label className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tighter">Modo Cálculo</label>
+                                                            <select className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.calcMode} onChange={e => handleUpdateVehicleConfig(key, { ...config, calcMode: e.target.value as 'KM' | 'ANTT' })}>
                                                                 <option value="KM">KM (Fator)</option>
                                                                 <option value="ANTT">ANTT (Fixo+Var)</option>
                                                             </select>
                                                         </div>
                                                         {config.calcMode === 'KM' ? (
                                                             <div>
-                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Fator por KM (R$)</label>
-                                                                <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.factor} onChange={e => handleUpdateVehicleConfig(key, { ...config, factor: Number(e.target.value) })} />
+                                                                <label className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tighter">Fator por KM (R$)</label>
+                                                                <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.factor} onChange={e => handleUpdateVehicleConfig(key, { ...config, factor: Number(e.target.value) })} />
                                                             </div>
                                                         ) : (
                                                             <>
                                                                 <div>
-                                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Custo Fixo (R$)</label>
-                                                                    <input type="number" step="1" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.fixed} onChange={e => handleUpdateVehicleConfig(key, { ...config, fixed: Number(e.target.value) })} />
+                                                                    <label className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tighter">Custo Fixo (R$)</label>
+                                                                    <input type="number" step="1" className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.fixed} onChange={e => handleUpdateVehicleConfig(key, { ...config, fixed: Number(e.target.value) })} />
                                                                 </div>
                                                                 <div className="col-span-1">
-                                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Custo Var / KM (R$)</label>
-                                                                    <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border" value={config.variable} onChange={e => handleUpdateVehicleConfig(key, { ...config, variable: Number(e.target.value) })} />
+                                                                    <label className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tighter">Custo Var / KM (R$)</label>
+                                                                    <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.variable} onChange={e => handleUpdateVehicleConfig(key, { ...config, variable: Number(e.target.value) })} />
                                                                 </div>
                                                             </>
                                                         )}
@@ -1945,8 +1944,8 @@ Disponibilidade: ${disponibilidade}`;
                                                     <div className="flex items-center gap-4">
                                                         <div className="p-3 bg-blue-100 rounded-2xl text-blue-600 shadow-sm"><Percent className="w-5 h-5" /></div>
                                                         <div>
-                                                            <h4 className="text-[13px] font-black uppercase text-slate-700 tracking-wider">Gestão de Alíquotas ICMS</h4>
-                                                            <p className="text-[10px] font-bold text-slate-400 uppercase">Matriz Completa TOTVS 2026 + Ajustes Manuais</p>
+                                                            <h4 className="text-[13px] font-medium uppercase text-slate-700 tracking-wider">Gestão de Alíquotas ICMS</h4>
+                                                            <p className="text-[10px] font-medium text-[#6b7280] uppercase">Matriz Completa TOTVS 2026 + Ajustes Manuais</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-4">
@@ -1958,7 +1957,7 @@ Disponibilidade: ${disponibilidade}`;
                                                                     showFeedback("Tabela TOTVS 2026 restaurada com sucesso!");
                                                                 }
                                                             }}
-                                                            className="px-6 py-4 bg-white border-2 border-slate-100 text-slate-500 hover:border-blue-100 hover:text-blue-600 rounded-2xl font-black text-[10px] uppercase transition-all flex items-center gap-2 shadow-sm"
+                                                            className="px-6 py-4 bg-white border-2 border-slate-100 text-[#6b7280] hover:border-blue-100 hover:text-blue-600 rounded-2xl font-medium text-[10px] uppercase transition-all flex items-center gap-2 shadow-sm"
                                                         >
                                                             <RotateCcw className="w-4 h-4" /> Restaurar Padrão
                                                         </button>
@@ -1968,32 +1967,32 @@ Disponibilidade: ${disponibilidade}`;
                                                 {/* Matrix Filters */}
                                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                                     <div className="flex flex-col gap-2">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Busca (Ex: SP-RJ)</label>
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase ml-2">Busca (Ex: SP-RJ)</label>
                                                         <input
                                                             type="text"
-                                                            className="w-full p-4 bg-white rounded-xl font-bold border-2 border-slate-100 focus:border-blue-200 outline-none uppercase text-xs"
+                                                            className="w-full p-4 bg-white rounded-xl font-medium border-2 border-slate-100 focus:border-blue-200 outline-none uppercase text-xs"
                                                             placeholder="BUSCAR PAR..."
                                                             value={icmsSearch}
                                                             onChange={e => setIcmsSearch(e.target.value)}
                                                         />
                                                     </div>
                                                     <div className="flex flex-col gap-2">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Origem</label>
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase ml-2">Origem</label>
                                                         <input
                                                             type="text"
                                                             maxLength={2}
-                                                            className="w-full p-4 bg-white rounded-xl font-bold border-2 border-slate-100 focus:border-blue-200 outline-none uppercase text-xs"
+                                                            className="w-full p-4 bg-white rounded-xl font-medium border-2 border-slate-100 focus:border-blue-200 outline-none uppercase text-xs"
                                                             placeholder="UF"
                                                             value={icmsOriginFilter}
                                                             onChange={e => setIcmsOriginFilter(e.target.value.toUpperCase())}
                                                         />
                                                     </div>
                                                     <div className="flex flex-col gap-2">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Destino</label>
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase ml-2">Destino</label>
                                                         <input
                                                             type="text"
                                                             maxLength={2}
-                                                            className="w-full p-4 bg-white rounded-xl font-bold border-2 border-slate-100 focus:border-blue-200 outline-none uppercase text-xs"
+                                                            className="w-full p-4 bg-white rounded-xl font-medium border-2 border-slate-100 focus:border-blue-200 outline-none uppercase text-xs"
                                                             placeholder="UF"
                                                             value={icmsDestFilter}
                                                             onChange={e => setIcmsDestFilter(e.target.value.toUpperCase())}
@@ -2002,7 +2001,7 @@ Disponibilidade: ${disponibilidade}`;
                                                     <div className="flex items-end">
                                                         <button
                                                             onClick={() => { setIcmsSearch(''); setIcmsOriginFilter(''); setIcmsDestFilter(''); }}
-                                                            className="w-full p-4 bg-slate-100 text-slate-400 hover:text-slate-600 rounded-xl font-black uppercase text-[10px] transition-all"
+                                                            className="w-full p-4 bg-slate-100 text-[#6b7280] hover:text-slate-600 rounded-xl font-medium uppercase text-[10px] transition-all"
                                                         >
                                                             Limpar Filtros
                                                         </button>
@@ -2013,8 +2012,8 @@ Disponibilidade: ${disponibilidade}`;
                                             {/* Matrix Listing */}
                                             <div className="space-y-4">
                                                 <div className="flex items-center justify-between px-4">
-                                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alíquotas e Ajustes Manuais</h4>
-                                                    <span className="text-[10px] font-bold text-slate-300 uppercase">Mostrando pares filtrados</span>
+                                                    <h4 className="text-[10px] font-medium text-[#6b7280] uppercase tracking-widest">Alíquotas e Ajustes Manuais</h4>
+                                                    <span className="text-[10px] font-medium text-slate-300 uppercase">Mostrando pares filtrados</span>
                                                 </div>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 max-h-[500px] overflow-y-auto p-2 scrollbar-hide">
@@ -2034,14 +2033,14 @@ Disponibilidade: ${disponibilidade}`;
                                                                 <div key={pair} className="bg-white p-4 rounded-2xl border-2 border-slate-50 flex items-center justify-between hover:border-blue-200 transition-all shadow-sm group">
                                                                     <div className="flex flex-col">
                                                                         <div className="flex items-center gap-1.5 mb-1">
-                                                                            <span className="font-black text-[10px] text-slate-500">{org}</span>
+                                                                            <span className="font-medium text-[10px] text-[#6b7280]">{org}</span>
                                                                             <ArrowRight className="w-2.5 h-2.5 text-slate-300" />
-                                                                            <span className="font-black text-[10px] text-blue-500">{dst}</span>
+                                                                            <span className="font-medium text-[10px] text-blue-500">{dst}</span>
                                                                         </div>
                                                                         <div className="flex items-center gap-2">
                                                                             <input
                                                                                 type="number"
-                                                                                className="w-16 bg-slate-50 border-none p-1 rounded font-black text-sm text-slate-800 focus:bg-white focus:ring-1 focus:ring-blue-400 outline-none"
+                                                                                className="w-16 bg-slate-50 border-none p-1 rounded font-medium text-sm text-slate-800 focus:bg-white focus:ring-1 focus:ring-blue-400 outline-none"
                                                                                 value={rate}
                                                                                 onChange={(e) => {
                                                                                     const val = Number(e.target.value);
@@ -2049,7 +2048,7 @@ Disponibilidade: ${disponibilidade}`;
                                                                                     handleUpdateIcmsRates(updated);
                                                                                 }}
                                                                             />
-                                                                            <span className="text-[10px] font-black text-slate-300">%</span>
+                                                                            <span className="text-[10px] font-medium text-slate-300">%</span>
                                                                         </div>
                                                                     </div>
                                                                     <div className="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2066,7 +2065,7 @@ Disponibilidade: ${disponibilidade}`;
                                                                 const standardRules = getStandardIcmsRules();
                                                                 handleUpdateIcmsRates(standardRules);
                                                             }}
-                                                            className="text-blue-500 font-black uppercase text-xs hover:underline"
+                                                            className="text-blue-500 font-medium uppercase text-xs hover:underline"
                                                         >
                                                             Clique para inicializar a tabela TOTVS 2026
                                                         </button>
@@ -2078,9 +2077,9 @@ Disponibilidade: ${disponibilidade}`;
 
                                     {configTab === 'identity' && (
                                         <div className="bg-slate-50 p-12 rounded-[3.5rem] flex flex-col items-center gap-8 border">
-                                            <div className="w-48 h-48 bg-white p-6 rounded-[3rem] shadow-2xl flex items-center justify-center overflow-hidden border-4 border-white">{appLogo ? <img src={appLogo} className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full text-[#344a5e]" />}</div>
-                                            <label className="bg-blue-600 px-10 py-5 rounded-2xl text-white font-black uppercase text-xs cursor-pointer"><ImageIcon className="w-5 h-5 inline mr-2" /> Alterar Logo<input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" /></label>
-                                            <button onClick={() => setAppLogo(null)} className="text-red-400 font-black text-[10px] uppercase underline underline-offset-4">Resetar Padrão</button>
+                                            <div className="w-48 h-48 bg-white p-6 rounded-[3rem] shadow-sm flex items-center justify-center overflow-hidden border-4 border-white">{appLogo ? <img src={appLogo} className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full text-[#111827]" />}</div>
+                                            <label className="bg-blue-600 px-10 py-5 rounded-2xl text-white font-medium uppercase text-xs cursor-pointer"><ImageIcon className="w-5 h-5 inline mr-2" /> Alterar Logo<input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" /></label>
+                                            <button onClick={() => setAppLogo(null)} className="text-red-400 font-medium text-[10px] uppercase underline underline-offset-4">Resetar Padrão</button>
                                         </div>
                                     )}
                                     {configTab === 'users' && (
@@ -2089,24 +2088,24 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
                                                 <div className="flex items-center gap-3 mb-6">
                                                     <Users className="w-5 h-5 text-blue-600" />
-                                                    <h3 className="font-black text-[#344a5e] uppercase text-xs">Cadastrar Novo Usuário</h3>
+                                                    <h3 className="font-medium text-[#111827] uppercase text-xs">Cadastrar Novo Usuário</h3>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                                     <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Nome Completo</label>
-                                                        <input type="text" id="new-user-name" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: João Silva" />
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Nome Completo</label>
+                                                        <input type="text" id="new-user-name" className="w-full p-4 bg-white rounded-2xl font-medium text-[#111827] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: João Silva" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Login (Usuário)</label>
-                                                        <input type="text" id="new-user-username" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: joao.silva" />
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Login (Usuário)</label>
+                                                        <input type="text" id="new-user-username" className="w-full p-4 bg-white rounded-2xl font-medium text-[#111827] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="Ex: joao.silva" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Senha</label>
-                                                        <input type="password" id="new-user-password" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="••••••••" />
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Senha</label>
+                                                        <input type="password" id="new-user-password" className="w-full p-4 bg-white rounded-2xl font-medium text-[#111827] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all" placeholder="••••••••" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Perfil</label>
-                                                        <select id="new-user-role" className="w-full p-4 bg-white rounded-2xl font-bold text-[#344a5e] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all">
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Perfil</label>
+                                                        <select id="new-user-role" className="w-full p-4 bg-white rounded-2xl font-medium text-[#111827] border-2 border-slate-100 outline-none focus:border-blue-200 transition-all">
                                                             <option value="operador">Operador</option>
                                                             <option value="master">Master</option>
                                                         </select>
@@ -2139,7 +2138,7 @@ Disponibilidade: ${disponibilidade}`;
                                                             showFeedback('Erro ao cadastrar usuário.', 'error');
                                                         }
                                                     }}
-                                                    className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                                                    className="w-full py-5 bg-blue-600 text-white rounded-2xl font-medium uppercase text-xs shadow-sm shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
                                                 >
                                                     <Save className="w-4 h-4" /> Cadastrar Usuário
                                                 </button>
@@ -2151,11 +2150,11 @@ Disponibilidade: ${disponibilidade}`;
                                                     <div key={u.id} className="p-5 bg-white rounded-[2rem] border-2 border-slate-50 flex items-center justify-between group hover:border-blue-100 transition-all shadow-sm">
                                                         <div className="flex items-center gap-4">
                                                             <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center">
-                                                                <span className="font-black text-blue-400 text-sm">{u.name.charAt(0)}</span>
+                                                                <span className="font-medium text-blue-400 text-sm">{u.name.charAt(0)}</span>
                                                             </div>
                                                             <div>
-                                                                <p className="font-black text-[#344a5e] text-xs uppercase tracking-tight">{u.name}</p>
-                                                                <p className="text-[9px] font-bold text-slate-300 uppercase">@{u.username} • {u.role === 'master' ? 'Master' : 'Operador'}</p>
+                                                                <p className="font-medium text-[#111827] text-xs uppercase tracking-tight">{u.name}</p>
+                                                                <p className="text-[9px] font-medium text-slate-300 uppercase">@{u.username} • {u.role === 'master' ? 'Master' : 'Operador'}</p>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
@@ -2177,7 +2176,7 @@ Disponibilidade: ${disponibilidade}`;
                                     )}
                                     {configTab === 'goals' && (
                                         <div className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm space-y-4">
-                                            <h3 className="font-black text-[#344a5e] mb-4">Metas Mensais (R$)</h3>
+                                            <h3 className="font-medium text-[#111827] mb-4">Metas Mensais (R$)</h3>
                                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                                 {Array.from({ length: 12 }).map((_, i) => {
                                                     const year = new Date().getFullYear();
@@ -2187,10 +2186,10 @@ Disponibilidade: ${disponibilidade}`;
 
                                                     return (
                                                         <div key={key}>
-                                                            <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 capitalize">{monthName}</label>
+                                                            <label className="text-[10px] font-medium text-[#6b7280] uppercase block mb-1 capitalize">{monthName}</label>
                                                             <input
                                                                 type="number"
-                                                                className="w-full p-3 bg-white rounded-xl font-bold text-[#344a5e] border"
+                                                                className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border"
                                                                 value={fedTaxes.goals?.[key] || ''}
                                                                 placeholder="0,00"
                                                                 onChange={e => {
@@ -2216,7 +2215,7 @@ Disponibilidade: ${disponibilidade}`;
             {
                 toast && (
                     <div className="fixed bottom-6 right-6 z-[1000] max-w-xs animate-fade-in-up pointer-events-none">
-                        <div className={`px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-[11px] font-bold leading-snug ${toast.type === 'error' ? 'bg-red-600/95 text-white' :
+                        <div className={`px-4 py-3 rounded-xl shadow-sm flex items-center gap-2 text-[11px] font-medium leading-snug ${toast.type === 'error' ? 'bg-red-600/95 text-white' :
                             toast.type === 'info' ? 'bg-slate-700/95 text-white' :
                                 'bg-emerald-600/95 text-white'
                             }`}>{toast.message}</div>
@@ -2231,10 +2230,10 @@ Disponibilidade: ${disponibilidade}`;
                         {[...Array(50)].map((_, i) => (
                             <div key={i} className="confetti" style={{ left: `${Math.random() * 100}vw`, animationDelay: `${Math.random() * 2}s`, backgroundColor: ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00bcd4', '#e91e63'][Math.floor(Math.random() * 7)], width: `${Math.random() * 10 + 5}px`, height: `${Math.random() * 20 + 10}px` }} />
                         ))}
-                        <div className="bg-white p-12 rounded-[3rem] shadow-2xl text-center celebration-text relative z-10 border-4 border-emerald-400 rotate-2">
+                        <div className="bg-white p-12 rounded-[3rem] shadow-sm text-center celebration-text relative z-10 border-4 border-emerald-400 rotate-2">
                             <div className="text-7xl mb-6">🎉 💸 🚚</div>
-                            <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-green-600 mb-2 uppercase tracking-tighter">Venda Fechada!</h1>
-                            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-2">Parabéns pelo excelente trabalho</p>
+                            <h1 className="text-5xl font-medium text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-green-600 mb-2 uppercase tracking-tighter">Venda Fechada!</h1>
+                            <p className="text-[#6b7280] font-medium uppercase tracking-widest text-xs mt-2">Parabéns pelo excelente trabalho</p>
                         </div>
                     </div>
                 )
