@@ -53,6 +53,7 @@ export interface FederalTaxes {
     csll: number;
     irpj: number;
     insurancePolicyRate: number;
+    marginThreshold?: number; // Limiar mínimo de margem (%) que dispara o modal de confirmação. Default 15.
     goals?: Record<string, number>; // Format: "YYYY-MM": value
     spotStats?: { simulated: number; converted: number };
     icmsRates?: Record<string, number>; // Format: "ORIGIN-DESTINATION": rate (e.g., "ES-RJ": 12)
@@ -96,6 +97,7 @@ export interface FreightCalculation {
     status: QuoteStatus;
     realProfit?: number;
     realMarginPercent?: number;
+    elaborationSeconds?: number; // Tempo de elaboração da cotação em segundos (cronômetro)
     isEdited?: boolean;
     updatedBy?: string;
     updatedByName?: string;

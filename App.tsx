@@ -102,6 +102,18 @@ const App: React.FC = () => {
     const [icmsOriginFilter, setIcmsOriginFilter] = useState('');
     const [icmsDestFilter, setIcmsDestFilter] = useState('');
 
+    // Cronômetro de elaboração (inicia ao digitar; persiste no registro)
+    const [elapsedSeconds, setElapsedSeconds] = useState(0);
+    const [isTimerRunning, setIsTimerRunning] = useState(false);
+
+    // Modal de validação de margem (limiar configurável)
+    const [showMarginModal, setShowMarginModal] = useState(false);
+    const [pendingSaveStatus, setPendingSaveStatus] = useState<QuoteStatus | null>(null);
+    const [pendingStayOnForm, setPendingStayOnForm] = useState(false);
+
+    // Abrir composição de custo ao cliente (cópia/PDF)
+    const [openCostToClient, setOpenCostToClient] = useState(false);
+
     // Novo estado para usuários e veículos
     const [newUserForm, setNewUserForm] = useState<Partial<User>>({ name: '', username: '', password: '', role: 'operador' });
     const [newVehicleName, setNewVehicleName] = useState('');
@@ -224,6 +236,28 @@ const App: React.FC = () => {
             return () => clearTimeout(timer);
         }
     }, [toast]);
+
+    // Cronômetro: incrementa a cada segundo enquanto estiver rodando
+    useEffect(() => {
+        if (!isTimerRunning) return;
+        const t = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+        return () => clearInterval(t);
+    }, [isTimerRunning]);
+
+    // Inicia o cronômetro na primeira digitação de uma nova cotação
+    const startTimer = () => {
+        if (!isTimerRunning && !editingId) setIsTimerRunning(true);
+    };
+
+    const formatElapsed = (total: number) => {
+        const s = Math.max(0, Math.floor(total || 0));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return `${m.toString().padStart(2, '0')}:${r.toString().padStart(2, '0')}`;
+    };
+
+    // Limiar de margem para o modal de confirmação (configurável, padrão 15%)
+    const marginThreshold = fedTaxes.marginThreshold ?? 15;
 
 
 
@@ -694,25 +728,44 @@ const App: React.FC = () => {
 
     const historicalAlert = useMemo(() => {
         if (!origin || !destination) return null;
-        const matches = history.filter(h =>
+        const routeMatches = history.filter(h =>
             h.origin.toLowerCase().includes(origin.toLowerCase()) &&
             h.destination.toLowerCase().includes(destination.toLowerCase())
         );
-        if (matches.length === 0) return null;
-        const checkWon = matches.some(h => h.status === 'won');
+        if (routeMatches.length === 0) return null;
+        const vehicleMatches = routeMatches.filter(h => h.vehicleType === vehicleType);
+        const wonVehicle = vehicleMatches.filter(h => h.status === 'won');
+        const checkWon = wonVehicle.length > 0 || routeMatches.some(h => h.status === 'won');
+        const avgWonFreight = wonVehicle.length > 0 ? wonVehicle.reduce((a, h) => a + (h.totalFreight || 0), 0) / wonVehicle.length : 0;
         return (
             <div className={`col-span-1 md:col-span-2 px-6 py-3 rounded-xl flex items-center gap-3 animate-fade-in ${checkWon ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                {checkWon ? <CheckCircle className="w-4 h-4" /> : <Info className="w-4 h-4" />}
+                {checkWon ? <CheckCircle className="w-4 h-4 shrink-0" /> : <Info className="w-4 h-4 shrink-0" />}
                 <span className="text-[10px] font-black uppercase">
-                    Histórico Encontrado: {matches.length} cotações anteriores ({checkWon ? 'JÁ ATENDEMOS' : 'NUNCA FECHAMOS'})
+                    Histórico desta rota: {routeMatches.length} cotação(ões)
+                    {vehicleMatches.length > 0
+                        ? ` • ${vehicleMatches.length} com ${vehicleType}`
+                        : ` • nenhuma com ${vehicleType}`}
+                    {wonVehicle.length > 0
+                        ? ` • Já fechado com ${vehicleType} ~ R$ ${formatCur(avgWonFreight)}`
+                        : (checkWon ? ' • Já atendemos esta rota' : ' • Nunca fechamos esta rota')}
                 </span>
             </div>
         );
-    }, [origin, destination, history]);
+    }, [origin, destination, history, vehicleType]);
 
     const generateId = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
 
-    const saveQuote = async (status: QuoteStatus) => {
+    const saveQuote = async (status: QuoteStatus, bypassMarginCheck = false, stayOnForm = false) => {
+        // Gate de margem: ao comprometer a cotação (fechar/salvar em pauta) com margem
+        // abaixo do limiar configurado, exige confirmação no modal antes de prosseguir.
+        if (!bypassMarginCheck && (status === 'won' || status === 'pending') && calcData.realMarginPercent < marginThreshold) {
+            setPendingSaveStatus(status);
+            setPendingStayOnForm(stayOnForm);
+            setShowMarginModal(true);
+            return;
+        }
+
+        setIsTimerRunning(false);
         const quoteId = editingId || generateId();
         const existingQuote = history.find(h => h.id === editingId);
         const createdDate = existingQuote?.createdAt ? existingQuote.createdAt : Date.now();
@@ -727,6 +780,7 @@ const App: React.FC = () => {
             pisPercent: fedTaxes.pis, cofinsPercent: fedTaxes.cofins, csllPercent: fedTaxes.csll, irpjPercent: fedTaxes.irpj,
             totalFreight: calcData.finalFreight, createdAt: createdDate, disponibilidade, status, updatedBy: currentUser?.id, updatedByName: currentUser?.name,
             realProfit: calcData.realProfitAmount, realMarginPercent: calcData.realMarginPercent,
+            elaborationSeconds: elapsedSeconds,
             otherCosts
         };
 
@@ -741,8 +795,12 @@ const App: React.FC = () => {
                 const result = await updateFreightCalculation(data);
                 if (result.success) {
                     setHistory(prev => prev.map(h => h.id === editingId ? data : h));
-                    showFeedback("Atualizado!");
-                    setEditingId(null); resetForm(); setActiveTab('history');
+                    if (stayOnForm) {
+                        showFeedback("Cotação enviada e sinalizada no CRM.");
+                    } else {
+                        showFeedback("Atualizado!");
+                        setEditingId(null); resetForm(); setActiveTab('history');
+                    }
                 } else {
                     showFeedback(`Erro ao atualizar no banco: ${result.error}`, "error");
                 }
@@ -750,8 +808,14 @@ const App: React.FC = () => {
                 const result = await createFreightCalculation(data);
                 if (result.success) {
                     setHistory(prev => [data, ...prev]);
-                    showFeedback("Salvo com sucesso!");
-                    setEditingId(null); resetForm(); setActiveTab('history');
+                    if (stayOnForm) {
+                        // Mantém o formulário na tela e entra em modo edição do registro recém-criado
+                        setEditingId(quoteId);
+                        showFeedback("Cotação enviada e sinalizada no CRM.");
+                    } else {
+                        showFeedback("Salvo com sucesso!");
+                        setEditingId(null); resetForm(); setActiveTab('history');
+                    }
                 } else {
                     showFeedback(`Erro ao salvar no banco: ${result.error}`, "error");
                 }
@@ -770,6 +834,7 @@ const App: React.FC = () => {
         setIcmsPercent(quote.icmsPercent.toString()); setEditingId(quote.id); setDisponibilidade(quote.disponibilidade || "Imediato");
         setMerchandiseType(quote.merchandiseType || '');
         setOtherCosts(quote.otherCosts || []);
+        setElapsedSeconds(quote.elaborationSeconds || 0); setIsTimerRunning(false);
         setActiveTab('new'); showFeedback("Editando...");
     };
 
@@ -777,15 +842,38 @@ const App: React.FC = () => {
         setOrigin(''); setDestination(''); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
         setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setTargetFreightClient('0'); setEditingId(null);
         setDisponibilidade("Imediato"); setMerchandiseType(''); setOtherCosts([]);
+        setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
+    };
+
+    // Linhas da composição de custo aberta ao cliente (reusada na cópia e no PDF)
+    const buildCompositionLines = () => {
+        const lines = [
+            `Frete base: R$ ${formatCur(activeTab === 'reverse' ? calcData.buyerPower : num(baseFreight))}`,
+            `Pedágio: R$ ${formatCur(num(tolls))}`,
+            `Seguro Ad Valorem (${insurancePercent}%): R$ ${formatCur(calcData.adValoremSelling)}`
+        ];
+        otherCosts.forEach(c => lines.push(`${c.label}: R$ ${formatCur(c.value)}`));
+        lines.push(`Impostos (ICMS ${icmsPercent}% + Federais): R$ ${formatCur(calcData.icmsAmount + calcData.fedTaxesAmount)}`);
+        return lines;
     };
 
     const handleCopyQuoteText = () => {
         const val = activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight;
-        const text = `Cotação de Frete:
+        let text = `Cotação de Frete:
 Veículo: ${vehicleType}
 Valor: R$ ${formatCur(val)} All In.
 Disponibilidade: ${disponibilidade}`;
+        if (openCostToClient) {
+            text += `\n\nComposição do valor:\n` + buildCompositionLines().map(l => `• ${l}`).join('\n');
+        }
         navigator.clipboard.writeText(text).then(() => showFeedback("Copiado!"));
+    };
+
+    // Envio rápido: copia o texto da cotação e sinaliza no CRM (salva como pendente),
+    // permanecendo na tela sem resetar o formulário.
+    const handleQuickSend = () => {
+        handleCopyQuoteText();
+        saveQuote('pending', false, true);
     };
 
     const generatePDF = async () => {
@@ -917,6 +1005,19 @@ Disponibilidade: ${disponibilidade}`;
             doc.text(`(CNPJ Recebedor: 51.653.821/0001-68)`, indent, currentY);
             doc.setFontSize(9);
             currentY += spacing + 3;
+
+            // 2.1 Composição aberta ao cliente (opcional)
+            if (openCostToClient) {
+                doc.setFont("helvetica", "bold");
+                doc.text("Composição do valor:", indent, currentY); currentY += spacing;
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(8);
+                buildCompositionLines().forEach(line => {
+                    doc.text(`-   ${line}`, indent + 2, currentY); currentY += spacing - 1;
+                });
+                doc.setFontSize(9);
+                currentY += 3;
+            }
 
             // 3. Detalhes
             doc.setFont("helvetica", "bold");
@@ -1332,19 +1433,27 @@ Disponibilidade: ${disponibilidade}`;
                                     <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border space-y-6">
                                         <div className="flex items-center justify-between mb-4">
                                             <div className="flex items-center gap-3"><Package className="w-5 h-5 text-blue-600" /><h3 className="font-black uppercase text-[11px] text-slate-400">Rota & Equipamento</h3></div>
-                                            {parseFloat(distanceKm) > 0 && (
-                                                <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-50 rounded-full border border-blue-100 animate-fade-in">
-                                                    <MapIcon className="w-3 h-3 text-blue-500" />
-                                                    <span className="text-[10px] font-black text-blue-600 uppercase">{(parseFloat(distanceKm) || 0).toLocaleString()} KM Sugeridos</span>
-                                                </div>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {(isTimerRunning || elapsedSeconds > 0) && (
+                                                    <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full border animate-fade-in ${isTimerRunning ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`} title="Tempo de elaboração da cotação">
+                                                        <Clock className={`w-3 h-3 ${isTimerRunning ? 'text-emerald-500 animate-pulse' : 'text-slate-400'}`} />
+                                                        <span className={`text-[10px] font-black uppercase tabular-nums ${isTimerRunning ? 'text-emerald-600' : 'text-slate-500'}`}>{formatElapsed(elapsedSeconds)}</span>
+                                                    </div>
+                                                )}
+                                                {parseFloat(distanceKm) > 0 && (
+                                                    <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-50 rounded-full border border-blue-100 animate-fade-in">
+                                                        <MapIcon className="w-3 h-3 text-blue-500" />
+                                                        <span className="text-[10px] font-black text-blue-600 uppercase">{(parseFloat(distanceKm) || 0).toLocaleString()} KM Sugeridos</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={origin} onChange={e => setOrigin(e.target.value)} onBlur={handleFetchDistance} placeholder="Origem (Cidade, UF)" />
+                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={origin} onChange={e => { startTimer(); setOrigin(e.target.value); }} onBlur={handleFetchDistance} placeholder="Origem (Cidade, UF)" />
                                             </div>
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={destination} onChange={e => setDestination(e.target.value)} onBlur={handleFetchDistance} placeholder="Destino (Cidade, UF)" />
+                                                <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-2 border-transparent focus:border-blue-200 outline-none" value={destination} onChange={e => { startTimer(); setDestination(e.target.value); }} onBlur={handleFetchDistance} placeholder="Destino (Cidade, UF)" />
                                             </div>
                                         </div>
                                         {/* Alerta de Histórico */}
@@ -1397,9 +1506,9 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="flex flex-col">
                                                 <div className="flex justify-between mb-2"><span className="text-[10px] font-black uppercase text-blue-600">{activeTab === 'reverse' ? 'Alvo Cliente' : 'Preço Base'}</span></div>
                                                 {activeTab === 'reverse' ? (
-                                                    <input type="text" className="w-full p-4 rounded-xl font-black border-2 bg-blue-50 text-blue-600 border-blue-200 transition-all" placeholder="Alvo Cliente" value={maskCurrency(targetFreightClient)} onChange={e => setTargetFreightClient(maskCurrency(e.target.value))} />
+                                                    <input type="text" className="w-full p-4 rounded-xl font-black border-2 bg-blue-50 text-blue-600 border-blue-200 transition-all" placeholder="Alvo Cliente" value={maskCurrency(targetFreightClient)} onChange={e => { startTimer(); setTargetFreightClient(maskCurrency(e.target.value)); }} />
                                                 ) : (
-                                                    <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={maskCurrency(baseFreight)} onChange={e => setBaseFreight(maskCurrency(e.target.value))} />
+                                                    <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={maskCurrency(baseFreight)} onChange={e => { startTimer(); setBaseFreight(maskCurrency(e.target.value)); }} />
                                                 )}
                                             </div>
                                             <div className="flex flex-col">
@@ -1408,7 +1517,7 @@ Disponibilidade: ${disponibilidade}`;
                                             </div>
                                             <div className="flex flex-col">
                                                 <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Valor Mercadoria</span></div>
-                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={maskCurrency(goodsValue)} onChange={e => setGoodsValue(maskCurrency(e.target.value))} placeholder="R$ 0,00" />
+                                                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl font-bold border-2 border-transparent focus:border-slate-100 outline-none transition-all" value={maskCurrency(goodsValue)} onChange={e => { startTimer(); setGoodsValue(maskCurrency(e.target.value)); }} placeholder="R$ 0,00" />
                                             </div>
                                             <div className="flex flex-col">
                                                 <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Ad Val (%)</span></div>
@@ -1549,9 +1658,9 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="text-right">
                                                 <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Validação de Viabilidade</p>
                                                 <div className="flex items-center gap-2">
-                                                    <div className={`w-3 h-3 rounded-full ${calcData.realMarginPercent >= 15 ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
+                                                    <div className={`w-3 h-3 rounded-full ${calcData.realMarginPercent >= marginThreshold ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
                                                     <span className="text-xs font-black uppercase tracking-widest">
-                                                        {calcData.realMarginPercent >= 15 ? 'Margem Saudável' : 'Revisar Custo'}
+                                                        {calcData.realMarginPercent >= marginThreshold ? 'Margem Saudável' : 'Revisar Custo'}
                                                     </span>
                                                 </div>
                                             </div>
@@ -1604,7 +1713,21 @@ Disponibilidade: ${disponibilidade}`;
                                                     </p>
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-2 w-full mt-4">
+                                            {/* Toggle: abrir composição de custo ao cliente */}
+                                            <button
+                                                onClick={() => setOpenCostToClient(v => !v)}
+                                                className={`w-full mt-4 flex items-center justify-between gap-2 px-4 py-3 rounded-xl border transition-all ${openCostToClient ? 'bg-emerald-500/20 border-emerald-400/40' : 'bg-white/5 border-white/15 hover:bg-white/10'}`}
+                                                title="Inclui a composição detalhada do custo na cópia e no PDF"
+                                            >
+                                                <span className="flex items-center gap-2 text-[8px] font-black uppercase tracking-wider">
+                                                    <Layers className="w-3 h-3 text-emerald-400" /> Abrir composição ao cliente
+                                                </span>
+                                                <span className={`w-8 h-4 rounded-full relative transition-all ${openCostToClient ? 'bg-emerald-400' : 'bg-white/20'}`}>
+                                                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${openCostToClient ? 'left-4' : 'left-0.5'}`}></span>
+                                                </span>
+                                            </button>
+
+                                            <div className="grid grid-cols-2 gap-2 w-full mt-3">
                                                 <button onClick={() => saveQuote('won')} className="bg-emerald-500 py-4 rounded-xl font-black uppercase text-[8px] flex items-center justify-center gap-1 hover:bg-emerald-600 shadow-md">
                                                     <ThumbsUp className="w-3 h-3" /> Fechado
                                                 </button>
@@ -1617,7 +1740,10 @@ Disponibilidade: ${disponibilidade}`;
                                                 <button onClick={handleCopyQuoteText} className="bg-white py-4 rounded-xl font-black uppercase text-[8px] text-[#005a9c] hover:bg-slate-100 flex items-center justify-center gap-1 shadow-md">
                                                     <ClipboardCopy className="w-3 h-3" /> Copiar
                                                 </button>
-                                                <button onClick={generatePDF} className="col-span-2 bg-slate-800 text-white py-3 rounded-xl font-black uppercase text-[8px] hover:bg-slate-900 border border-slate-700 flex items-center justify-center gap-1 shadow-md mt-1">
+                                                <button onClick={handleQuickSend} className="col-span-2 bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[8px] hover:bg-emerald-700 border border-emerald-500 flex items-center justify-center gap-1 shadow-md mt-1">
+                                                    <Zap className="w-3 h-3 text-white" /> Envio Rápido (Copiar + CRM)
+                                                </button>
+                                                <button onClick={generatePDF} className="col-span-2 bg-slate-800 text-white py-3 rounded-xl font-black uppercase text-[8px] hover:bg-slate-900 border border-slate-700 flex items-center justify-center gap-1 shadow-md">
                                                     <FileDown className="w-3 h-3 text-emerald-400" /> PDF Comercial
                                                 </button>
                                             </div>
@@ -1719,6 +1845,51 @@ Disponibilidade: ${disponibilidade}`;
                     )}
                 </div>
             </main >
+
+            {/* Modal de Validação de Margem */}
+            {showMarginModal && (
+                <div className="fixed inset-0 bg-[#1e293b]/80 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden">
+                        <div className="p-8 bg-gradient-to-br from-red-500 to-red-600 text-white flex items-center gap-4">
+                            <div className="p-3 bg-white/15 rounded-2xl"><AlertTriangle className="w-7 h-7" /></div>
+                            <div>
+                                <h3 className="text-lg font-black uppercase tracking-tight leading-none">Margem abaixo do limiar</h3>
+                                <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest mt-1">Confirmação necessária</p>
+                            </div>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div className="flex items-center justify-around gap-4">
+                                <div className="text-center">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Margem desta cotação</p>
+                                    <p className="text-3xl font-black text-red-500">{calcData.realMarginPercent.toFixed(1)}%</p>
+                                </div>
+                                <ArrowRight className="w-5 h-5 text-slate-300" />
+                                <div className="text-center">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Limiar mínimo</p>
+                                    <p className="text-3xl font-black text-[#344a5e]">{marginThreshold.toFixed(1)}%</p>
+                                </div>
+                            </div>
+                            <p className="text-xs font-bold text-slate-500 text-center leading-relaxed">
+                                Esta cotação está com a margem real abaixo do mínimo configurado. Deseja prosseguir mesmo assim?
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 pt-2">
+                                <button
+                                    onClick={() => { setShowMarginModal(false); setPendingSaveStatus(null); setPendingStayOnForm(false); }}
+                                    className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all"
+                                >
+                                    Revisar Custo
+                                </button>
+                                <button
+                                    onClick={() => { const s = pendingSaveStatus; const stay = pendingStayOnForm; setShowMarginModal(false); setPendingSaveStatus(null); setPendingStayOnForm(false); if (s) saveQuote(s, true, stay); }}
+                                    className="py-4 bg-red-500 text-white rounded-2xl font-black uppercase text-[10px] hover:bg-red-600 transition-all shadow-lg shadow-red-200"
+                                >
+                                    Prosseguir Assim
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Configurações */}
             {
@@ -1858,12 +2029,21 @@ Disponibilidade: ${disponibilidade}`;
                                         </div>
                                     )}
                                     {configTab === 'financial' && (
-                                        <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).filter(([k]) => k !== 'goals').map(([key, val]) => (
-                                            <div key={key} className="bg-slate-50 p-6 rounded-[2.5rem] border shadow-sm">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">{key}</label>
-                                                <input type="number" step="0.01" className="w-full p-4 bg-white rounded-2xl font-black text-2xl text-[#344a5e]" value={val as number} onChange={e => handleUpdateFedTaxes(key as any, Number(e.target.value))} />
-                                            </div>
-                                        ))}</div>
+                                        <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).filter(([k, v]) => typeof v === 'number').map(([key, val]) => {
+                                            const labels: Record<string, string> = {
+                                                pis: 'PIS (%)', cofins: 'COFINS (%)', csll: 'CSLL (%)', irpj: 'IRPJ (%)',
+                                                insurancePolicyRate: 'Taxa Apólice / Ad Valorem Custo (%)',
+                                                marginThreshold: 'Limiar Mínimo de Margem (%)'
+                                            };
+                                            const isThreshold = key === 'marginThreshold';
+                                            return (
+                                                <div key={key} className={`p-6 rounded-[2.5rem] border shadow-sm ${isThreshold ? 'bg-blue-50/60 border-blue-100' : 'bg-slate-50'}`}>
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">{labels[key] || key}</label>
+                                                    <input type="number" step="0.01" className={`w-full p-4 bg-white rounded-2xl font-black text-2xl ${isThreshold ? 'text-blue-600' : 'text-[#344a5e]'}`} value={val as number} onChange={e => handleUpdateFedTaxes(key as any, Number(e.target.value))} />
+                                                    {isThreshold && <p className="text-[9px] font-bold text-blue-400 mt-2 uppercase tracking-tight">Abaixo disso, fechar/salvar exige confirmação.</p>}
+                                                </div>
+                                            );
+                                        })}</div>
                                     )}
                                     {configTab === 'goals' && (
                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
