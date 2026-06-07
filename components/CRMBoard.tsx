@@ -11,7 +11,7 @@ interface CRMBoardProps {
 }
 
 const COLUMNS: { id: QuoteStatus; label: string; color: string; border: string }[] = [
-    { id: 'pending', label: 'Cotações (Novas)', color: 'bg-slate-50 text-slate-600', border: 'border-slate-200' },
+    { id: 'pending', label: 'Cotações (Novas)', color: 'bg-[#f9fafb] text-slate-600', border: 'border-slate-200' },
     { id: 'respondida', label: 'Respondidas', color: 'bg-blue-50 text-blue-600', border: 'border-blue-200' },
     { id: 'aprovada', label: 'Aprovadas', color: 'bg-indigo-50 text-indigo-600', border: 'border-indigo-200' },
     { id: 'em_operacao', label: 'Em Operação', color: 'bg-amber-50 text-amber-600', border: 'border-amber-200' },
@@ -136,18 +136,18 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
     return (
         <div className="h-full flex flex-col gap-6">
             {/* Header / Insights */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 animate-fade-in-up">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-[#e5e7eb] flex flex-col md:flex-row justify-between items-center gap-6 animate-fade-in-up">
 
                 {/* Month Selector */}
                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-50 rounded-2xl text-blue-600"><Calendar className="w-6 h-6" /></div>
+                    <div className="p-3 bg-blue-50 rounded-lg text-blue-600"><Calendar className="w-6 h-6" /></div>
                     <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 block">Mês de Referência</label>
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] block">Mês de Referência</label>
                         <input
                             type="month"
                             value={selectedMonth}
                             onChange={e => setSelectedMonth(e.target.value)}
-                            className="text-lg font-black text-[#344a5e] bg-transparent outline-none uppercase cursor-pointer"
+                            className="text-lg font-medium text-[#111827] bg-transparent outline-none uppercase cursor-pointer"
                         />
                     </div>
                 </div>
@@ -155,22 +155,22 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                 {/* Insights Cards */}
                 <div className="flex items-center gap-8 flex-1 justify-end">
                     <div className="text-right">
-                        <p className="text-[10px] font-black uppercase text-slate-400">Meta do Mês</p>
-                        <p className="text-xl font-black text-[#344a5e]">{formatCurrency(insights.goalValue)}</p>
+                        <p className="text-[10px] font-medium uppercase text-[#6b7280]">Meta do Mês</p>
+                        <p className="text-xl font-medium text-[#111827]">{formatCurrency(insights.goalValue)}</p>
                     </div>
 
                     <div className="text-right relative group cursor-help">
-                        <p className="text-[10px] font-black uppercase text-slate-400">Realizado (Vendas)</p>
-                        <p className={`text-xl font-black ${insights.percentReached >= 100 ? 'text-emerald-500' : 'text-blue-600'}`}>
+                        <p className="text-[10px] font-medium uppercase text-[#6b7280]">Realizado (Vendas)</p>
+                        <p className={`text-xl font-medium ${insights.percentReached >= 100 ? 'text-emerald-500' : 'text-blue-600'}`}>
                             {formatCurrency(insights.realizedValue)}
                         </p>
-                        <div className="absolute top-full right-0 mt-2 bg-[#344a5e] text-white text-[10px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 z-10 pointer-events-none">
+                        <div className="absolute top-full right-0 mt-2 bg-[#111827] text-white text-[10px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 z-10 pointer-events-none">
                             Aprovadas + Em Operação + Ganha
                         </div>
                     </div>
 
                     <div className="w-32">
-                        <div className="flex justify-between text-[9px] font-black uppercase text-slate-400 mb-1">
+                        <div className="flex justify-between text-[9px] font-medium uppercase text-[#6b7280] mb-1">
                             <span>Conquista</span>
                             <span>{insights.percentReached.toFixed(1)}%</span>
                         </div>
@@ -183,13 +183,13 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                     </div>
 
                     <div className="text-right border-l pl-8 border-slate-100">
-                        <p className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1 justify-end">
+                        <p className="text-[10px] font-medium uppercase text-[#6b7280] flex items-center gap-1 justify-end">
                             <Target className="w-3 h-3" /> Meta Diária (Restante)
                         </p>
-                        <p className={`text-xl font-black ${insights.dailyTarget > 0 ? 'text-amber-500' : 'text-slate-300'}`}>
+                        <p className={`text-xl font-medium ${insights.dailyTarget > 0 ? 'text-amber-500' : 'text-slate-300'}`}>
                             {insights.dailyTarget > 0 ? formatCurrency(insights.dailyTarget) : '---'}
                         </p>
-                        <p className="text-[9px] font-bold text-slate-400">{insights.businessDaysRemaining} dias úteis restantes</p>
+                        <p className="text-[9px] font-medium text-[#6b7280]">{insights.businessDaysRemaining} dias úteis restantes</p>
                     </div>
                 </div>
             </div>
@@ -203,23 +203,23 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                     return (
                         <div
                             key={col.id}
-                            className={`min-w-[320px] w-[320px] flex flex-col rounded-[2rem] border ${col.border} shadow-sm bg-white overflow-hidden`}
+                            className={`min-w-[320px] w-[320px] flex flex-col rounded-xl border ${col.border} shadow-sm bg-white overflow-hidden`}
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, col.id)}
                         >
                             {/* Column Header */}
                             <div className={`p-5 flex flex-col gap-2 ${col.color}`}>
                                 <div className="flex justify-between items-center">
-                                    <span className="font-black text-sm uppercase tracking-wide">{col.label}</span>
-                                    <span className="bg-white/40 px-3 py-1 rounded-full text-xs font-black">{items.length}</span>
+                                    <span className="font-medium text-sm uppercase tracking-wide">{col.label}</span>
+                                    <span className="bg-white/40 px-3 py-1 rounded-full text-xs font-medium">{items.length}</span>
                                 </div>
-                                <div className="text-xs font-bold opacity-80 mt-1">
+                                <div className="text-xs font-medium opacity-80 mt-1">
                                     Total: {formatCurrency(totalValue)}
                                 </div>
                             </div>
 
                             {/* Cards Container */}
-                            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 bg-slate-50/50">
+                            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 bg-[#f9fafb]/50">
                                 {items.map(quote => {
                                     const customer = customers.find(c => c.id === quote.customerId);
                                     const loadingDate = quote.createdAt ? new Date(quote.createdAt) : null;
@@ -231,35 +231,35 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, quote.id)}
                                             onClick={() => setSelectedQuote(quote)}
-                                            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all active:cursor-grabbing group relative overflow-hidden"
+                                            className="bg-white p-4 rounded-lg shadow-sm border border-[#e5e7eb] cursor-pointer hover:shadow-sm hover:-translate-y-1 transition-all active:cursor-grabbing group relative overflow-hidden"
                                         >
                                             <div className="absolute top-0 left-0 w-1 h-full bg-slate-200 group-hover:bg-blue-400 transition-colors"></div>
                                             <div className="pl-3">
                                                 {/* Header: Logo + Info */}
                                                 <div className="flex items-start gap-3 mb-3">
                                                     {/* Customer Logo */}
-                                                    <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                                    <div className="w-10 h-10 rounded-xl bg-[#f9fafb] border border-[#e5e7eb] flex items-center justify-center overflow-hidden flex-shrink-0">
                                                         {customer?.logoUrl ? (
                                                             <img src={customer.logoUrl} className="w-full h-full object-contain" alt={customer.name} />
                                                         ) : (
-                                                            <span className="font-black text-slate-300 text-sm">{(customer?.name || '?').charAt(0)}</span>
+                                                            <span className="font-medium text-slate-300 text-sm">{(customer?.name || '?').charAt(0)}</span>
                                                         )}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex justify-between items-start">
-                                                            <h4 className="font-black text-[#344a5e] text-sm line-clamp-1">{customer?.name || 'Cliente'}</h4>
+                                                            <h4 className="font-medium text-[#111827] text-sm line-clamp-1">{customer?.name || 'Cliente'}</h4>
                                                             {quote.disponibilidade === 'Imediato' && (
-                                                                <span className="bg-red-50 text-red-600 text-[9px] px-2 py-1 rounded-lg font-black flex items-center gap-1 uppercase tracking-tighter ml-1 flex-shrink-0">
+                                                                <span className="bg-red-50 text-red-600 text-[9px] px-2 py-1 rounded-lg font-medium flex items-center gap-1 uppercase tracking-tighter ml-1 flex-shrink-0">
                                                                     <AlertCircle className="w-3 h-3" /> Urgente
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <span className="text-[10px] font-bold text-slate-400">#{quote.proposalNumber}</span>
+                                                        <span className="text-[10px] font-medium text-[#6b7280]">#{quote.proposalNumber}</span>
                                                     </div>
                                                 </div>
 
                                                 {/* Route */}
-                                                <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 mb-3">
+                                                <div className="flex items-center gap-1 text-[10px] font-medium text-[#6b7280] mb-3">
                                                     <MapPin className="w-3 h-3 flex-shrink-0" />
                                                     <span className="truncate">{(quote.origin || '').split(',')[0]} × {(quote.destination || '').split(',')[0]}</span>
                                                 </div>
@@ -267,15 +267,15 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                                 {/* Value */}
                                                 <div className="flex justify-between items-center mb-2">
                                                     <div className="flex flex-col">
-                                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{quote.vehicleType.split('-')[0]}</span>
-                                                        <span className="text-base font-black text-[#344a5e]">{formatCurrency(quote.totalFreight)}</span>
+                                                        <span className="text-[9px] text-[#6b7280] font-medium uppercase tracking-wider">{quote.vehicleType.split('-')[0]}</span>
+                                                        <span className="text-base font-medium text-[#111827]">{formatCurrency(quote.totalFreight)}</span>
                                                     </div>
                                                 </div>
 
                                                 {/* Date */}
                                                 <div className={`flex items-center gap-1.5 pt-2 border-t border-slate-50 ${isUrgentDate ? 'text-amber-500' : 'text-slate-300'}`}>
                                                     <Calendar className="w-3 h-3" />
-                                                    <span className="text-[10px] font-bold">
+                                                    <span className="text-[10px] font-medium">
                                                         {loadingDate ? loadingDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '---'}
                                                     </span>
                                                     {isUrgentDate && <AlertCircle className="w-3 h-3 text-amber-500" />}
@@ -292,26 +292,26 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
 
             {/* Lost Reason Modal */}
             {showLostModal && (
-                <div className="fixed inset-0 bg-[#344a5e]/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg p-8 animate-scale-in border-4 border-white/20">
+                <div className="fixed inset-0 bg-black/40 z-[200] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-sm w-full max-w-lg p-8 animate-scale-in border-4 border-white/20">
                         <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-xl font-black text-[#344a5e] uppercase tracking-tight">Justificar Perda</h3>
+                            <h3 className="text-xl font-medium text-[#111827] uppercase tracking-tight">Justificar Perda</h3>
                             <button onClick={() => setShowLostModal(null)} className="p-3 hover:bg-slate-100 rounded-full transition-colors">
-                                <X className="w-6 h-6 text-slate-400" />
+                                <X className="w-6 h-6 text-[#6b7280]" />
                             </button>
                         </div>
 
                         <div className="space-y-6">
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase mb-2">Motivo Principal <span className="text-red-500">*</span></label>
+                                <label className="block text-xs font-medium text-[#6b7280] uppercase mb-2">Motivo Principal <span className="text-red-500">*</span></label>
                                 <div className="grid grid-cols-2 gap-3">
                                     {Object.entries(LOST_REASONS).map(([key, label]) => (
                                         <button
                                             key={key}
                                             onClick={() => setLostForm({ ...lostForm, reason: key as LostReason })}
-                                            className={`p-3 rounded-xl text-xs font-bold border-2 transition-all ${lostForm.reason === key
+                                            className={`p-3 rounded-xl text-xs font-medium border-2 transition-all ${lostForm.reason === key
                                                 ? 'border-red-500 bg-red-50 text-red-600'
-                                                : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
+                                                : 'border-slate-100 bg-[#f9fafb] text-[#6b7280] hover:border-slate-200'
                                                 }`}
                                         >
                                             {label}
@@ -321,25 +321,25 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                             </div>
 
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase mb-2">Observações Detalhadas</label>
+                                <label className="block text-xs font-medium text-[#6b7280] uppercase mb-2">Observações Detalhadas</label>
                                 <textarea
                                     value={lostForm.obs}
                                     onChange={(e) => setLostForm({ ...lostForm, obs: e.target.value })}
-                                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-medium text-sm text-[#344a5e] h-32 resize-none outline-none focus:border-blue-300 transition-all"
+                                    className="w-full p-4 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-medium text-sm text-[#111827] h-32 resize-none outline-none focus:border-blue-300 transition-all"
                                     placeholder="Descreva o que aconteceu..."
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase mb-2">Anexar Comprovante (URL)</label>
+                                <label className="block text-xs font-medium text-[#6b7280] uppercase mb-2">Anexar Comprovante (URL)</label>
                                 <div className="flex gap-2">
-                                    <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl flex items-center px-4 transition-all focus-within:border-blue-300">
-                                        <Paperclip className="w-4 h-4 text-slate-400 mr-2" />
+                                    <div className="flex-1 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg flex items-center px-4 transition-all focus-within:border-blue-300">
+                                        <Paperclip className="w-4 h-4 text-[#6b7280] mr-2" />
                                         <input
                                             type="text"
                                             value={lostForm.fileUrl}
                                             onChange={(e) => setLostForm({ ...lostForm, fileUrl: e.target.value })}
-                                            className="w-full py-4 bg-transparent font-bold text-sm text-[#344a5e] outline-none placeholder:text-slate-300"
+                                            className="w-full py-4 bg-transparent font-medium text-sm text-[#111827] outline-none placeholder:text-slate-300"
                                             placeholder="https://..."
                                         />
                                     </div>
@@ -350,14 +350,14 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                         <div className="flex justify-end gap-3 mt-10">
                             <button
                                 onClick={() => setShowLostModal(null)}
-                                className="px-6 py-4 text-slate-500 font-bold uppercase text-xs hover:bg-slate-50 rounded-2xl transition-colors"
+                                className="px-6 py-4 text-[#6b7280] font-medium uppercase text-xs hover:bg-[#f9fafb] rounded-lg transition-colors"
                             >
                                 Cancelar
                             </button>
                             <button
                                 onClick={handleLostSubmit}
                                 disabled={!lostForm.reason}
-                                className="px-8 py-4 bg-red-500 text-white font-black uppercase text-xs rounded-2xl hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-red-200 hover:shadow-xl hover:-translate-y-1"
+                                className="px-8 py-4 bg-red-500 text-white font-medium uppercase text-xs rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm shadow-red-200 hover:shadow-sm hover:-translate-y-1"
                             >
                                 Confirmar Perda
                             </button>
@@ -372,38 +372,35 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                 const isSpot = selectedQuote.status === 'spot_simulated';
 
                 return (
-                    <div className="fixed inset-0 bg-[#0f172a]/95 z-[9999] flex items-center justify-center p-4 md:p-10 backdrop-blur-2xl animate-fade-in overflow-hidden">
-                        <div className="bg-white w-full max-w-6xl max-h-[92vh] rounded-[3rem] shadow-2xl animate-scale-in border-[1px] border-white/20 overflow-y-auto flex flex-col pointer-events-auto relative scrollbar-hide">
-                            {/* Modal Header with Gradient */}
-                            <div className="bg-gradient-to-r from-[#1e293b] to-[#334155] p-10 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
-                                <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 rounded-full -ml-24 -mb-24 blur-3xl"></div>
-
-                                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-8">
-                                    <div className="flex items-center gap-6">
-                                        <div className="w-24 h-24 bg-white rounded-[2rem] p-4 shadow-xl border-4 border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                    <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4 md:p-10 backdrop-blur-sm animate-fade-in overflow-hidden">
+                        <div className="bg-white w-full max-w-6xl max-h-[92vh] rounded-xl shadow-sm animate-scale-in border border-[#e5e7eb] overflow-y-auto flex flex-col pointer-events-auto relative scrollbar-hide">
+                            {/* Modal Header */}
+                            <div className="bg-white border-b border-[#e5e7eb] p-8 relative">
+                                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                    <div className="flex items-center gap-5">
+                                        <div className="w-20 h-20 bg-[#f9fafb] rounded-xl p-3 border border-[#e5e7eb] flex items-center justify-center overflow-hidden flex-shrink-0">
                                             {customer?.logoUrl ? (
                                                 <img src={customer.logoUrl} className="w-full h-full object-contain" alt={customer.name} />
                                             ) : (
-                                                <span className="font-black text-slate-200 text-4xl">{(customer?.name || '?').charAt(0)}</span>
+                                                <span className="font-medium text-[#6b7280] text-3xl">{(customer?.name || '?').charAt(0)}</span>
                                             )}
                                         </div>
                                         <div>
                                             <div className="flex items-center gap-3 mb-2">
-                                                <h2 className="text-3xl font-black text-white tracking-tight">{customer?.name || 'Cliente Avulso'}</h2>
-                                                <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${selectedQuote.status === 'won' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' :
-                                                    selectedQuote.status === 'lost' ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' :
-                                                        'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
+                                                <h2 className="text-2xl font-medium text-[#111827] tracking-tight">{customer?.name || 'Cliente Avulso'}</h2>
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-medium uppercase tracking-wide ${selectedQuote.status === 'won' ? 'bg-emerald-50 text-emerald-700' :
+                                                    selectedQuote.status === 'lost' ? 'bg-red-50 text-red-700' :
+                                                        'bg-blue-50 text-[#1d6fb8]'
                                                     }`}>
                                                     {COLUMNS.find(c => c.id === selectedQuote.status)?.label || (isSpot ? 'SPOT SIMULADO' : selectedQuote.status)}
                                                 </span>
                                             </div>
-                                            <div className="flex flex-wrap gap-4 items-center">
-                                                <span className="text-white/60 font-black text-xs uppercase tracking-widest">Proposta #{selectedQuote.proposalNumber}</span>
-                                                <span className="w-1.5 h-1.5 bg-white/20 rounded-full"></span>
-                                                <div className="flex items-center gap-2 text-white/60">
-                                                    <Clock className="w-4 h-4" />
-                                                    <span className="text-[10px] font-bold">Criado em {new Date(selectedQuote.createdAt).toLocaleDateString()}</span>
+                                            <div className="flex flex-wrap gap-3 items-center">
+                                                <span className="text-[#6b7280] font-normal text-xs">Proposta #{selectedQuote.proposalNumber}</span>
+                                                <span className="w-1 h-1 bg-[#d1d5db] rounded-full"></span>
+                                                <div className="flex items-center gap-2 text-[#6b7280]">
+                                                    <Clock className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                                    <span className="text-[11px] font-normal">Criado em {new Date(selectedQuote.createdAt).toLocaleDateString()}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -411,81 +408,81 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
 
                                     <button
                                         onClick={() => setSelectedQuote(null)}
-                                        className="self-start p-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl transition-all active:scale-95 group"
+                                        className="self-start p-2.5 bg-[#f9fafb] border border-[#e5e7eb] hover:bg-[#f3f4f6] text-[#6b7280] rounded-lg transition-colors"
                                     >
-                                        <X className="w-6 h-6 group-hover:rotate-90 transition-transform" />
+                                        <X className="w-5 h-5" strokeWidth={1.75} />
                                     </button>
                                 </div>
                             </div>
 
                             {/* Main Content Area */}
-                            <div className="p-10 space-y-10 bg-slate-50/50">
+                            <div className="p-10 space-y-10 bg-[#f9fafb]/50">
                                 {/* Top KPI Dashboard */}
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                    <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                                    <div className="bg-white p-6 rounded-xl border border-[#e5e7eb] shadow-sm hover:shadow-md transition-all group">
                                         <div className="flex items-center gap-4 mb-4">
                                             <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
                                                 <DollarSign className="w-5 h-5" />
                                             </div>
-                                            <p className="text-[10px] font-black uppercase text-slate-400">Total Cliente</p>
+                                            <p className="text-[10px] font-medium uppercase text-[#6b7280]">Total Cliente</p>
                                         </div>
-                                        <p className="text-2xl font-black text-slate-800">R$ {formatCurrency(selectedQuote.totalFreight)}</p>
+                                        <p className="text-2xl font-medium text-[#111827]">R$ {formatCurrency(selectedQuote.totalFreight)}</p>
                                     </div>
 
-                                    <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                                    <div className="bg-white p-6 rounded-xl border border-[#e5e7eb] shadow-sm hover:shadow-md transition-all group">
                                         <div className="flex items-center gap-4 mb-4">
                                             <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
                                                 <TrendingUp className="w-5 h-5" />
                                             </div>
-                                            <p className="text-[10px] font-black uppercase text-slate-400">Margem Real</p>
+                                            <p className="text-[10px] font-medium uppercase text-[#6b7280]">Margem Real</p>
                                         </div>
-                                        <p className={`text-2xl font-black ${(selectedQuote.realMarginPercent || 0) < 15 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                        <p className={`text-2xl font-medium ${(selectedQuote.realMarginPercent || 0) < 15 ? 'text-red-500' : 'text-emerald-500'}`}>
                                             {selectedQuote.realMarginPercent?.toFixed(1)}%
                                         </p>
                                     </div>
 
-                                    <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                                    <div className="bg-white p-6 rounded-xl border border-[#e5e7eb] shadow-sm hover:shadow-md transition-all group">
                                         <div className="flex items-center gap-4 mb-4">
                                             <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
                                                 <PieChart className="w-5 h-5" />
                                             </div>
-                                            <p className="text-[10px] font-black uppercase text-slate-400">EBITDA Estimado</p>
+                                            <p className="text-[10px] font-medium uppercase text-[#6b7280]">EBITDA Estimado</p>
                                         </div>
-                                        <p className="text-2xl font-black text-slate-800">R$ {formatCurrency(selectedQuote.realProfit)}</p>
+                                        <p className="text-2xl font-medium text-[#111827]">R$ {formatCurrency(selectedQuote.realProfit)}</p>
                                     </div>
 
-                                    <div className="bg-[#344a5e] p-6 rounded-[2rem] shadow-xl text-white transform hover:scale-105 transition-all">
+                                    <div className="bg-white p-6 rounded-xl shadow-sm border border-[#e5e7eb]">
                                         <div className="flex items-center gap-4 mb-4">
-                                            <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-blue-300">
-                                                <Zap className="w-5 h-5 text-yellow-400" />
+                                            <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
+                                                <Zap className="w-5 h-5" />
                                             </div>
-                                            <p className="text-[10px] font-black uppercase text-slate-300">Poder de Compra</p>
+                                            <p className="text-[10px] font-medium uppercase text-[#6b7280]">Poder de Compra</p>
                                         </div>
-                                        <p className="text-2xl font-black tracking-tight">R$ {formatCurrency(selectedQuote.baseFreight)}</p>
+                                        <p className="text-2xl font-medium text-[#111827] tracking-tight">R$ {formatCurrency(selectedQuote.baseFreight)}</p>
                                     </div>
                                 </div>
 
                                 {/* Detailed Breakdown Section */}
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                                     {/* Left: Route Visualization */}
-                                    <div className="lg:col-span-1 bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm relative overflow-hidden">
+                                    <div className="lg:col-span-1 bg-white p-8 rounded-xl border border-[#e5e7eb] shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 right-0 p-8 opacity-5">
-                                            <MapPin className="w-32 h-32 text-slate-900" />
+                                            <MapPin className="w-32 h-32 text-[#f3f4f6]" />
                                         </div>
-                                        <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-8 flex items-center gap-2">
+                                        <h3 className="text-xs font-medium uppercase text-[#6b7280] tracking-widest mb-8 flex items-center gap-2">
                                             <Activity className="w-4 h-4 text-blue-500" /> Fluxo da Operação
                                         </h3>
 
                                         <div className="space-y-6 relative">
-                                            <div className="absolute left-[19px] top-6 bottom-6 w-0.5 bg-gradient-to-b from-blue-500 via-slate-200 to-slate-800 border-dashed border-l-2"></div>
+                                            <div className="absolute left-[19px] top-6 bottom-6 w-0.5 bg-[#e5e7eb]"></div>
 
                                             <div className="flex items-start gap-6 relative">
                                                 <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white ring-8 ring-blue-50 z-10 flex-shrink-0">
                                                     <MapPin className="w-5 h-5" />
                                                 </div>
                                                 <div>
-                                                    <p className="text-[9px] font-black uppercase text-blue-500 mb-1">Ponto de Coleta</p>
-                                                    <p className="font-black text-slate-700 leading-tight">{selectedQuote.origin}</p>
+                                                    <p className="text-[9px] font-medium uppercase text-blue-500 mb-1">Ponto de Coleta</p>
+                                                    <p className="font-medium text-slate-700 leading-tight">{selectedQuote.origin}</p>
                                                 </div>
                                             </div>
 
@@ -493,97 +490,97 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                                 <div className="w-10 flex justify-center flex-shrink-0">
                                                     <div className="w-2 h-2 bg-slate-200 rounded-full translate-x-px"></div>
                                                 </div>
-                                                <div className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-100 flex items-center justify-between">
+                                                <div className="flex-1 bg-[#f9fafb] p-3 rounded-lg border border-[#e5e7eb] flex items-center justify-between">
                                                     <div className="flex items-center gap-2">
-                                                        <TrendingUp className="w-3 h-3 text-slate-400" />
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{selectedQuote.distanceKm} KM PERCORRIDOS</span>
+                                                        <TrendingUp className="w-3 h-3 text-[#6b7280]" />
+                                                        <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter">{selectedQuote.distanceKm} KM PERCORRIDOS</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <BarChart3 className="w-3 h-3 text-slate-400" />
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{selectedQuote.vehicleType}</span>
+                                                        <BarChart3 className="w-3 h-3 text-[#6b7280]" />
+                                                        <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter">{selectedQuote.vehicleType}</span>
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div className="flex items-start gap-6 relative">
-                                                <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-white ring-8 ring-slate-100 z-10 flex-shrink-0">
+                                                <div className="w-10 h-10 bg-[#1d6fb8] rounded-full flex items-center justify-center text-white ring-8 ring-[#f3f4f6] z-10 flex-shrink-0">
                                                     <Target className="w-5 h-5" />
                                                 </div>
                                                 <div>
-                                                    <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Destino Final</p>
-                                                    <p className="font-black text-slate-700 leading-tight">{selectedQuote.destination}</p>
+                                                    <p className="text-[9px] font-medium uppercase text-[#6b7280] mb-1">Destino Final</p>
+                                                    <p className="font-medium text-slate-700 leading-tight">{selectedQuote.destination}</p>
                                                 </div>
                                             </div>
                                         </div>
 
                                         <div className="mt-12 pt-8 border-t border-slate-100 flex items-center justify-between">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400">
+                                                <div className="w-10 h-10 bg-[#f9fafb] rounded-xl flex items-center justify-center text-[#6b7280]">
                                                     <Scale className="w-5 h-5" />
                                                 </div>
                                                 <div>
-                                                    <p className="text-[9px] font-black uppercase text-slate-400">Tipo de Carga</p>
-                                                    <p className="text-xs font-black text-slate-700 uppercase">{selectedQuote.merchandiseType || 'Carga Geral'}</p>
+                                                    <p className="text-[9px] font-medium uppercase text-[#6b7280]">Tipo de Carga</p>
+                                                    <p className="text-xs font-medium text-slate-700 uppercase">{selectedQuote.merchandiseType || 'Carga Geral'}</p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-[9px] font-black uppercase text-slate-400">Peso Estimado</p>
-                                                <p className="text-xs font-black text-slate-700">{(selectedQuote.weight || 0).toLocaleString()} KG</p>
+                                                <p className="text-[9px] font-medium uppercase text-[#6b7280]">Peso Estimado</p>
+                                                <p className="text-xs font-medium text-slate-700">{(selectedQuote.weight || 0).toLocaleString()} KG</p>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Right: Technical & Financial Breakdown */}
                                     <div className="lg:col-span-2 space-y-6">
-                                        <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm transition-all hover:border-blue-100">
-                                            <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-6 flex items-center gap-2">
+                                        <div className="bg-white p-8 rounded-xl border border-[#e5e7eb] shadow-sm transition-all hover:border-blue-100">
+                                            <h3 className="text-xs font-medium uppercase text-[#6b7280] tracking-widest mb-6 flex items-center gap-2">
                                                 <BarChart3 className="w-4 h-4 text-emerald-500" /> Demonstrativo Gerencial
                                             </h3>
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
                                                 <div className="space-y-6">
                                                     <div className="flex items-center justify-between group">
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight group-hover:text-slate-600 transition-colors">Frete Base (Motorista)</span>
-                                                        <span className="font-black text-slate-700">R$ {formatCurrency(selectedQuote.baseFreight)}</span>
+                                                        <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tight group-hover:text-slate-600 transition-colors">Frete Base (Motorista)</span>
+                                                        <span className="font-medium text-slate-700">R$ {formatCurrency(selectedQuote.baseFreight)}</span>
                                                     </div>
                                                     <div className="flex items-center justify-between group">
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight group-hover:text-slate-600 transition-colors">Pedágios / Custos Fixos</span>
-                                                        <span className="font-black text-slate-700">R$ {formatCurrency(selectedQuote.tolls)}</span>
+                                                        <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tight group-hover:text-slate-600 transition-colors">Pedágios / Custos Fixos</span>
+                                                        <span className="font-medium text-slate-700">R$ {formatCurrency(selectedQuote.tolls)}</span>
                                                     </div>
                                                     <div className="flex items-center justify-between group">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Impostos</span>
-                                                            <span className="px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[8px] font-black">{selectedQuote.icmsPercent}% ICMS</span>
+                                                            <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tight">Impostos</span>
+                                                            <span className="px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[8px] font-medium">{selectedQuote.icmsPercent}% ICMS</span>
                                                         </div>
-                                                        <span className="font-black text-red-400">R$ {formatCurrency((selectedQuote.totalFreight || 0) * (selectedQuote.icmsPercent / 100))}</span>
+                                                        <span className="font-medium text-red-400">R$ {formatCurrency((selectedQuote.totalFreight || 0) * (selectedQuote.icmsPercent / 100))}</span>
                                                     </div>
                                                 </div>
 
                                                 <div className="space-y-6">
                                                     <div className="flex items-center justify-between group">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Ad Valorem / Seguros</span>
+                                                            <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tight">Ad Valorem / Seguros</span>
                                                         </div>
-                                                        <span className="font-black text-slate-700">R$ {formatCurrency(selectedQuote.adValorem)}</span>
+                                                        <span className="font-medium text-slate-700">R$ {formatCurrency(selectedQuote.adValorem)}</span>
                                                     </div>
                                                     <div className="flex items-center justify-between group">
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight group-hover:text-slate-600 transition-colors">Custos Adicionais</span>
-                                                        <span className="font-black text-slate-700">R$ {formatCurrency(selectedQuote.extraCosts)}</span>
+                                                        <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tight group-hover:text-slate-600 transition-colors">Custos Adicionais</span>
+                                                        <span className="font-medium text-slate-700">R$ {formatCurrency(selectedQuote.extraCosts)}</span>
                                                     </div>
                                                     <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                                                        <span className="text-xs font-black text-blue-600 uppercase">Faturamento Total</span>
-                                                        <span className="text-xl font-black text-slate-800">R$ {formatCurrency(selectedQuote.totalFreight)}</span>
+                                                        <span className="text-xs font-medium text-blue-600 uppercase">Faturamento Total</span>
+                                                        <span className="text-xl font-medium text-[#111827]">R$ {formatCurrency(selectedQuote.totalFreight)}</span>
                                                     </div>
                                                 </div>
                                             </div>
 
                                             {/* Margin Progress Bar */}
-                                            <div className="mt-10 p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                                            <div className="mt-10 p-6 bg-[#f9fafb] rounded-lg border border-[#e5e7eb]">
                                                 <div className="flex items-center justify-between mb-3">
-                                                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-tighter flex items-center gap-2">
+                                                    <p className="text-[10px] font-medium uppercase text-[#6b7280] tracking-tighter flex items-center gap-2">
                                                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Saúde Financeira do Frete
                                                     </p>
-                                                    <span className={`text-xs font-black ${(selectedQuote.realMarginPercent || 0) < 15 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                                    <span className={`text-xs font-medium ${(selectedQuote.realMarginPercent || 0) < 15 ? 'text-red-500' : 'text-emerald-600'}`}>
                                                         {selectedQuote.realMarginPercent?.toFixed(1)}% Margem
                                                     </span>
                                                 </div>
@@ -594,32 +591,32 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                                     ></div>
                                                 </div>
                                                 <div className="flex justify-between mt-2">
-                                                    <span className="text-[8px] font-bold text-slate-400">CRÍTICO</span>
-                                                    <span className="text-[8px] font-bold text-slate-400">IDEAL</span>
-                                                    <span className="text-[8px] font-bold text-slate-400">EXCELENTE</span>
+                                                    <span className="text-[8px] font-medium text-[#6b7280]">CRÍTICO</span>
+                                                    <span className="text-[8px] font-medium text-[#6b7280]">IDEAL</span>
+                                                    <span className="text-[8px] font-medium text-[#6b7280]">EXCELENTE</span>
                                                 </div>
                                             </div>
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 shadow-sm flex items-center gap-4 group">
-                                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                            <div className="bg-white p-6 rounded-lg border border-[#e5e7eb] shadow-sm flex items-center gap-4 group">
+                                                <div className="w-12 h-12 bg-[#f9fafb] rounded-lg flex items-center justify-center text-[#6b7280] group-hover:bg-blue-600 group-hover:text-white transition-all">
                                                     <FileText className="w-6 h-6" />
                                                 </div>
                                                 <div>
-                                                    <p className="text-[9px] font-black uppercase text-slate-400">Responsável</p>
-                                                    <p className="text-xs font-black text-slate-700 uppercase">{selectedQuote.updatedByName || 'Admin'}</p>
+                                                    <p className="text-[9px] font-medium uppercase text-[#6b7280]">Responsável</p>
+                                                    <p className="text-xs font-medium text-slate-700 uppercase">{selectedQuote.updatedByName || 'Admin'}</p>
                                                 </div>
                                             </div>
 
-                                            <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 shadow-sm flex items-center justify-between gap-4 group">
+                                            <div className="bg-white p-6 rounded-lg border border-[#e5e7eb] shadow-sm flex items-center justify-between gap-4 group">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-amber-500 group-hover:text-white transition-all">
+                                                    <div className="w-12 h-12 bg-[#f9fafb] rounded-lg flex items-center justify-center text-[#6b7280] group-hover:bg-amber-500 group-hover:text-white transition-all">
                                                         <Clock className="w-6 h-6" />
                                                     </div>
                                                     <div>
-                                                        <p className="text-[9px] font-black uppercase text-slate-400">Disponibilidade</p>
-                                                        <p className="text-xs font-black text-slate-700 uppercase">{selectedQuote.disponibilidade || 'Programada'}</p>
+                                                        <p className="text-[9px] font-medium uppercase text-[#6b7280]">Disponibilidade</p>
+                                                        <p className="text-xs font-medium text-slate-700 uppercase">{selectedQuote.disponibilidade || 'Programada'}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -632,12 +629,12 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                             <div className="p-8 bg-white border-t border-slate-100 flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <Info className="w-4 h-4 text-slate-300" />
-                                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Os valores acima são estimativas baseadas na configuração atual do sistema.</span>
+                                    <span className="text-[10px] font-medium text-slate-300 uppercase tracking-widest">Os valores acima são estimativas baseadas na configuração atual do sistema.</span>
                                 </div>
                                 <div className="flex gap-4">
                                     <button
                                         onClick={() => setSelectedQuote(null)}
-                                        className="px-10 py-5 bg-slate-100 text-slate-500 font-black uppercase text-xs rounded-2xl hover:bg-slate-200 transition-all active:scale-95 tracking-widest"
+                                        className="px-10 py-5 bg-slate-100 text-[#6b7280] font-medium uppercase text-xs rounded-lg hover:bg-slate-200 transition-all active:scale-95 tracking-widest"
                                     >
                                         Fechar Resumo
                                     </button>
