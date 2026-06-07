@@ -1656,7 +1656,7 @@ Disponibilidade: ${disponibilidade}`;
 
             {/* Modal de Validação de Margem */}
             {showMarginModal && (
-                <div className="fixed inset-0 bg-[#1e293b]/80 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-fade-in">
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-fade-in">
                     <div className="bg-white w-full max-w-md rounded-xl shadow-sm overflow-hidden">
                         <div className="p-6 bg-red-50 border-b border-red-100 flex items-center gap-3">
                             <div className="p-2.5 bg-red-100 rounded-lg text-red-600"><AlertTriangle className="w-6 h-6" strokeWidth={1.75} /></div>
@@ -1702,7 +1702,7 @@ Disponibilidade: ${disponibilidade}`;
             {/* Modal de Configurações */}
             {
                 showConfigModal && (
-                    <div className="fixed inset-0 bg-[#1e293b]/80 backdrop-blur-md z-[100] flex items-center justify-center p-6">
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
                         <div className="bg-white w-full max-w-5xl h-[85vh] rounded-[3.5rem] shadow-sm flex flex-col overflow-hidden">
                             <div className="p-8 border-b flex justify-between items-center bg-[#f9fafb]">
                                 <div className="flex items-center gap-4">
@@ -2037,7 +2037,7 @@ Disponibilidade: ${disponibilidade}`;
                                                                         <div className="flex items-center gap-2">
                                                                             <input
                                                                                 type="number"
-                                                                                className="w-16 bg-[#f9fafb] border-none p-1 rounded font-medium text-sm text-slate-800 focus:bg-white focus:ring-1 focus:ring-blue-400 outline-none"
+                                                                                className="w-16 bg-[#f9fafb] border-none p-1 rounded font-medium text-sm text-[#111827] focus:bg-white focus:ring-1 focus:ring-blue-400 outline-none"
                                                                                 value={rate}
                                                                                 onChange={(e) => {
                                                                                     const val = Number(e.target.value);
