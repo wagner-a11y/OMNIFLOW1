@@ -180,9 +180,10 @@ const App: React.FC = () => {
                 console.log('Supabase Realtime Status:', status);
                 if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
                     // Suppress frequent connection error alerts to avoid "every time" annoyance
+                    // Intervalo mínimo entre alertas: 5 minutos.
                     const lastAlert = sessionStorage.getItem('last_connection_alert');
                     const now = Date.now();
-                    if (!lastAlert || (now - parseInt(lastAlert)) > 30000) {
+                    if (!lastAlert || (now - parseInt(lastAlert)) > 300000) {
                         showFeedback('Erro na conexão em tempo real. Tentando reconectar...', 'error');
                         sessionStorage.setItem('last_connection_alert', now.toString());
                     }
@@ -2214,8 +2215,11 @@ Disponibilidade: ${disponibilidade}`;
 
             {
                 toast && (
-                    <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[1000] animate-bounce-in">
-                        <div className="bg-[#1e293b] text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-4 font-black uppercase text-[10px]">{toast.message}</div>
+                    <div className="fixed bottom-6 right-6 z-[1000] max-w-xs animate-fade-in-up pointer-events-none">
+                        <div className={`px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-[11px] font-bold leading-snug ${toast.type === 'error' ? 'bg-red-600/95 text-white' :
+                            toast.type === 'info' ? 'bg-slate-700/95 text-white' :
+                                'bg-emerald-600/95 text-white'
+                            }`}>{toast.message}</div>
                     </div>
                 )
             }
