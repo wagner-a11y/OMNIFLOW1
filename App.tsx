@@ -536,13 +536,15 @@ const App: React.FC = () => {
     }, [vehicleType, distanceKm, vehicleConfigs]);
 
     const calcData = useMemo(() => {
-        const gv = parseFloat(goodsValue.replace(',', '.')) || 0;
+        // Monetários: num() lida com "R$ 1.234,56", "42" cru e "42,00" de forma uniforme.
+        // Percentuais (ip/pm/icmsP) usam parseFloat pois são strings sem máscara (ex.: "0.2").
+        const gv = num(goodsValue);
         const ip = parseFloat(insurancePercent.replace(',', '.')) || 0;
         const pm = parseFloat(profitMargin.replace(',', '.')) || 0;
         const icmsP = parseFloat(icmsPercent.replace(',', '.')) || 0;
-        const t = parseFloat(tolls.replace(',', '.')) || 0;
-        const bf = parseFloat(baseFreight.replace(',', '.')) || 0;
-        const ec = parseFloat(extraCosts.replace(',', '.')) || 0;
+        const t = num(tolls);
+        const bf = num(baseFreight);
+        const ec = num(extraCosts);
 
         const adValoremSelling = gv * (ip / 100);
         const adValoremCost = gv * (fedTaxes.insurancePolicyRate / 100);
@@ -637,8 +639,8 @@ const App: React.FC = () => {
             proposalNumber: editingId ? (history.find(h => h.id === editingId)?.proposalNumber || '') : `CT-${new Date().getFullYear()}-${(history.length + 1).toString().padStart(4, '0')}`,
             clientReference, origin, destination, distanceKm: parseFloat(distanceKm.replace(',', '.')) || 0, vehicleType: vehicleType as VehicleType, merchandiseType, weight: parseFloat(weight.replace(',', '.')) || 0,
             customerId: selectedCustomerId, suggestedFreight: suggestedFreightANTT,
-            baseFreight: parseFloat(baseFreight.replace(',', '.')) || 0,
-            tolls: parseFloat(tolls.replace(',', '.')) || 0, extraCosts: parseFloat(extraCosts.replace(',', '.')) || 0, extraCostsDescription, goodsValue: parseFloat(goodsValue.replace(',', '.')) || 0, insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
+            baseFreight: num(baseFreight),
+            tolls: num(tolls), extraCosts: num(extraCosts), extraCostsDescription, goodsValue: num(goodsValue), insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
             pisPercent: fedTaxes.pis, cofinsPercent: fedTaxes.cofins, csllPercent: fedTaxes.csll, irpjPercent: fedTaxes.irpj,
             totalFreight: calcData.finalFreight, createdAt: createdDate, disponibilidade, status, updatedBy: currentUser?.id, updatedByName: currentUser?.name,
             realProfit: calcData.realProfitAmount, realMarginPercent: calcData.realMarginPercent,
@@ -690,9 +692,9 @@ const App: React.FC = () => {
 
     const loadQuote = (quote: FreightCalculation) => {
         setOrigin(quote.origin); setDestination(quote.destination); setClientReference(quote.clientReference || ''); setDistanceKm(quote.distanceKm.toString());
-        setVehicleType(quote.vehicleType); setWeight(quote.weight.toString()); setSelectedCustomerId(quote.customerId); setBaseFreight(quote.baseFreight.toString());
-        setTolls(quote.tolls.toString()); setExtraCosts((quote.extraCosts || 0).toString()); setExtraCostsDescription(quote.extraCostsDescription || '');
-        setGoodsValue(quote.goodsValue.toString()); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
+        setVehicleType(quote.vehicleType); setWeight(quote.weight.toString()); setSelectedCustomerId(quote.customerId); setBaseFreight(maskCurrency(quote.baseFreight));
+        setTolls(maskCurrency(quote.tolls)); setExtraCosts(maskCurrency(quote.extraCosts || 0)); setExtraCostsDescription(quote.extraCostsDescription || '');
+        setGoodsValue(maskCurrency(quote.goodsValue)); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
         setIcmsPercent(quote.icmsPercent.toString()); setEditingId(quote.id); setDisponibilidade(quote.disponibilidade || "Imediato");
         setMerchandiseType(quote.merchandiseType || '');
         setOtherCosts(quote.otherCosts || []);
@@ -1484,7 +1486,7 @@ Disponibilidade: ${disponibilidade}`;
                                         <p className="text-3xl font-black mb-4">R$ {formatCur(suggestedFreightANTT)}</p>
                                         <button
                                             onClick={() => {
-                                                setBaseFreight(suggestedFreightANTT.toString());
+                                                setBaseFreight(maskCurrency(suggestedFreightANTT));
                                                 showFeedback("Valor ANTT aplicado ao preço base!");
                                             }}
                                             className="w-full py-2 bg-white/10 hover:bg-emerald-500 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-2 border border-white/10 hover:border-transparent group-hover:scale-105"
