@@ -6,10 +6,7 @@ import {
     LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
-import { SpotChecker } from './components/SpotChecker';
 import { WonInfoModal } from './components/WonInfoModal';
-import { OperationsPipeline } from './components/OperationsPipeline';
-import { MonitoringPipeline } from './components/MonitoringPipeline';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { estimateDistance } from './services/geminiService';
@@ -59,7 +56,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'reverse' | 'dashboard' | 'crm' | 'spot' | 'operations' | 'monitoring'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm'>('dashboard');
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -93,7 +90,6 @@ const App: React.FC = () => {
     const [insurancePercent, setInsurancePercent] = useState<string>('0.2');
     const [profitMargin, setProfitMargin] = useState<string>('15');
     const [icmsPercent, setIcmsPercent] = useState<string>('12');
-    const [targetFreightClient, setTargetFreightClient] = useState<string>('0');
     const [loadingDistance, setLoadingDistance] = useState(false);
     const [disponibilidade, setDisponibilidade] = useState<Disponibilidade>("Imediato");
     const [merchandiseType, setMerchandiseType] = useState('');
@@ -303,107 +299,6 @@ const App: React.FC = () => {
         setShowConfigModal(false);
     };
 
-    const handleSpotSimulation = async (data: any) => {
-        const newCalc: FreightCalculation = {
-            id: Date.now().toString(),
-            proposalNumber: `SPOT-${Date.now().toString().slice(-6)}`,
-            origin: data.origin || data.originNormalized || data.spotOrigin || '',
-            destination: data.destination || data.destinationNormalized || data.spotDest || '',
-            distanceKm: data.dist || data.km,
-            vehicleType: data.vehicleName || data.vehicleType,
-            merchandiseType: 'Carga Geral',
-            weight: 0,
-            customerId: data.customerId || '',
-            baseFreight: data.freteOfertado || data.freight,
-            tolls: data.tolls || 0,
-            extraCosts: 0,
-            goodsValue: 0,
-            insurancePercent: 0,
-            adValorem: 0,
-            profitMargin: 0,
-            icmsPercent: data.icmsRate || 0,
-            pisPercent: 0,
-            cofinsPercent: 0,
-            csllPercent: 0,
-            irpjPercent: 0,
-            totalFreight: data.freteOfertado || data.freight,
-            createdAt: Date.now(),
-            disponibilidade: 'Imediato',
-            status: 'spot_simulated',
-            realProfit: data.ebitda,
-            realMarginPercent: data.ebitdaPercent,
-            suggestedFreight: data.suggestedSalesFreight || 0
-        };
-
-        // Save to DB
-        await createFreightCalculation(newCalc);
-        setHistory(prev => [newCalc, ...prev]);
-
-        // Update Stats
-        const currentSimulated = spotStats?.simulated || 0;
-        const newStats = { ...spotStats, simulated: currentSimulated + 1 };
-        setSpotStats(newStats as any);
-        updateSystemConfig({ ...fedTaxes, spotStats: newStats as any });
-
-        if (data.accept) {
-            handleAcceptSpotCharge(newCalc);
-        }
-    };
-
-    const handleAcceptSpotCharge = async (data: FreightCalculation) => {
-        try {
-            // 1. Update Status to Pending (CRM)
-            const updatedCalc = { ...data, status: 'pending' as QuoteStatus };
-            await updateFreightCalculation(updatedCalc);
-
-            // Update local state
-            setHistory(prev => prev.map(h => h.id === data.id ? updatedCalc : h));
-
-            // 2. Conversion Stats
-            const newStats = { ...spotStats, converted: (spotStats.converted || 0) + 1 };
-            setSpotStats(newStats);
-            updateSystemConfig({ ...fedTaxes, spotStats: newStats });
-
-            // 3. Pre-fill Quote Form
-            setOrigin(data.origin || '');
-            setDestination(data.destination || '');
-            setBaseFreight((data.baseFreight || 0).toString());
-            setDistanceKm((data.distanceKm || 0).toString());
-            setVehicleType(data.vehicleType || Object.keys(vehicleConfigs)[0]);
-            if (data.customerId) setSelectedCustomerId(data.customerId);
-
-            // 4. Simulate Email Notification
-            const emailBody = `
-                NOVA CARGA ACEITA - FRETE RÁPIDO
-                --------------------------------
-                ID: ${data.proposalNumber}
-                Cliente: ${customers.find(c => c.id === data.customerId)?.name || 'N/A'}
-                Origem: ${data.origin}
-                Destino: ${data.destination}
-                Veículo: ${data.vehicleType}
-                Valor: R$ ${(data.totalFreight || 0).toFixed(2)}
-                Margem: ${data.realMarginPercent?.toFixed(1) || '0.0'}%
-                
-                Acesse o CRM para mais detalhes.
-            `;
-            // In a real app, this would be an API call.
-            console.log("SENDING EMAIL...", emailBody);
-
-
-            setActiveTab('crm'); // Go to CRM to see the card
-            showFeedback("Carga aceita! Disponível no CRM e notificação enviada.");
-        } catch (error) {
-            console.error("Error accepting spot charge:", error);
-            showFeedback("Erro ao aceitar carga. Tente novamente.", "error");
-        }
-    };
-
-    const handleRecordSimulation = async () => {
-        const newStats = { ...spotStats, simulated: spotStats.simulated + 1 };
-        setSpotStats(newStats);
-        await updateSystemConfig({ ...fedTaxes, spotStats: newStats });
-    };
-
     const formatCur = (val: number | undefined | null) => {
         if (val === undefined || val === null || isNaN(val)) return '0,00';
         return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -590,21 +485,6 @@ const App: React.FC = () => {
         }
     };
 
-    const handleUpdatePipelineData = async (id: string, data: Partial<FreightCalculation>) => {
-        const quote = history.find(h => h.id === id);
-        if (!quote) return;
-
-        const updated = { ...quote, ...data };
-        const result = await updateFreightCalculation(updated);
-
-        if (result.success) {
-            setHistory(prev => prev.map(h => h.id === id ? updated : h));
-            showFeedback('Carga atualizada com sucesso!');
-        } else {
-            showFeedback(`Erro ao atualizar carga: ${result.error}`, 'error');
-        }
-    };
-
     const handleWonInfoSubmit = async (wonData: any) => {
         if (!selectedWonQuote) return;
 
@@ -660,7 +540,6 @@ const App: React.FC = () => {
         const ip = parseFloat(insurancePercent.replace(',', '.')) || 0;
         const pm = parseFloat(profitMargin.replace(',', '.')) || 0;
         const icmsP = parseFloat(icmsPercent.replace(',', '.')) || 0;
-        const tfc = parseFloat(targetFreightClient.replace(',', '.')) || 0;
         const t = parseFloat(tolls.replace(',', '.')) || 0;
         const bf = parseFloat(baseFreight.replace(',', '.')) || 0;
         const ec = parseFloat(extraCosts.replace(',', '.')) || 0;
@@ -670,23 +549,6 @@ const App: React.FC = () => {
         const totalFedTaxPercent = (fedTaxes.pis + fedTaxes.cofins + fedTaxes.csll + fedTaxes.irpj);
         const icmsDivisor = (1 - (icmsP / 100));
         const marginDivisor = (1 - (pm / 100));
-
-        if (activeTab === 'reverse' && tfc > 0) {
-            const finalFreight = tfc;
-            const icmsAmount = finalFreight * (icmsP / 100);
-            const fedTaxesAmount = finalFreight * (totalFedTaxPercent / 100);
-            const netRevenue = finalFreight - icmsAmount - fedTaxesAmount;
-            const maxDirectCosts = netRevenue * marginDivisor;
-
-            const totalOtherCosts = otherCosts.reduce((acc, curr) => acc + curr.value, 0);
-            const totalEc = ec + totalOtherCosts;
-
-            const buyerPower = maxDirectCosts - t - totalEc - adValoremSelling;
-            const realDirectCosts = buyerPower + t + totalEc + adValoremCost;
-            const realProfitAmount = netRevenue - realDirectCosts;
-            const realMarginPercent = finalFreight > 0 ? (realProfitAmount / finalFreight) * 100 : 0;
-            return { directCosts: buyerPower + t + totalEc + adValoremSelling, realDirectCosts, priceAfterMargin: maxDirectCosts, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, buyerPower: Math.max(0, buyerPower) };
-        }
 
         const totalOtherCosts = otherCosts.reduce((acc, curr) => acc + curr.value, 0);
         const totalEc = ec + totalOtherCosts;
@@ -699,8 +561,8 @@ const App: React.FC = () => {
         const realDirectCosts = bf + t + totalEc + adValoremCost;
         const realProfitAmount = finalFreight - icmsAmount - fedTaxesAmount - realDirectCosts;
         const realMarginPercent = finalFreight > 0 ? (realProfitAmount / finalFreight) * 100 : 0;
-        return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, buyerPower: 0 };
-    }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes, activeTab, targetFreightClient]);
+        return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent };
+    }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes]);
 
     const handleFetchDistance = async () => {
         if (!origin || !destination) return;
@@ -775,7 +637,7 @@ const App: React.FC = () => {
             proposalNumber: editingId ? (history.find(h => h.id === editingId)?.proposalNumber || '') : `CT-${new Date().getFullYear()}-${(history.length + 1).toString().padStart(4, '0')}`,
             clientReference, origin, destination, distanceKm: parseFloat(distanceKm.replace(',', '.')) || 0, vehicleType: vehicleType as VehicleType, merchandiseType, weight: parseFloat(weight.replace(',', '.')) || 0,
             customerId: selectedCustomerId, suggestedFreight: suggestedFreightANTT,
-            baseFreight: activeTab === 'reverse' ? calcData.buyerPower : (parseFloat(baseFreight.replace(',', '.')) || 0),
+            baseFreight: parseFloat(baseFreight.replace(',', '.')) || 0,
             tolls: parseFloat(tolls.replace(',', '.')) || 0, extraCosts: parseFloat(extraCosts.replace(',', '.')) || 0, extraCostsDescription, goodsValue: parseFloat(goodsValue.replace(',', '.')) || 0, insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
             pisPercent: fedTaxes.pis, cofinsPercent: fedTaxes.cofins, csllPercent: fedTaxes.csll, irpjPercent: fedTaxes.irpj,
             totalFreight: calcData.finalFreight, createdAt: createdDate, disponibilidade, status, updatedBy: currentUser?.id, updatedByName: currentUser?.name,
@@ -840,7 +702,7 @@ const App: React.FC = () => {
 
     const resetForm = () => {
         setOrigin(''); setDestination(''); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
-        setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setTargetFreightClient('0'); setEditingId(null);
+        setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setEditingId(null);
         setDisponibilidade("Imediato"); setMerchandiseType(''); setOtherCosts([]);
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
     };
@@ -848,7 +710,7 @@ const App: React.FC = () => {
     // Linhas da composição de custo aberta ao cliente (reusada na cópia e no PDF)
     const buildCompositionLines = () => {
         const lines = [
-            `Frete base: R$ ${formatCur(activeTab === 'reverse' ? calcData.buyerPower : num(baseFreight))}`,
+            `Frete base: R$ ${formatCur(num(baseFreight))}`,
             `Pedágio: R$ ${formatCur(num(tolls))}`,
             `Seguro Ad Valorem (${insurancePercent}%): R$ ${formatCur(calcData.adValoremSelling)}`
         ];
@@ -858,7 +720,7 @@ const App: React.FC = () => {
     };
 
     const handleCopyQuoteText = () => {
-        const val = activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight;
+        const val = calcData.finalFreight;
         let text = `Cotação de Frete:
 Veículo: ${vehicleType}
 Valor: R$ ${formatCur(val)} All In.
@@ -995,7 +857,7 @@ Disponibilidade: ${disponibilidade}`;
             doc.text("2. Valor do Serviço", 15, currentY); currentY += spacing + 1;
             doc.setFont("helvetica", "normal");
 
-            const freightVal = activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight;
+            const freightVal = calcData.finalFreight;
             const formattedVal = freightVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
             doc.setFont("helvetica", "bold");
@@ -1141,14 +1003,10 @@ Disponibilidade: ${disponibilidade}`;
                 </div>
                 <nav className="flex-1 px-4 space-y-3 mt-6 relative z-10">
                     {[
-                        { id: 'dashboard', icon: BarChart3, label: 'Visão Geral', adminOnly: true },
-                        { id: 'crm', icon: List, label: 'CRM' },
-                        { id: 'operations', icon: Activity, label: 'Operações' },
-                        { id: 'monitoring', icon: MapIcon, label: 'Monitoramento' },
-                        { id: 'spot', icon: Zap, label: 'Frete Rápido' },
-                        { id: 'new', icon: PlusCircle, label: 'Formação Comercial' },
-                        { id: 'reverse', icon: Target, label: 'Frete Cliente' },
-                        { id: 'history', icon: History, label: 'Histórico' }
+                        { id: 'dashboard', icon: BarChart3, label: 'Dashboard', adminOnly: true },
+                        { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
+                        { id: 'history', icon: History, label: 'Histórico' },
+                        { id: 'crm', icon: List, label: 'CRM' }
                     ].filter(item => !item.adminOnly || currentUser.role === 'master').map(item => (
                         <button key={item.id} onClick={() => { setActiveTab(item.id as any); if (item.id !== 'history' && item.id !== 'dashboard') resetForm(); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg translate-x-2' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
                             <item.icon className="w-5 h-5" />
@@ -1177,11 +1035,7 @@ Disponibilidade: ${disponibilidade}`;
                         {editingId ? 'Editando Registro' :
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
                                 activeTab === 'crm' ? 'CRM' :
-                                    activeTab === 'operations' ? 'Operações Pipeline' :
-                                        activeTab === 'monitoring' ? 'Monitoramento Pipeline' :
-                                            activeTab === 'spot' ? 'Frete Rápido' :
-                                                activeTab === 'new' ? 'Formação Comercial' :
-                                                    activeTab === 'reverse' ? 'Frete Cliente' : 'Histórico'}
+                                    activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
                         <div className="relative w-72">
@@ -1199,47 +1053,6 @@ Disponibilidade: ${disponibilidade}`;
                                 onUpdateStatus={handleCRMStatusUpdate}
                                 customers={customers}
                                 systemConfig={fedTaxes}
-                            />
-                        </div>
-                    )}
-
-                    {activeTab === 'spot' && (
-                        <div className="space-y-8 animate-fade-in-up">
-                            <SpotChecker
-                                vehicleConfigs={vehicleConfigs}
-                                fedTaxes={fedTaxes}
-                                onAcceptCharge={handleAcceptSpotCharge}
-                                onSimulate={handleSpotSimulation}
-                                stats={spotStats}
-                                customers={customers}
-                                history={history.filter(h => h.status === 'spot_simulated')}
-                            />
-                        </div>
-                    )}
-
-                    {activeTab === 'operations' && (
-                        <div className="h-full animate-fade-in">
-                            <OperationsPipeline
-                                quotes={history}
-                                onUpdateStatus={(id, stage) => handleUpdatePipelineData(id, { pipelineStage: stage })}
-                                onUpdateLoadData={handleUpdatePipelineData}
-                            />
-                        </div>
-                    )}
-
-                    {activeTab === 'monitoring' && (
-                        <div className="h-full animate-fade-in">
-                            <MonitoringPipeline
-                                quotes={history}
-                                onUpdateStatus={(id, stage) => {
-                                    const quote = history.find(h => h.id === id);
-                                    if (quote) {
-                                        const updated = { ...quote, pipelineStage: stage };
-                                        updateFreightCalculation(updated).then(success => {
-                                            if (success) setHistory(prev => prev.map(h => h.id === id ? updated : h));
-                                        });
-                                    }
-                                }}
                             />
                         </div>
                     )}
@@ -1426,7 +1239,7 @@ Disponibilidade: ${disponibilidade}`;
                         </div>
                     )}
 
-                    {(activeTab === 'new' || activeTab === 'reverse') && (
+                    {activeTab === 'new' && (
                         <div className="space-y-8 animate-fade-in-up">
                             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                                 <div className="lg:col-span-3 space-y-8">
@@ -1504,12 +1317,8 @@ Disponibilidade: ${disponibilidade}`;
                                     <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border hover:shadow-xl transition-all relative">
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black uppercase text-blue-600">{activeTab === 'reverse' ? 'Alvo Cliente' : 'Preço Base'}</span></div>
-                                                {activeTab === 'reverse' ? (
-                                                    <input type="text" className="w-full p-4 rounded-xl font-black border-2 bg-blue-50 text-blue-600 border-blue-200 transition-all" placeholder="Alvo Cliente" value={maskCurrency(targetFreightClient)} onChange={e => { startTimer(); setTargetFreightClient(maskCurrency(e.target.value)); }} />
-                                                ) : (
-                                                    <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={maskCurrency(baseFreight)} onChange={e => { startTimer(); setBaseFreight(maskCurrency(e.target.value)); }} />
-                                                )}
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-black uppercase text-blue-600">Preço Base</span></div>
+                                                <input type="text" className="w-full p-4 rounded-xl font-black text-[#344a5e] bg-slate-100 focus:bg-white outline-none border-2 border-transparent focus:border-blue-100 transition-all" value={maskCurrency(baseFreight)} onChange={e => { startTimer(); setBaseFreight(maskCurrency(e.target.value)); }} />
                                             </div>
                                             <div className="flex flex-col">
                                                 <div className="flex justify-between mb-2"><span className="text-[10px] font-black text-slate-400 uppercase">Pedágio</span></div>
@@ -1622,7 +1431,7 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="space-y-4">
                                                 <div className="flex justify-between items-center py-3 border-b border-white/10">
                                                     <span className="text-[10px] font-bold uppercase opacity-60">Frete Base / Poder de Compra</span>
-                                                    <span className="font-black text-sm">R$ {formatCur(activeTab === 'reverse' ? calcData.buyerPower : num(baseFreight))}</span>
+                                                    <span className="font-black text-sm">R$ {formatCur(num(baseFreight))}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center py-3 border-b border-white/10">
                                                     <span className="text-[10px] font-bold uppercase opacity-60">Pedágio Programado</span>
@@ -1685,7 +1494,7 @@ Disponibilidade: ${disponibilidade}`;
                                     </div>
 
                                     {/* Final Freight Summary - Side Column */}
-                                    <div className={`p-8 rounded-[2.5rem] shadow-2xl text-white flex flex-col items-center gap-6 relative overflow-hidden transition-all duration-500 border-4 border-white/5 ${activeTab === 'reverse' ? 'bg-[#344a5e]' : 'bg-[#005a9c]'}`}>
+                                    <div className="p-8 rounded-[2.5rem] shadow-2xl text-white flex flex-col items-center gap-6 relative overflow-hidden transition-all duration-500 border-4 border-white/5 bg-[#005a9c]">
                                         <div className="w-full text-center p-4 bg-white/10 rounded-2xl border border-white/20">
                                             <TrendingUp className="w-6 h-6 mx-auto mb-1 text-emerald-400" />
                                             <p className="text-2xl font-black">{calcData.realMarginPercent.toFixed(1)}%</p>
@@ -1693,23 +1502,23 @@ Disponibilidade: ${disponibilidade}`;
                                         </div>
                                         <div className="text-center w-full">
                                             <p className="text-[9px] font-black opacity-50 uppercase tracking-[0.2em] mb-2">
-                                                {activeTab === 'reverse' ? 'PODER DE COMPRA' : 'FRETE FINAL'}
+                                                FRETE FINAL
                                             </p>
                                             <p className="text-4xl font-black tracking-tighter drop-shadow-xl">
-                                                R$ {formatCur(activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight)}
+                                                R$ {formatCur(calcData.finalFreight)}
                                             </p>
 
                                             <div className="flex flex-col gap-3 mt-4 mb-4">
                                                 <div className="text-center bg-white/5 p-2 rounded-xl">
                                                     <p className="text-[8px] font-black uppercase opacity-60">R$ / Ton (Cobrar)</p>
                                                     <p className="text-sm font-black">
-                                                        R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? (activeTab === 'reverse' ? (calcData.buyerPower + num(tolls)) : calcData.finalFreight) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
+                                                        R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? calcData.finalFreight / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
                                                     </p>
                                                 </div>
                                                 <div className="text-center bg-white/5 p-2 rounded-xl">
                                                     <p className="text-[8px] font-black uppercase opacity-60">R$ / Ton (Pagar)</p>
                                                     <p className="text-sm font-black text-white/80">
-                                                        R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? (activeTab === 'reverse' ? calcData.buyerPower : num(baseFreight)) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
+                                                        R$ {formatCur((parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) > 0 ? num(baseFreight) / (parseFloat(weight.replace('.', '').replace(',', '.')) / 1000) : 0)}
                                                     </p>
                                                 </div>
                                             </div>
