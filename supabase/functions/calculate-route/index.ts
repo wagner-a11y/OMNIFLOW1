@@ -17,53 +17,87 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-async function getRouteFromGoogle(origin: string, destination: string): Promise<RouteResult | null> {
+// Soma as parcelas de pedágio (Money repetido) retornadas pela Routes API, preferindo BRL.
+function sumTollPrice(tollInfo: any): number {
+  const prices = tollInfo?.estimatedPrice;
+  if (!Array.isArray(prices) || prices.length === 0) return 0;
+  const pick = prices.find((p: any) => p.currencyCode === 'BRL') || prices[0];
+  const units = Number(pick.units || 0);
+  const nanos = Number(pick.nanos || 0);
+  return units + nanos / 1e9;
+}
+
+async function getRouteFromGoogle(origin: string, destination: string, axles: number): Promise<RouteResult | null> {
   if (!GOOGLE_MAPS_API_KEY) {
      console.error('GOOGLE_MAPS_API_KEY is missing');
      return { km: 0, originNormalized: origin, destinationNormalized: destination, estimatedTolls: 0, error: 'GOOGLE_MAPS_API_KEY_MISSING' };
   }
 
   try {
-    const params = new URLSearchParams({
-      origin,
-      destination,
-      key: GOOGLE_MAPS_API_KEY,
-      language: 'pt-BR',
-      region: 'br',
-    });
+    // Routes API v2 (computeRoutes) com cálculo de pedágio (extraComputations: TOLLS).
+    const body = {
+      origin: { address: origin },
+      destination: { address: destination },
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_UNAWARE',
+      extraComputations: ['TOLLS'],
+      routeModifiers: {
+        // A Routes API não recebe nº de eixos; emissionType ajuda na estimativa de pedágio.
+        vehicleInfo: { emissionType: 'DIESEL' },
+      },
+      languageCode: 'pt-BR',
+      regionCode: 'BR',
+      units: 'METRIC',
+    };
 
     const res = await fetch(
-      `https://maps.googleapis.com/maps/api/directions/json?${params}`
+      'https://routes.googleapis.com/directions/v2:computeRoutes',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+          'X-Goog-FieldMask': 'routes.distanceMeters,routes.travelAdvisory.tollInfo,routes.legs.travelAdvisory.tollInfo',
+        },
+        body: JSON.stringify(body),
+      }
     );
+
     const data = await res.json();
 
-    if (data.status !== 'OK' || !data.routes?.length) {
-      console.error('Google Directions API error:', data.status, data.error_message);
-      return { 
-        km: 0, 
-        originNormalized: origin, 
-        destinationNormalized: destination, 
-        estimatedTolls: 0, 
-        error: `GOOGLE_MAPS_ERROR: ${data.status} - ${data.error_message || 'No details'}` 
+    if (!res.ok || !data.routes?.length) {
+      const msg = data?.error?.message || data?.error?.status || `HTTP ${res.status}`;
+      console.error('Google Routes API error:', msg);
+      return {
+        km: 0,
+        originNormalized: origin,
+        destinationNormalized: destination,
+        estimatedTolls: 0,
+        error: `GOOGLE_ROUTES_ERROR: ${msg}`,
       };
     }
 
     const route = data.routes[0];
-    const leg = route.legs[0];
-    const km = Math.round(leg.distance.value / 1000);
-    const originNormalized = leg.start_address || origin;
-    const destinationNormalized = leg.end_address || destination;
-    const estimatedTolls = Math.round(km * 0.12);
+    const km = Math.round((route.distanceMeters || 0) / 1000);
+
+    // A Routes API estima o pedágio para um veículo padrão (2 eixos). No Brasil o pedágio
+    // é cobrado por eixo, então escalamos pela razão (eixos / 2). Sem dado de pedágio do
+    // Google, caímos numa heurística por km também proporcional aos eixos.
+    const axleFactor = axles && axles > 0 ? axles / 2 : 1;
+    const baseToll = sumTollPrice(route.travelAdvisory?.tollInfo);
+    const estimatedTolls = baseToll > 0
+      ? Math.round(baseToll * axleFactor)
+      : Math.round(km * 0.06 * (axles || 2));
 
     return {
       km,
-      originNormalized: simplifyAddress(originNormalized),
-      destinationNormalized: simplifyAddress(destinationNormalized),
+      originNormalized: simplifyAddress(origin),
+      destinationNormalized: simplifyAddress(destination),
       estimatedTolls,
     };
   } catch (err) {
-    console.error('Google Directions API fetch error:', err);
-    return { km: 0, originNormalized: origin, destinationNormalized: destination, estimatedTolls: 0, error: 'GOOGLE_MAPS_FETCH_FAILURE' };
+    console.error('Google Routes API fetch error:', err);
+    return { km: 0, originNormalized: origin, destinationNormalized: destination, estimatedTolls: 0, error: 'GOOGLE_ROUTES_FETCH_FAILURE' };
   }
 }
 
@@ -125,7 +159,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`Calculating route: ${origin} -> ${destination} (${vehicleType})`);
 
-    let result = await getRouteFromGoogle(origin, destination);
+    let result = await getRouteFromGoogle(origin, destination, axles);
     let source = 'google';
 
     if (!result || result.km === 0) {
