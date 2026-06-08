@@ -583,7 +583,7 @@ const App: React.FC = () => {
                 setDistanceKm(result.km.toString());
                 setOrigin(result.originNormalized);
                 setDestination(result.destinationNormalized);
-                setTolls(result.estimatedTolls.toString());
+                setTolls(maskCurrency(result.estimatedTolls));
                 showFeedback("Rota sincronizada!");
             }
         } catch (err: any) {
