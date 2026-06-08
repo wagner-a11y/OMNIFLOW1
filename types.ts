@@ -5,6 +5,7 @@ export enum VehicleType {
     HR_VUC = "HR/VUC - Utilitário",
     Toco = "Toco",
     Truck = "Truck",
+    Bitruck = "Bitruck",
     CarretaSimples = "Carreta Simples",
     CarretaLS = "Carreta LS",
     Carreta4Eixo = "Carreta 4º Eixo",

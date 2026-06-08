@@ -9,6 +9,7 @@ import { CRMBoard } from './components/CRMBoard';
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
+import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt';
 import { estimateDistance } from './services/geminiService';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
@@ -93,6 +94,7 @@ const App: React.FC = () => {
     const [loadingDistance, setLoadingDistance] = useState(false);
     const [disponibilidade, setDisponibilidade] = useState<Disponibilidade>("Imediato");
     const [merchandiseType, setMerchandiseType] = useState('');
+    const [cargoType, setCargoType] = useState<string>('Carga geral'); // Tipo de carga Tabela A (ANTT)
     const [newIcmsRate, setNewIcmsRate] = useState('');
     const [icmsSearch, setIcmsSearch] = useState('');
     const [icmsOriginFilter, setIcmsOriginFilter] = useState('');
@@ -132,7 +134,9 @@ const App: React.FC = () => {
                 if (configData.spotStats) setSpotStats(configData.spotStats);
             }
             const vehiclesData = await getVehicleConfigs();
-            setVehicleConfigs(Object.keys(vehiclesData).length > 0 ? vehiclesData : VEHICLE_CONFIGS);
+            // Mescla defaults com o que vem do banco: garante que veículos novos (ex.: Bitruck)
+            // apareçam mesmo quando o banco já tem configs; valores do banco têm prioridade.
+            setVehicleConfigs({ ...VEHICLE_CONFIGS, ...vehiclesData });
         } catch (error) {
             console.error('Erro ao carregar dados:', error);
             showFeedback('Erro ao carregar dados do banco.', 'error');
@@ -174,7 +178,7 @@ const App: React.FC = () => {
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_configs' }, () => {
                 console.log('Real-Time Update: vehicle_configs');
-                getVehicleConfigs().then(data => setVehicleConfigs(Object.keys(data).length > 0 ? data : VEHICLE_CONFIGS));
+                getVehicleConfigs().then(data => setVehicleConfigs({ ...VEHICLE_CONFIGS, ...data }));
             })
             .subscribe((status) => {
                 console.log('Supabase Realtime Status:', status);
@@ -518,23 +522,20 @@ const App: React.FC = () => {
         }
     };
 
-    const suggestedFreightANTT = useMemo(() => {
-        const config = vehicleConfigs[vehicleType];
-        const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
-        if (!config || dist === 0) return 0;
+    // Indica se o veículo selecionado possui tabela ANTT (piso mínimo aplicável).
+    const hasAntt = vehicleHasANTT(vehicleType);
 
-        switch (config.calcMode) {
-            case 'KM_ROUND_TRIP':
-                return dist * 2 * config.factor;
-            case 'FREE':
-                return 0;
-            case 'ANTT':
-                return config.fixed + (dist * config.variable);
-            case 'KM':
-            default:
-                return dist * config.factor;
-        }
-    }, [vehicleType, distanceKm, vehicleConfigs]);
+    // Piso mínimo ANTT (Tabela A) = (km × CCD) + CC, conforme tipo de carga e eixos do veículo.
+    // Retorna null quando não aplicável (veículo sem ANTT, eixos/carga sem coeficiente).
+    const anttFloor = useMemo(() => {
+        if (!hasAntt) return null;
+        const axles = vehicleConfigs[vehicleType]?.axles;
+        const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
+        return computeANTTFloor(cargoType, axles, dist);
+    }, [hasAntt, vehicleType, cargoType, distanceKm, vehicleConfigs]);
+
+    // Valor numérico para persistência e para o botão "Aderir ao Preço Base".
+    const suggestedFreightANTT = anttFloor ?? 0;
 
     const calcData = useMemo(() => {
         // Monetários: num() lida com "R$ 1.234,56", "42" cru e "42,00" de forma uniforme.
@@ -706,7 +707,7 @@ const App: React.FC = () => {
     const resetForm = () => {
         setOrigin(''); setDestination(''); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
         setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setEditingId(null);
-        setDisponibilidade("Imediato"); setMerchandiseType(''); setOtherCosts([]);
+        setDisponibilidade("Imediato"); setMerchandiseType(''); setCargoType('Carga geral'); setOtherCosts([]);
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
     };
 
@@ -1478,18 +1479,48 @@ Disponibilidade: ${disponibilidade}`;
                                 </div>
 
                                 <div className="lg:col-span-1 space-y-8">
-                                    <div className="bg-white border border-[#e5e7eb] p-6 rounded-xl text-center flex flex-col items-center justify-center">
-                                        <h4 className="text-xs font-normal text-[#6b7280] mb-1">Referência ANTT</h4>
-                                        <p className="text-2xl font-medium text-[#111827] mb-4">R$ {formatCur(suggestedFreightANTT)}</p>
-                                        <button
-                                            onClick={() => {
-                                                setBaseFreight(maskCurrency(suggestedFreightANTT));
-                                                showFeedback("Valor ANTT aplicado ao preço base!");
-                                            }}
-                                            className="w-full py-2.5 bg-white border border-[#e5e7eb] hover:bg-[#f9fafb] text-[#111827] rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            <Check className="w-3.5 h-3.5" strokeWidth={1.75} /> Aderir ao Preço Base
-                                        </button>
+                                    <div className="bg-white border border-[#e5e7eb] p-6 rounded-xl flex flex-col gap-3">
+                                        <h4 className="text-xs font-normal text-[#6b7280] text-center">Piso Mínimo ANTT (Tabela A)</h4>
+                                        {hasAntt ? (
+                                            <>
+                                                <div>
+                                                    <label className="text-[11px] font-normal text-[#6b7280] block mb-1">Tipo de carga</label>
+                                                    <div className="relative">
+                                                        <select
+                                                            value={cargoType}
+                                                            onChange={e => setCargoType(e.target.value)}
+                                                            className="w-full pl-3 pr-8 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors appearance-none"
+                                                        >
+                                                            {ANTT_CARGO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                        </select>
+                                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6b7280] pointer-events-none" strokeWidth={1.75} />
+                                                    </div>
+                                                </div>
+                                                <p className="text-2xl font-medium text-[#111827] text-center">
+                                                    {anttFloor !== null ? `R$ ${formatCur(anttFloor)}` : '—'}
+                                                </p>
+                                                {anttFloor !== null ? (
+                                                    <button
+                                                        onClick={() => {
+                                                            setBaseFreight(maskCurrency(anttFloor));
+                                                            showFeedback("Piso ANTT aplicado ao preço base!");
+                                                        }}
+                                                        className="w-full py-2.5 bg-white border border-[#e5e7eb] hover:bg-[#f9fafb] text-[#111827] rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
+                                                    >
+                                                        <Check className="w-3.5 h-3.5" strokeWidth={1.75} /> Aderir ao Preço Base
+                                                    </button>
+                                                ) : (
+                                                    <p className="text-[11px] font-normal text-[#6b7280] text-center">
+                                                        Sem coeficiente para {vehicleConfigs[vehicleType]?.axles ?? '?'} eixos nesta carga.
+                                                    </p>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="text-2xl font-medium text-[#111827] text-center">—</p>
+                                                <p className="text-[11px] font-normal text-[#6b7280] text-center">Veículo sem tabela ANTT</p>
+                                            </>
+                                        )}
                                     </div>
 
                                     {/* Final Freight Summary - Side Column */}
