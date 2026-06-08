@@ -568,12 +568,14 @@ const App: React.FC = () => {
         return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent };
     }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes]);
 
-    const handleFetchDistance = async () => {
+    const handleFetchDistance = async (overrideVehicle?: string) => {
         if (!origin || !destination) return;
+        // overrideVehicle só é considerado quando for string (chamadas via onBlur/onClick passam um evento).
+        const vt = (typeof overrideVehicle === 'string' && overrideVehicle) ? overrideVehicle : vehicleType;
         setLoadingDistance(true);
         try {
-            const config = vehicleConfigs[vehicleType];
-            const result = await estimateDistance(origin, destination, vehicleType, config?.axles);
+            const config = vehicleConfigs[vt];
+            const result = await estimateDistance(origin, destination, vt, config?.axles);
             if (result.error) {
                 console.warn('Distance estimation failed:', result.error, result.details);
                 const detailStr = result.details?.google ? ` (Google: ${result.details.google})` : '';
@@ -1278,7 +1280,14 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-blue-50/50 rounded-lg font-medium border-2 border-blue-100 focus:border-blue-300 outline-none" value={clientReference} onChange={e => setClientReference(e.target.value)} placeholder="Ref Cliente" /></div>
                                             <div className="relative">
                                                 <Truck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                                                <select className="w-full pl-10 pr-4 py-4 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all appearance-none" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>
+                                                <select className="w-full pl-10 pr-4 py-4 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all appearance-none" value={vehicleType} onChange={e => {
+                                                    const v = e.target.value;
+                                                    setVehicleType(v);
+                                                    // O pedágio depende dos eixos: se já há rota definida, recalcula com o novo veículo.
+                                                    if (origin && destination && (parseFloat(distanceKm.replace(',', '.')) || 0) > 0 && !loadingDistance) {
+                                                        handleFetchDistance(v);
+                                                    }
+                                                }}>
                                                     {Object.keys(vehicleConfigs).map(v => <option key={v} value={v}>{v}</option>)}
                                                 </select>
                                                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
