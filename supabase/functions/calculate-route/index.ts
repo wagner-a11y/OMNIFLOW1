@@ -121,7 +121,7 @@ async function getRouteFromGemini(origin: string, destination: string, vehicleTy
     const prompt = `Como um especialista em logística, estime a distância rodoviária entre ${origin} e ${destination} para um veículo ${vehicleType} com ${axles || 2} eixos. Retorne APENAS um JSON no formato: {"km": numero, "originNormalized": "Cidade, UF", "destinationNormalized": "Cidade, UF", "estimatedTolls": numero}`;
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
