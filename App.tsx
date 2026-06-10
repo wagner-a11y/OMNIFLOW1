@@ -158,6 +158,8 @@ const App: React.FC = () => {
                     username: profile?.email || session.user.email || '',
                     role: (profile?.role as UserRole) || 'operador',
                 });
+                // Lista de perfis (gestão) só é legível autenticado — carrega após a sessão.
+                getProfiles().then(setUsers);
             } else if (mounted) {
                 setCurrentUser(null);
             }
@@ -170,8 +172,7 @@ const App: React.FC = () => {
 
     const loadAllData = async () => {
         try {
-            const profilesData = await getProfiles();
-            setUsers(profilesData);
+            // profiles é carregado após a autenticação (RLS exige sessão) — ver applySession.
             const customersData = await getCustomers();
             setCustomers(customersData.length > 0 ? customersData : INITIAL_CUSTOMERS);
             const historyData = await getFreightCalculations();

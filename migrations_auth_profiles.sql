@@ -14,3 +14,12 @@ create table if not exists public.profiles (
 );
 
 comment on table public.profiles is 'Perfil/papel do usuário, vinculado ao Supabase Auth (auth.users).';
+
+-- A tabela já está com RLS ligada. Política MÍNIMA para a Etapa A:
+-- usuários AUTENTICADOS leem os perfis (anon continua bloqueado).
+-- A trava fina por papel (operador só o próprio, master tudo) entra na Etapa D.
+alter table public.profiles enable row level security;
+
+drop policy if exists "profiles_select_authenticated" on public.profiles;
+create policy "profiles_select_authenticated" on public.profiles
+  for select to authenticated using (true);
