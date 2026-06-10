@@ -15,7 +15,8 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
 async function fetchStages(token: string) {
-  const res = await fetch(`${RAMPER_BASE}/stages?limit=100`, {
+  // fields explícito para garantir que o nome venha (algumas rotas LSCRM limitam campos por padrão).
+  const res = await fetch(`${RAMPER_BASE}/stages?limit=100&fields=id,name,name_short,order,pipe_id,active`, {
     headers: { 'access-token': token, 'Accept': 'application/json' },
   });
   const data = await res.json().catch(() => ({}));
@@ -36,7 +37,7 @@ Deno.serve(async (req) => {
     if (body.action === 'list-stages') {
       const itens = await fetchStages(token);
       return json({
-        stages: itens.map((s: any) => ({ id: s.id, name: s.name, pipe: s.pipes?.name, order: s.order })),
+        stages: itens.map((s: any) => ({ id: s.id, name: s.name ?? s.name_short, pipe: s.pipes?.name, order: s.order })),
       });
     }
 
@@ -49,8 +50,9 @@ Deno.serve(async (req) => {
     if (!resolvedStageId) {
       const target = String(stageName || 'Cotações').toLowerCase();
       const itens = await fetchStages(token);
-      const match = itens.find((s: any) => String(s.name || '').toLowerCase() === target)
-        || itens.find((s: any) => String(s.name || '').toLowerCase().includes(target));
+      const nameOf = (s: any) => String(s.name || s.name_short || '').toLowerCase();
+      const match = itens.find((s: any) => nameOf(s) === target)
+        || itens.find((s: any) => nameOf(s).includes(target));
       if (!match) throw new Error(`Etapa "${stageName || 'Cotações'}" não encontrada no funil do Ramper.`);
       resolvedStageId = match.id;
     }
