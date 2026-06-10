@@ -50,7 +50,6 @@ const UTILITARIO_KM_RATES: Record<string, number> = {
 const App: React.FC = () => {
     // Estados de Autenticação (sessão nativa do Supabase Auth)
     const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [authUserId, setAuthUserId] = useState<{ id: string; email: string } | null>(null);
     const [authLoading, setAuthLoading] = useState(true); // enquanto restaura a sessão
     const [loginSubmitting, setLoginSubmitting] = useState(false);
     const [users, setUsers] = useState<User[]>([]); // perfis (tela de gestão do master)
@@ -147,39 +146,33 @@ const App: React.FC = () => {
     }, []);
 
     // --- SESSÃO SUPABASE AUTH ---
-    // O callback do onAuthStateChange precisa ser SÍNCRONO: chamar supabase.from(...) com await
-    // dentro dele trava (deadlock do lock interno do auth). Então aqui só guardamos o usuário
-    // da sessão; o perfil/papel é buscado no effect separado abaixo.
+    // Mantém "Carregando" até o perfil resolver (evita flash da tela de login no F5).
+    // O getProfile é adiado com setTimeout(0) para NÃO rodar dentro do callback do
+    // onAuthStateChange (evita o deadlock do lock interno do auth).
     useEffect(() => {
         let mounted = true;
-        const setFromSession = (session: any) => {
-            if (!mounted) return;
-            const u = session?.user;
-            setAuthUserId(u ? { id: u.id, email: u.email || '' } : null);
-            setAuthLoading(false);
+        const resolveSession = (session: any) => {
+            if (!session?.user) {
+                if (mounted) { setCurrentUser(null); setAuthLoading(false); }
+                return;
+            }
+            setTimeout(async () => {
+                const profile = await getProfile(session.user.id);
+                if (!mounted) return;
+                setCurrentUser({
+                    id: session.user.id,
+                    name: profile?.name || session.user.email || 'Usuário',
+                    username: profile?.email || session.user.email || '',
+                    role: (profile?.role as UserRole) || 'operador',
+                });
+                getProfiles().then(list => { if (mounted) setUsers(list); });
+                setAuthLoading(false);
+            }, 0);
         };
-        supabase.auth.getSession().then(({ data }) => setFromSession(data.session));
-        const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => setFromSession(session));
+        supabase.auth.getSession().then(({ data }) => resolveSession(data.session));
+        const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => resolveSession(session));
         return () => { mounted = false; sub.subscription.unsubscribe(); };
     }, []);
-
-    // Busca o perfil/papel quando o usuário da sessão muda (fora do callback de auth).
-    useEffect(() => {
-        let mounted = true;
-        if (!authUserId) { setCurrentUser(null); return; }
-        (async () => {
-            const profile = await getProfile(authUserId.id);
-            if (!mounted) return;
-            setCurrentUser({
-                id: authUserId.id,
-                name: profile?.name || authUserId.email || 'Usuário',
-                username: profile?.email || authUserId.email || '',
-                role: (profile?.role as UserRole) || 'operador',
-            });
-            getProfiles().then(list => { if (mounted) setUsers(list); });
-        })();
-        return () => { mounted = false; };
-    }, [authUserId]);
 
     const loadAllData = async () => {
         try {
