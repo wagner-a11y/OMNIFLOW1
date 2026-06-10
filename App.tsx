@@ -14,9 +14,8 @@ import { estimateDistance, parseRequest } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
-    getUsers,
-    createUser,
-    deleteUser,
+    getProfile,
+    getProfiles,
     getCustomers,
     createCustomer,
     deleteCustomer,
@@ -49,13 +48,12 @@ const UTILITARIO_KM_RATES: Record<string, number> = {
 };
 
 const App: React.FC = () => {
-    // Estados de Autenticação
-    const [currentUser, setCurrentUser] = useState<User | null>(() => {
-        const saved = localStorage.getItem('flow_current_user');
-        return saved ? JSON.parse(saved) : null;
-    });
-    const [users, setUsers] = useState<User[]>([]);
-    const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+    // Estados de Autenticação (sessão nativa do Supabase Auth)
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [authLoading, setAuthLoading] = useState(true); // enquanto restaura a sessão
+    const [loginSubmitting, setLoginSubmitting] = useState(false);
+    const [users, setUsers] = useState<User[]>([]); // perfis (tela de gestão do master)
+    const [loginForm, setLoginForm] = useState({ username: '', password: '' }); // username = e-mail
 
     // Estados Globais
     const [appLogo, setAppLogo] = useState<string | null>(() => localStorage.getItem('flow_app_logo'));
@@ -147,10 +145,33 @@ const App: React.FC = () => {
         loadAllData();
     }, []);
 
+    // --- SESSÃO SUPABASE AUTH: restaura sessão e mantém sincronizada (com refresh token) ---
+    useEffect(() => {
+        let mounted = true;
+        const applySession = async (session: any) => {
+            if (session?.user) {
+                const profile = await getProfile(session.user.id);
+                if (!mounted) return;
+                setCurrentUser({
+                    id: session.user.id,
+                    name: profile?.name || session.user.email || 'Usuário',
+                    username: profile?.email || session.user.email || '',
+                    role: (profile?.role as UserRole) || 'operador',
+                });
+            } else if (mounted) {
+                setCurrentUser(null);
+            }
+            if (mounted) setAuthLoading(false);
+        };
+        supabase.auth.getSession().then(({ data }) => applySession(data.session));
+        const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => applySession(session));
+        return () => { mounted = false; sub.subscription.unsubscribe(); };
+    }, []);
+
     const loadAllData = async () => {
         try {
-            const usersData = await getUsers();
-            setUsers(usersData);
+            const profilesData = await getProfiles();
+            setUsers(profilesData);
             const customersData = await getCustomers();
             setCustomers(customersData.length > 0 ? customersData : INITIAL_CUSTOMERS);
             const historyData = await getFreightCalculations();
@@ -199,9 +220,9 @@ const App: React.FC = () => {
                     }
                 });
             })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
-                console.log('Real-Time Update: users');
-                getUsers().then(setUsers);
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+                console.log('Real-Time Update: profiles');
+                getProfiles().then(setUsers);
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_configs' }, () => {
                 console.log('Real-Time Update: vehicle_configs');
@@ -253,10 +274,7 @@ const App: React.FC = () => {
         else localStorage.removeItem('flow_app_logo');
     }, [appLogo]);
 
-    useEffect(() => {
-        if (currentUser) localStorage.setItem('flow_current_user', JSON.stringify(currentUser));
-        else localStorage.removeItem('flow_current_user');
-    }, [currentUser]);
+    // Sessão é gerida pelo Supabase Auth (não persistimos o usuário em localStorage).
 
     useEffect(() => {
         localStorage.setItem('flow_solicitantes', JSON.stringify(solicitantes));
@@ -302,34 +320,32 @@ const App: React.FC = () => {
         }
     }, [origin, destination, fedTaxes.icmsRates]);
 
-    const handleLogin = (e?: React.FormEvent | React.MouseEvent) => {
+    // Login via Supabase Auth (e-mail + senha). A sessão e o papel são definidos pelo onAuthStateChange.
+    const handleLogin = async (e?: React.FormEvent | React.MouseEvent) => {
         if (e) e.preventDefault();
-
-        if (users.length === 0) {
-            console.log("Login blocked: Users not loaded yet");
-            showFeedback("Carregando sistema... Tente em instantes.", "info");
-            loadAllData(); // Tenta recarregar se estiver vazio
-            return;
-        }
-
-        console.log("Login attempt started", loginForm);
-
-        const user = users.find(u =>
-            u.username.toLowerCase().trim() === loginForm.username.toLowerCase().trim() &&
-            u.password === loginForm.password
-        );
-
-        if (user) {
-            console.log("User found, logging in:", user.name);
-            setCurrentUser(user);
-            showFeedback(`Bem-vindo, ${user.name}!`);
-        } else {
-            console.log("Login failed: User not found or password incorrect");
-            showFeedback("Usuário ou senha incorretos.", "error");
+        if (loginSubmitting) return;
+        setLoginSubmitting(true);
+        try {
+            const { error } = await supabase.auth.signInWithPassword({
+                email: loginForm.username.trim(),
+                password: loginForm.password,
+            });
+            if (error) {
+                console.warn('Login failed:', error.message);
+                showFeedback("E-mail ou senha incorretos.", "error");
+            } else {
+                setLoginForm({ username: '', password: '' });
+                showFeedback("Bem-vindo!");
+            }
+        } catch (err: any) {
+            showFeedback(`Falha no login: ${err.message}`, "error");
+        } finally {
+            setLoginSubmitting(false);
         }
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
         setCurrentUser(null);
         setLoginForm({ username: '', password: '' });
         setShowConfigModal(false);
@@ -1153,6 +1169,14 @@ Disponibilidade: ${disponibilidade}`;
         }
     };
 
+    if (authLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa]">
+                <p className="text-sm font-normal text-[#6b7280]">Carregando...</p>
+            </div>
+        );
+    }
+
     if (!currentUser) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa] p-6">
@@ -1164,10 +1188,10 @@ Disponibilidade: ${disponibilidade}`;
                         <h1 className="text-2xl font-medium text-[#111827] tracking-tight text-center leading-none">OMNIFLOW</h1>
                     </div>
                     <form onSubmit={handleLogin} className="space-y-4">
-                        <input type="text" className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" placeholder="Usuário" value={loginForm.username} onChange={e => setLoginForm({ ...loginForm, username: e.target.value })} required />
-                        <input type="password" className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" placeholder="Senha" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required />
-                        <button type="submit" onClick={handleLogin} className="w-full py-3 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm cursor-pointer hover:bg-[#1a5f9e] active:scale-[0.99] transition-all disabled:opacity-50" disabled={users.length === 0}>
-                            {users.length === 0 ? 'Conectando...' : 'Acessar'}
+                        <input type="email" autoComplete="email" className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" placeholder="E-mail" value={loginForm.username} onChange={e => setLoginForm({ ...loginForm, username: e.target.value })} required />
+                        <input type="password" autoComplete="current-password" className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" placeholder="Senha" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required />
+                        <button type="submit" onClick={handleLogin} className="w-full py-3 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm cursor-pointer hover:bg-[#1a5f9e] active:scale-[0.99] transition-all disabled:opacity-50" disabled={loginSubmitting}>
+                            {loginSubmitting ? 'Entrando...' : 'Acessar'}
                         </button>
                     </form>
                 </div>
@@ -2557,32 +2581,7 @@ Disponibilidade: ${disponibilidade}`;
                                                     </div>
                                                 </div>
                                                 <button
-                                                    onClick={async () => {
-                                                        const nameEl = document.getElementById('new-user-name') as HTMLInputElement;
-                                                        const usernameEl = document.getElementById('new-user-username') as HTMLInputElement;
-                                                        const passwordEl = document.getElementById('new-user-password') as HTMLInputElement;
-                                                        const roleEl = document.getElementById('new-user-role') as HTMLSelectElement;
-                                                        if (!nameEl.value || !usernameEl.value || !passwordEl.value) {
-                                                            showFeedback('Preencha todos os campos.', 'error');
-                                                            return;
-                                                        }
-                                                        const newUser = await createUser({
-                                                            id: crypto.randomUUID(),
-                                                            name: nameEl.value,
-                                                            username: usernameEl.value,
-                                                            password: passwordEl.value,
-                                                            role: roleEl.value as any
-                                                        });
-                                                        if (newUser) {
-                                                            setUsers([...users, newUser]);
-                                                            nameEl.value = '';
-                                                            usernameEl.value = '';
-                                                            passwordEl.value = '';
-                                                            showFeedback('Usuário cadastrado!');
-                                                        } else {
-                                                            showFeedback('Erro ao cadastrar usuário.', 'error');
-                                                        }
-                                                    }}
+                                                    onClick={() => showFeedback('Criação de usuários será ativada na Etapa B (Supabase Auth).', 'info')}
                                                     className="w-full py-5 bg-blue-600 text-white rounded-lg font-medium uppercase text-xs shadow-sm shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
                                                 >
                                                     <Save className="w-4 h-4" /> Cadastrar Usuário
@@ -2604,12 +2603,7 @@ Disponibilidade: ${disponibilidade}`;
                                                         </div>
                                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                                             {currentUser.role === 'master' && u.id !== currentUser.id && (
-                                                                <button onClick={async () => {
-                                                                    if (await deleteUser(u.id)) {
-                                                                        setUsers(users.filter(i => i.id !== u.id));
-                                                                        showFeedback('Usuário removido!');
-                                                                    }
-                                                                }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
+                                                                <button onClick={() => showFeedback('Remoção de usuários será ativada na Etapa B (Supabase Auth).', 'info')} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
                                                                     <Trash2 className="w-4 h-4" />
                                                                 </button>
                                                             )}

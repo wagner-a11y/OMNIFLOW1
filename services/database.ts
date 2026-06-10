@@ -2,7 +2,35 @@
 import { supabase } from './supabase';
 import { FreightCalculation, Customer, FederalTaxes, User, ANTTCoefficients } from '../types';
 
-// =================== USERS ===================
+// =================== PROFILES (Supabase Auth) ===================
+// Perfil único do usuário autenticado (papel + nome), lido após o login via Auth.
+export const getProfile = async (id: string): Promise<{ id: string; name: string; email: string; role: string } | null> => {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id,name,email,role')
+        .eq('id', id)
+        .single();
+    if (error) {
+        console.error('Error fetching profile:', error);
+        return null;
+    }
+    return data;
+};
+
+// Lista de perfis para a tela de gestão de usuários (master).
+export const getProfiles = async (): Promise<User[]> => {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id,name,email,role')
+        .order('created_at', { ascending: true });
+    if (error) {
+        console.error('Error fetching profiles:', error);
+        return [];
+    }
+    return (data || []).map((p: any) => ({ id: p.id, name: p.name, username: p.email, role: p.role }));
+};
+
+// =================== USERS (LEGADO — removido do login na Etapa A) ===================
 export const getUsers = async (): Promise<User[]> => {
     const { data, error } = await supabase
         .from('users')
