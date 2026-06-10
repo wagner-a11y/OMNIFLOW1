@@ -1,0 +1,79 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+// Integração OmniFlow → Ramper Pipeline (LSCRM). Apenas esta função conversa com o Ramper;
+// o token fica somente no secret RAMPER_ACCESS_TOKEN, nunca no frontend.
+
+const RAMPER_BASE = 'https://api.lscrm.com.br/v1';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+async function fetchStages(token: string) {
+  const res = await fetch(`${RAMPER_BASE}/stages?limit=100`, {
+    headers: { 'access-token': token, 'Accept': 'application/json' },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`Ramper /stages ${res.status}: ${JSON.stringify(data)}`);
+  return data?.get_list?.itens || data?.itens || [];
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  try {
+    const token = Deno.env.get('RAMPER_ACCESS_TOKEN');
+    if (!token) throw new Error('RAMPER_ACCESS_TOKEN não configurado nos secrets do Supabase.');
+
+    const body = await req.json().catch(() => ({}));
+
+    // --- Modo somente leitura: listar etapas do funil (para descobrir/confirmar stage_id) ---
+    if (body.action === 'list-stages') {
+      const itens = await fetchStages(token);
+      return json({
+        stages: itens.map((s: any) => ({ id: s.id, name: s.name, pipe: s.pipes?.name, order: s.order })),
+      });
+    }
+
+    // --- Modo criação de card (oportunidade) ---
+    const { title, value, organizationName, personName, stageId, stageName } = body;
+    if (!title) throw new Error('title é obrigatório.');
+
+    // Resolve o stage_id: usa o informado, senão busca pela etapa "Cotações" (por nome).
+    let resolvedStageId = stageId;
+    if (!resolvedStageId) {
+      const target = String(stageName || 'Cotações').toLowerCase();
+      const itens = await fetchStages(token);
+      const match = itens.find((s: any) => String(s.name || '').toLowerCase() === target)
+        || itens.find((s: any) => String(s.name || '').toLowerCase().includes(target));
+      if (!match) throw new Error(`Etapa "${stageName || 'Cotações'}" não encontrada no funil do Ramper.`);
+      resolvedStageId = match.id;
+    }
+
+    // Corpo no formato form-urlencoded (padrão da API LSCRM, com chaves aninhadas em colchetes).
+    const form = new URLSearchParams();
+    form.set('title', title);
+    form.set('stage_id', String(resolvedStageId));
+    if (value != null && !isNaN(Number(value))) form.set('value', Number(value).toFixed(2));
+    if (organizationName) form.set('organizations[name]', String(organizationName));
+    if (personName) form.set('organizations_person[name]', String(personName));
+
+    const res = await fetch(`${RAMPER_BASE}/opportunities`, {
+      method: 'POST',
+      headers: { 'access-token': token, 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body: form.toString(),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`Ramper /opportunities ${res.status}: ${JSON.stringify(data)}`);
+
+    return json({ ok: true, stage_id: resolvedStageId, result: data });
+  } catch (error) {
+    console.error('CREATE-RAMPER-CARD ERROR:', (error as Error).message);
+    return json({ error: (error as Error).message }, 500);
+  }
+});

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles
+    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { WonInfoModal } from './components/WonInfoModal';
@@ -11,6 +11,7 @@ import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, A
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt';
 import { estimateDistance, parseRequest } from './services/geminiService';
+import { createRamperCard } from './services/ramper';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
     getUsers,
@@ -127,8 +128,9 @@ const App: React.FC = () => {
     const [showSolicitanteManager, setShowSolicitanteManager] = useState(false);
     const [newSolicitanteName, setNewSolicitanteName] = useState('');
 
-    // Modal pós-salvar (Nova Cotação / Ver Histórico)
+    // Modal pós-salvar (Mandar pro Ramper / Nova Cotação / Ver Histórico)
     const [showPostSaveModal, setShowPostSaveModal] = useState(false);
+    const [ramperSending, setRamperSending] = useState(false);
 
     // Importar Solicitação (leitura inteligente via Gemini)
     const [showImportModal, setShowImportModal] = useState(false);
@@ -886,6 +888,37 @@ Disponibilidade: ${disponibilidade}`;
             showFeedback(`Falha ao interpretar: ${e.message}`, 'error');
         } finally {
             setImportLoading(false);
+        }
+    };
+
+    // Envia a cotação salva como card no Ramper Pipeline (etapa "Cotações"). Erro é exibido, nunca engolido.
+    const handleSendToRamper = async () => {
+        setRamperSending(true);
+        try {
+            const customerName = customers.find(c => c.id === selectedCustomerId)?.name || '';
+            const today = new Date().toLocaleDateString('pt-BR');
+            const title = `Cotação de Frete SPOT - ${origin || '—'} x ${destination || '—'} - ${today}`;
+            const res = await createRamperCard({
+                title,
+                value: calcData.finalFreight,
+                organizationName: customerName,
+                personName: solicitante,
+                stageName: 'Cotações',
+            });
+            if (res?.error) {
+                console.error('Ramper error:', res.error);
+                showFeedback('Falha ao criar card no Ramper, verifique a conexão', 'error');
+            } else {
+                showFeedback('Card criado no Ramper');
+                setShowPostSaveModal(false);
+                resetForm();
+                setActiveTab('history');
+            }
+        } catch (e: any) {
+            console.error('Ramper exception:', e);
+            showFeedback('Falha ao criar card no Ramper, verifique a conexão', 'error');
+        } finally {
+            setRamperSending(false);
         }
     };
 
@@ -1986,19 +2019,28 @@ Disponibilidade: ${disponibilidade}`;
                         </div>
                         <h3 className="text-base font-medium text-[#111827]">Cotação salva com sucesso</h3>
                         <p className="text-sm font-normal text-[#6b7280] mt-1 mb-6">O que deseja fazer agora?</p>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-3">
                             <button
-                                onClick={() => { setShowPostSaveModal(false); resetForm(); setActiveTab('new'); }}
-                                className="py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm hover:bg-[#1a5f9e] transition-colors flex items-center justify-center gap-2"
+                                onClick={handleSendToRamper}
+                                disabled={ramperSending}
+                                className="w-full py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm hover:bg-[#1a5f9e] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                             >
-                                <PlusCircle className="w-4 h-4" strokeWidth={1.75} /> Nova Cotação
+                                <Send className="w-4 h-4" strokeWidth={1.75} /> {ramperSending ? 'Enviando...' : 'Mandar pro Ramper'}
                             </button>
-                            <button
-                                onClick={() => { setShowPostSaveModal(false); resetForm(); setActiveTab('history'); }}
-                                className="py-2.5 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg font-medium text-sm hover:bg-[#f9fafb] transition-colors flex items-center justify-center gap-2"
-                            >
-                                <History className="w-4 h-4" strokeWidth={1.75} /> Ver Histórico
-                            </button>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    onClick={() => { setShowPostSaveModal(false); resetForm(); setActiveTab('new'); }}
+                                    className="py-2.5 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg font-medium text-sm hover:bg-[#f9fafb] transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <PlusCircle className="w-4 h-4" strokeWidth={1.75} /> Nova Cotação
+                                </button>
+                                <button
+                                    onClick={() => { setShowPostSaveModal(false); resetForm(); setActiveTab('history'); }}
+                                    className="py-2.5 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg font-medium text-sm hover:bg-[#f9fafb] transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <History className="w-4 h-4" strokeWidth={1.75} /> Ver Histórico
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
