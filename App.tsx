@@ -3,14 +3,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight
+    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt';
-import { estimateDistance } from './services/geminiService';
+import { estimateDistance, parseRequest } from './services/geminiService';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
     getUsers,
@@ -129,6 +129,13 @@ const App: React.FC = () => {
 
     // Modal pós-salvar (Nova Cotação / Ver Histórico)
     const [showPostSaveModal, setShowPostSaveModal] = useState(false);
+
+    // Importar Solicitação (leitura inteligente via Gemini)
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importText, setImportText] = useState('');
+    const [importFile, setImportFile] = useState<{ name: string; base64: string; type: string } | null>(null);
+    const [importLoading, setImportLoading] = useState(false);
+    const [importSummary, setImportSummary] = useState<{ label: string; value: string; filled: boolean }[] | null>(null);
 
     // Novo estado para usuários e veículos
     const [newUserForm, setNewUserForm] = useState<Partial<User>>({ name: '', username: '', password: '', role: 'operador' });
@@ -789,6 +796,99 @@ Disponibilidade: ${disponibilidade}`;
         saveQuote('pending', false, true);
     };
 
+    // ===== Importar Solicitação (leitura inteligente via Gemini) =====
+    const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+
+    const openImportModal = () => {
+        setImportText(''); setImportFile(null); setImportSummary(null); setImportLoading(false);
+        setShowImportModal(true);
+    };
+
+    const handleImportFile = async (file: File | undefined) => {
+        if (!file) return;
+        try {
+            const base64 = await fileToBase64(file);
+            setImportFile({ name: file.name, base64, type: file.type });
+            setImportText('');
+        } catch {
+            showFeedback('Falha ao ler o arquivo.', 'error');
+        }
+    };
+
+    // Preenche os campos do formulário com o JSON interpretado. Não calcula nada.
+    const applyParsedFields = (data: any) => {
+        const norm = (v: any) => (v === null || v === undefined || String(v).trim() === '' || String(v).toLowerCase() === 'null') ? '' : String(v).trim();
+        const origem = norm(data.origem);
+        const destino = norm(data.destino);
+        const tipoCarga = norm(data.tipoCarga);
+        const pesoRaw = norm(data.peso);
+        const valorRaw = norm(data.valorMercadoria);
+        const disp = norm(data.disponibilidade).toLowerCase();
+        const sol = norm(data.solicitante);
+        const obs = norm(data.observacoes);
+
+        if (origem) setOrigin(origem);
+        if (destino) setDestination(destino);
+        if (tipoCarga) setMerchandiseType(tipoCarga);
+
+        const pesoNum = parseFloat(pesoRaw.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.'));
+        if (pesoRaw && !isNaN(pesoNum)) setWeight(String(pesoNum));
+
+        const valorNum = parseFloat(valorRaw.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.'));
+        if (valorRaw && !isNaN(valorNum)) setGoodsValue(maskCurrency(valorNum));
+
+        let dispLabel = '';
+        if (disp.includes('imediato')) { setDisponibilidade('Imediato'); dispLabel = 'Imediato'; }
+        else if (disp.includes('agendad') || disp.includes('program')) { setDisponibilidade('Conforme programação'); dispLabel = 'Conforme programação'; }
+
+        if (sol) {
+            setSolicitantes(prev => prev.includes(sol) ? prev : [...prev, sol]);
+            setSolicitante(sol);
+        }
+
+        // Resumo para conferência do operador.
+        const blank = '— (em branco)';
+        const summary = [
+            { label: 'Origem', value: origem || blank, filled: !!origem },
+            { label: 'Destino', value: destino || blank, filled: !!destino },
+            { label: 'Tipo de Mercadoria', value: tipoCarga || blank, filled: !!tipoCarga },
+            { label: 'Peso (kg)', value: (pesoRaw && !isNaN(pesoNum)) ? String(pesoNum) : blank, filled: !!(pesoRaw && !isNaN(pesoNum)) },
+            { label: 'Valor da Mercadoria', value: (valorRaw && !isNaN(valorNum)) ? `R$ ${formatCur(valorNum)}` : blank, filled: !!(valorRaw && !isNaN(valorNum)) },
+            { label: 'Disponibilidade', value: dispLabel || blank, filled: !!dispLabel },
+            { label: 'Solicitante', value: sol || blank, filled: !!sol },
+            { label: 'Observações', value: obs || blank, filled: !!obs },
+        ];
+        setImportSummary(summary);
+    };
+
+    const handleImportParse = async () => {
+        if (!importFile && !importText.trim()) {
+            showFeedback('Cole um texto ou anexe um arquivo.', 'info');
+            return;
+        }
+        setImportLoading(true);
+        try {
+            const result = importFile
+                ? await parseRequest({ fileBase64: importFile.base64, fileType: importFile.type })
+                : await parseRequest({ content: importText.trim() });
+            if (result?.error) {
+                showFeedback(`Erro na leitura: ${result.error}`, 'error');
+            } else {
+                applyParsedFields(result);
+                showFeedback('Solicitação interpretada! Confira os campos.');
+            }
+        } catch (e: any) {
+            showFeedback(`Falha ao interpretar: ${e.message}`, 'error');
+        } finally {
+            setImportLoading(false);
+        }
+    };
+
     const generatePDF = async () => {
         const doc = new jsPDF();
         const primaryColor = "#1d6fb8"; // OmniCargo Blue
@@ -1291,6 +1391,15 @@ Disponibilidade: ${disponibilidade}`;
 
                     {activeTab === 'new' && (
                         <div className="space-y-8 animate-fade-in-up">
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={openImportModal}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#e5e7eb] rounded-lg text-sm font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors"
+                                    title="Ler uma solicitação (e-mail/mensagem/arquivo) e preencher os campos automaticamente"
+                                >
+                                    <Sparkles className="w-4 h-4 text-[#1d6fb8]" strokeWidth={1.75} /> Importar Solicitação
+                                </button>
+                            </div>
                             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                                 <div className="lg:col-span-3 space-y-8">
                                     <div className="bg-white p-8 rounded-xl shadow-sm border space-y-6">
@@ -1785,6 +1894,89 @@ Disponibilidade: ${disponibilidade}`;
             </main >
 
             {/* Modal de Validação de Margem */}
+            {/* Modal: Importar Solicitação (leitura inteligente via Gemini) */}
+            {showImportModal && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="bg-white w-full max-w-lg rounded-xl border border-[#e5e7eb] shadow-sm overflow-hidden">
+                        <div className="p-5 border-b border-[#e5e7eb] flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-[#1d6fb8]" strokeWidth={1.75} />
+                                <h3 className="text-base font-medium text-[#111827]">Importar Solicitação</h3>
+                            </div>
+                            <button onClick={() => setShowImportModal(false)} className="p-1.5 text-[#6b7280] hover:bg-[#f9fafb] rounded-md transition-colors">
+                                <X className="w-4 h-4" strokeWidth={1.75} />
+                            </button>
+                        </div>
+
+                        {!importSummary ? (
+                            <div className="p-5 space-y-4">
+                                <p className="text-sm font-normal text-[#6b7280]">
+                                    Anexe um arquivo (JPG, PNG ou PDF) <span className="font-medium">ou</span> cole o texto do e-mail/mensagem. A IA vai extrair os dados e preencher os campos.
+                                </p>
+
+                                <label className={`flex items-center justify-center gap-2 w-full px-4 py-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${importFile ? 'border-[#1d6fb8] bg-[#eff6ff]' : 'border-[#e5e7eb] hover:bg-[#f9fafb]'}`}>
+                                    <Upload className="w-4 h-4 text-[#6b7280]" strokeWidth={1.75} />
+                                    <span className="text-sm font-medium text-[#111827] truncate">
+                                        {importFile ? importFile.name : 'Selecionar arquivo (JPG/PNG/PDF)'}
+                                    </span>
+                                    <input type="file" accept="image/png,image/jpeg,application/pdf" className="hidden" onChange={e => handleImportFile(e.target.files?.[0])} />
+                                </label>
+
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1 h-px bg-[#e5e7eb]"></div>
+                                    <span className="text-[11px] font-medium text-[#6b7280] uppercase">ou</span>
+                                    <div className="flex-1 h-px bg-[#e5e7eb]"></div>
+                                </div>
+
+                                <textarea
+                                    value={importText}
+                                    onChange={e => { setImportText(e.target.value); if (e.target.value) setImportFile(null); }}
+                                    placeholder="Cole aqui o conteúdo do e-mail ou mensagem..."
+                                    rows={6}
+                                    className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors resize-none"
+                                />
+
+                                <div className="flex justify-end gap-3 pt-1">
+                                    <button onClick={() => setShowImportModal(false)} className="px-4 py-2.5 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg text-sm font-medium hover:bg-[#f9fafb] transition-colors">
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleImportParse}
+                                        disabled={importLoading || (!importFile && !importText.trim())}
+                                        className="px-4 py-2.5 bg-[#1d6fb8] text-white rounded-lg text-sm font-medium hover:bg-[#1a5f9e] transition-colors disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        <Sparkles className="w-4 h-4" strokeWidth={1.75} />
+                                        {importLoading ? 'Interpretando...' : 'Interpretar'}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="p-5 space-y-4">
+                                <p className="text-sm font-normal text-[#6b7280]">
+                                    Campos preenchidos. Confira antes de continuar — os que ficaram em branco podem ser preenchidos manualmente.
+                                </p>
+                                <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                                    {importSummary.map((item, i) => (
+                                        <div key={i} className="flex items-center justify-between bg-[#f9fafb] border border-[#e5e7eb] rounded-lg px-3 py-2 gap-3">
+                                            <span className="text-[11px] font-medium text-[#6b7280] shrink-0">{item.label}</span>
+                                            <span className={`text-xs text-right truncate ${item.filled ? 'font-medium text-[#111827]' : 'font-normal text-[#9ca3af] italic'}`}>{item.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex justify-end gap-3 pt-1">
+                                    <button onClick={() => { setImportSummary(null); setImportText(''); setImportFile(null); }} className="px-4 py-2.5 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg text-sm font-medium hover:bg-[#f9fafb] transition-colors">
+                                        Importar outra
+                                    </button>
+                                    <button onClick={() => setShowImportModal(false)} className="px-4 py-2.5 bg-[#1d6fb8] text-white rounded-lg text-sm font-medium hover:bg-[#1a5f9e] transition-colors flex items-center gap-2">
+                                        <Check className="w-4 h-4" strokeWidth={1.75} /> Concluir
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Modal pós-salvar: Nova Cotação ou Ver Histórico */}
             {showPostSaveModal && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-6 animate-fade-in">

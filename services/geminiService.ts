@@ -66,3 +66,24 @@ export const extractDataFromDoc = async (fileBase64: string, fileType: string) =
     }
 };
 
+// Leitura inteligente de solicitação de frete (texto colado ou arquivo) via Gemini.
+// Retorna { origem, destino, tipoCarga, peso, valorMercadoria, disponibilidade, solicitante, observacoes } ou { error }.
+export const parseRequest = async (params: { content?: string; fileBase64?: string; fileType?: string }) => {
+    console.log('--- IMPORT: parseRequest started ---', { hasFile: !!params.fileBase64, hasText: !!params.content });
+    try {
+        const { data, error } = await supabase.functions.invoke('parse-request', { body: params });
+        if (error) {
+            console.error('--- IMPORT ERROR: Supabase Function Invoke (parse-request) ---', error);
+            return { error: error.message };
+        }
+        if (data?.error) {
+            console.error('--- IMPORT FAILED (Gemini internal) ---', data.error);
+            return { error: data.error };
+        }
+        return data;
+    } catch (error: any) {
+        console.error('--- IMPORT CRITICAL ERROR: catch block ---', error);
+        return { error: error.message };
+    }
+};
+
