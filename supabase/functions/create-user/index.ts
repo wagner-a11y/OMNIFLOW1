@@ -47,21 +47,24 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
-    // action 'create' — convite por e-mail (usuário define a própria senha) + perfil.
-    const { email, name, role, redirectTo } = body;
-    if (!email || !name) return json({ error: 'email e name são obrigatórios.' }, 400);
+    // action 'create' — cria o usuário já com senha inicial (sem e-mail). O usuário troca depois.
+    const { email, name, role, password } = body;
+    if (!email || !name || !password) return json({ error: 'email, name e password são obrigatórios.' }, 400);
+    if (String(password).length < 6) return json({ error: 'A senha inicial deve ter ao menos 6 caracteres.' }, 400);
     const finalRole = role === 'master' ? 'master' : 'operador';
 
-    const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
-      data: { name },
-      redirectTo: redirectTo || undefined,
+    const { data: created, error: createErr } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // já habilitado para login imediato (sem e-mail de confirmação)
+      user_metadata: { name },
     });
-    if (inviteErr || !invited?.user) {
-      return json({ error: `Falha ao convidar: ${inviteErr?.message || 'desconhecido'}` }, 400);
+    if (createErr || !created?.user) {
+      return json({ error: `Falha ao criar usuário: ${createErr?.message || 'desconhecido'}` }, 400);
     }
 
     const { error: profErr } = await admin.from('profiles').upsert({
-      id: invited.user.id,
+      id: created.user.id,
       name,
       email,
       role: finalRole,
@@ -70,7 +73,7 @@ Deno.serve(async (req) => {
       return json({ error: `Usuário criado, mas falhou ao salvar perfil: ${profErr.message}` }, 500);
     }
 
-    return json({ ok: true, id: invited.user.id, email, name, role: finalRole });
+    return json({ ok: true, id: created.user.id, email, name, role: finalRole });
   } catch (error) {
     console.error('CREATE-USER ERROR:', (error as Error).message);
     return json({ error: (error as Error).message }, 500);

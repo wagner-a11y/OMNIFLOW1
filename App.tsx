@@ -2660,14 +2660,18 @@ Disponibilidade: ${disponibilidade}`;
                                                     <Users className="w-5 h-5 text-blue-600" />
                                                     <h3 className="font-medium text-[#111827] uppercase text-xs">Cadastrar Novo Usuário</h3>
                                                 </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                                     <div>
                                                         <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Nome Completo</label>
                                                         <input type="text" id="new-user-name" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="Ex: João Silva" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">E-mail</label>
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">E-mail (login)</label>
                                                         <input type="email" id="new-user-email" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="ex: joao@empresa.com" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Senha inicial</label>
+                                                        <input type="text" id="new-user-password" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="mín. 6 caracteres" />
                                                     </div>
                                                     <div>
                                                         <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Perfil</label>
@@ -2677,29 +2681,34 @@ Disponibilidade: ${disponibilidade}`;
                                                         </select>
                                                     </div>
                                                 </div>
-                                                <p className="text-[10px] font-normal text-[#6b7280] mb-3">O usuário receberá um e-mail de convite para definir a própria senha. O login dele será o e-mail.</p>
+                                                <p className="text-[10px] font-normal text-[#6b7280] mb-3">Você define a senha inicial e repassa ao usuário. Ele entra com o e-mail + essa senha e troca depois em "Trocar senha".</p>
                                                 <button
                                                     onClick={async () => {
                                                         const nameEl = document.getElementById('new-user-name') as HTMLInputElement;
                                                         const emailEl = document.getElementById('new-user-email') as HTMLInputElement;
+                                                        const passwordEl = document.getElementById('new-user-password') as HTMLInputElement;
                                                         const roleEl = document.getElementById('new-user-role') as HTMLSelectElement;
-                                                        if (!nameEl.value.trim() || !emailEl.value.trim()) {
-                                                            showFeedback('Preencha nome e e-mail.', 'error');
+                                                        if (!nameEl.value.trim() || !emailEl.value.trim() || !passwordEl.value.trim()) {
+                                                            showFeedback('Preencha nome, e-mail e senha inicial.', 'error');
                                                             return;
                                                         }
-                                                        showFeedback('Enviando convite...', 'info');
+                                                        if (passwordEl.value.trim().length < 6) {
+                                                            showFeedback('A senha inicial deve ter ao menos 6 caracteres.', 'error');
+                                                            return;
+                                                        }
+                                                        showFeedback('Criando usuário...', 'info');
                                                         const res = await createUserAccount({
                                                             email: emailEl.value.trim(),
                                                             name: nameEl.value.trim(),
                                                             role: roleEl.value,
-                                                            redirectTo: window.location.origin,
+                                                            password: passwordEl.value.trim(),
                                                         });
                                                         if (res?.error) {
                                                             showFeedback(`Erro ao cadastrar: ${res.error}`, 'error');
                                                         } else {
-                                                            nameEl.value = ''; emailEl.value = '';
+                                                            nameEl.value = ''; emailEl.value = ''; passwordEl.value = '';
                                                             getProfiles().then(setUsers);
-                                                            showFeedback('Convite enviado! O usuário define a senha pelo e-mail.');
+                                                            showFeedback('Usuário criado! Repasse o e-mail e a senha inicial.');
                                                         }
                                                     }}
                                                     className="w-full py-5 bg-blue-600 text-white rounded-lg font-medium uppercase text-xs shadow-sm shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
