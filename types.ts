@@ -100,7 +100,9 @@ export interface FreightCalculation {
     realMarginPercent?: number;
     elaborationSeconds?: number; // Tempo de elaboração da cotação em segundos (cronômetro)
     isEdited?: boolean;
-    updatedBy?: string;
+    createdBy?: string;       // autor da CRIAÇÃO (gravado uma vez, nunca sobrescrito)
+    createdByName?: string;
+    updatedBy?: string;       // último que editou
     updatedByName?: string;
     updatedAt?: string;
     lostReason?: LostReason;

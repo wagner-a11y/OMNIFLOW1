@@ -744,6 +744,9 @@ const App: React.FC = () => {
             tolls: num(tolls), extraCosts: num(extraCosts), extraCostsDescription, goodsValue: num(goodsValue), insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
             pisPercent: fedTaxes.pis, cofinsPercent: fedTaxes.cofins, csllPercent: fedTaxes.csll, irpjPercent: fedTaxes.irpj,
             totalFreight: calcData.finalFreight, createdAt: createdDate, disponibilidade, status, updatedBy: currentUser?.id, updatedByName: currentUser?.name,
+            // Autoria imutável: na criação grava o usuário atual; na edição preserva o autor original.
+            createdBy: editingId ? existingQuote?.createdBy : currentUser?.id,
+            createdByName: editingId ? existingQuote?.createdByName : currentUser?.name,
             realProfit: calcData.realProfitAmount, realMarginPercent: calcData.realMarginPercent,
             elaborationSeconds: elapsedSeconds,
             otherCosts
