@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
     // Nota da oportunidade (campo "history" = Notas, conforme doc LSCRM): preço base interno.
     if (basePrice != null && !isNaN(Number(basePrice))) {
       const v = Number(basePrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      form.set('history', `Preço base: R$ ${v}`);
+      form.set('history', `Valor a pagar pro terceiro: R$ ${v}`);
     }
 
     const res = await fetch(`${RAMPER_BASE}/opportunities`, {
