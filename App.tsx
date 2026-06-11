@@ -10,8 +10,9 @@ import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt';
-import { estimateDistance, parseRequest } from './services/geminiService';
+import { estimateDistance, estimateMultiRoute, parseRequest } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
+import { RouteMap } from './components/RouteMap';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
     getProfile,
@@ -91,6 +92,10 @@ const App: React.FC = () => {
     // Form State
     const [origin, setOrigin] = useState('');
     const [destination, setDestination] = useState('');
+    // Multidestino: destinos extras (destino 2..8). Vazio = destino único (comportamento atual).
+    const [destinations, setDestinations] = useState<string[]>([]);
+    const [showMap, setShowMap] = useState(false);
+    const [routeLoading, setRouteLoading] = useState(false);
     const [clientReference, setClientReference] = useState('');
     const [distanceKm, setDistanceKm] = useState<string>('0');
     const [vehicleType, setVehicleType] = useState<string>(Object.keys(vehicleConfigs)[0] || "Truck");
@@ -710,6 +715,42 @@ const App: React.FC = () => {
         } finally { setLoadingDistance(false); }
     };
 
+    // Recalcula a rota multi-parada (coleta + destino + destinos extras). A distância TOTAL
+    // alimenta o cálculo (distanceKm); o pedágio e a otimização vêm do backend. Não mexe na fórmula.
+    const fetchMultiRoute = async (optimize = false) => {
+        const stops = [destination, ...destinations].map(d => (d || '').trim()).filter(Boolean);
+        if (!origin.trim() || stops.length < 2) {
+            showFeedback('Informe a coleta e ao menos 2 destinos para a rota.', 'info');
+            return;
+        }
+        setRouteLoading(true);
+        try {
+            const axles = vehicleConfigs[vehicleType]?.axles;
+            const res = await estimateMultiRoute(origin, stops, vehicleType, axles, optimize);
+            if (res?.error || !res?.km) {
+                showFeedback(`Erro na rota: ${res?.error || 'sem distância'}`, 'error');
+                return;
+            }
+            // Otimização: reordena os destinos conforme a ordem dos intermediários (destino final fica fixo).
+            if (optimize && Array.isArray(res.optimizedIntermediateOrder)) {
+                const intermediates = stops.slice(0, -1);
+                const last = stops[stops.length - 1];
+                const reordered = [...res.optimizedIntermediateOrder.map((i: number) => intermediates[i]), last];
+                setDestination(reordered[0]);
+                setDestinations(reordered.slice(1));
+                showFeedback('Ordem otimizada e rota recalculada!');
+            } else {
+                showFeedback('Rota recalculada!');
+            }
+            setDistanceKm(String(res.km));
+            setTolls(maskCurrency(res.estimatedTolls || 0));
+        } catch (err: any) {
+            showFeedback(`Falha na rota: ${err.message}`, 'error');
+        } finally {
+            setRouteLoading(false);
+        }
+    };
+
     const historicalAlert = useMemo(() => {
         if (!origin || !destination) return null;
         const routeMatches = history.filter(h =>
@@ -757,7 +798,7 @@ const App: React.FC = () => {
         const data: FreightCalculation = {
             id: quoteId,
             proposalNumber: editingId ? (history.find(h => h.id === editingId)?.proposalNumber || '') : `CT-${new Date().getFullYear()}-${(history.length + 1).toString().padStart(4, '0')}`,
-            clientReference, origin, destination, distanceKm: parseFloat(distanceKm.replace(',', '.')) || 0, vehicleType: vehicleType as VehicleType, merchandiseType, weight: parseFloat(weight.replace(',', '.')) || 0,
+            clientReference, origin, destination, destinations: destinations.map(d => (d || '').trim()).filter(Boolean), distanceKm: parseFloat(distanceKm.replace(',', '.')) || 0, vehicleType: vehicleType as VehicleType, merchandiseType, weight: parseFloat(weight.replace(',', '.')) || 0,
             customerId: selectedCustomerId, suggestedFreight: suggestedFreightANTT, solicitante,
             baseFreight: num(baseFreight),
             tolls: num(tolls), extraCosts: num(extraCosts), extraCostsDescription, goodsValue: num(goodsValue), insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
@@ -814,7 +855,7 @@ const App: React.FC = () => {
     };
 
     const loadQuote = (quote: FreightCalculation) => {
-        setOrigin(quote.origin); setDestination(quote.destination); setClientReference(quote.clientReference || ''); setDistanceKm(quote.distanceKm.toString());
+        setOrigin(quote.origin); setDestination(quote.destination); setDestinations(quote.destinations || []); setShowMap(false); setClientReference(quote.clientReference || ''); setDistanceKm(quote.distanceKm.toString());
         setVehicleType(quote.vehicleType); setWeight(quote.weight.toString()); setSelectedCustomerId(quote.customerId); setBaseFreight(maskCurrency(quote.baseFreight));
         setTolls(maskCurrency(quote.tolls)); setExtraCosts(maskCurrency(quote.extraCosts || 0)); setExtraCostsDescription(quote.extraCostsDescription || '');
         setGoodsValue(maskCurrency(quote.goodsValue)); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
@@ -827,7 +868,7 @@ const App: React.FC = () => {
     };
 
     const resetForm = () => {
-        setOrigin(''); setDestination(''); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
+        setOrigin(''); setDestination(''); setDestinations([]); setShowMap(false); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
         setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setEditingId(null);
         setDisponibilidade("Imediato"); setMerchandiseType(''); setCargoType('Carga geral'); setOtherCosts([]);
         setSolicitante('');
@@ -1568,12 +1609,49 @@ Disponibilidade: ${disponibilidade}`;
                                         </div>
                                         <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={origin} onChange={e => { startTimer(); setOrigin(e.target.value); }} onBlur={handleFetchDistance} placeholder="Origem (Cidade, UF)" />
+                                                <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={origin} onChange={e => { startTimer(); setOrigin(e.target.value); }} onBlur={() => { if (destinations.length === 0) handleFetchDistance(); }} placeholder="Origem / Coleta (Cidade, UF)" />
                                             </div>
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={destination} onChange={e => { startTimer(); setDestination(e.target.value); }} onBlur={handleFetchDistance} placeholder="Destino (Cidade, UF)" />
+                                                <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={destination} onChange={e => { startTimer(); setDestination(e.target.value); }} onBlur={() => { if (destinations.length === 0) handleFetchDistance(); }} placeholder={destinations.length ? 'Destino 1 (Cidade, UF)' : 'Destino (Cidade, UF)'} />
                                             </div>
                                         </div>
+
+                                        {/* Multidestino: destinos extras (2..8), reordenáveis + otimizar + mapa */}
+                                        <div className="space-y-2">
+                                            {destinations.map((d, i) => (
+                                                <div key={i} className="flex items-center gap-2">
+                                                    <span className="shrink-0 w-7 h-7 rounded-full bg-[#eff6ff] text-[#1d6fb8] text-xs font-medium flex items-center justify-center">{i + 2}</span>
+                                                    <input type="text" className="flex-1 min-w-0 px-4 py-3 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={d} onChange={e => { startTimer(); setDestinations(prev => prev.map((x, j) => j === i ? e.target.value : x)); }} placeholder={`Destino ${i + 2} (Cidade, UF)`} />
+                                                    <button type="button" title="Subir" disabled={i === 0} onClick={() => setDestinations(prev => { const a = [...prev]; [a[i - 1], a[i]] = [a[i], a[i - 1]]; return a; })} className="shrink-0 p-2 text-[#6b7280] hover:bg-[#f9fafb] rounded-lg disabled:opacity-30"><ArrowDown className="w-4 h-4 rotate-180" strokeWidth={1.75} /></button>
+                                                    <button type="button" title="Descer" disabled={i === destinations.length - 1} onClick={() => setDestinations(prev => { const a = [...prev]; [a[i + 1], a[i]] = [a[i], a[i + 1]]; return a; })} className="shrink-0 p-2 text-[#6b7280] hover:bg-[#f9fafb] rounded-lg disabled:opacity-30"><ArrowDown className="w-4 h-4" strokeWidth={1.75} /></button>
+                                                    <button type="button" title="Remover destino" onClick={() => setDestinations(prev => prev.filter((_, j) => j !== i))} className="shrink-0 p-2 text-[#6b7280] hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" strokeWidth={1.75} /></button>
+                                                </div>
+                                            ))}
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {destinations.length < 7 && (
+                                                    <button type="button" onClick={() => setDestinations(prev => [...prev, ''])} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e5e7eb] rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors">
+                                                        <Plus className="w-3.5 h-3.5 text-[#1d6fb8]" strokeWidth={1.75} /> Adicionar destino
+                                                    </button>
+                                                )}
+                                                {destinations.length > 0 && (
+                                                    <>
+                                                        <button type="button" disabled={routeLoading} onClick={() => fetchMultiRoute(false)} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e5e7eb] rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors disabled:opacity-50">
+                                                            <RotateCcw className={`w-3.5 h-3.5 ${routeLoading ? 'animate-spin' : ''}`} strokeWidth={1.75} /> {routeLoading ? 'Calculando...' : 'Recalcular rota'}
+                                                        </button>
+                                                        <button type="button" disabled={routeLoading} onClick={() => fetchMultiRoute(true)} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e5e7eb] rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors disabled:opacity-50">
+                                                            <Zap className="w-3.5 h-3.5 text-[#1d6fb8]" strokeWidth={1.75} /> Otimizar ordem
+                                                        </button>
+                                                        <button type="button" onClick={() => setShowMap(v => !v)} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e5e7eb] rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors">
+                                                            <MapIcon className="w-3.5 h-3.5 text-[#1d6fb8]" strokeWidth={1.75} /> {showMap ? 'Ocultar rota' : 'Ver rota'}
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                            {showMap && destinations.length > 0 && (
+                                                <RouteMap origin={origin} destinos={[destination, ...destinations]} />
+                                            )}
+                                        </div>
+
                                         {/* Alerta de Histórico */}
                                         {historicalAlert}
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">

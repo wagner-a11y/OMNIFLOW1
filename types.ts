@@ -72,6 +72,7 @@ export interface FreightCalculation {
     clientReference?: string;
     origin: string;
     destination: string;
+    destinations?: string[]; // destinos extras (multidestino); vazio/ausente = destino único
     distanceKm: number;
     vehicleType: VehicleType;
     merchandiseType: string;

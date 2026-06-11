@@ -40,6 +40,21 @@ export const estimateDistance = async (origin: string, destination: string, vehi
     }
 };
 
+// Rota multi-parada: coleta + lista de destinos. Retorna distância total, pedágio,
+// ordem otimizada dos intermediários e polyline. (Edge function calculate-route, modo multi.)
+export const estimateMultiRoute = async (origin: string, destinations: string[], vehicleType: string, axles?: number, optimize = false) => {
+    try {
+        const { data, error } = await supabase.functions.invoke('calculate-route', {
+            body: { origin, destinations, vehicleType, axles: axles || 6, optimize },
+        });
+        if (error) return { error: error.message };
+        if (data?.error) return { error: data.error };
+        return data;
+    } catch (error: any) {
+        return { error: error.message };
+    }
+};
+
 export const extractDataFromDoc = async (fileBase64: string, fileType: string) => {
     console.log('--- OCR: extractDataFromDoc started ---', { fileType });
     try {
