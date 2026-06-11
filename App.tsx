@@ -148,9 +148,10 @@ const App: React.FC = () => {
     const [newUserForm, setNewUserForm] = useState<Partial<User>>({ name: '', username: '', password: '', role: 'operador' });
     const [newVehicleName, setNewVehicleName] = useState('');
 
+    // Carrega os dados só DEPOIS de autenticar (necessário p/ RLS: leitura exige sessão).
     useEffect(() => {
-        loadAllData();
-    }, []);
+        if (currentUser?.id) loadAllData();
+    }, [currentUser?.id]);
 
     // --- SESSÃO SUPABASE AUTH ---
     // Mantém "Carregando" até o perfil resolver (evita flash da tela de login no F5).
