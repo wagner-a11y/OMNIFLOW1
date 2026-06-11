@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-// Carrega o script do Google Maps JS sob demanda (uma única vez). Chave só via env.
+// Carrega o script do Google Maps JS sob demanda (uma única vez). Só a Maps JavaScript API
+// (lib geometry, que faz parte dela) — NÃO usa Directions/Geocoding (chave restrita).
 let mapsPromise: Promise<any> | null = null;
 function loadGoogleMaps(apiKey: string): Promise<any> {
     if ((window as any).google?.maps) return Promise.resolve((window as any).google.maps);
@@ -17,68 +18,80 @@ function loadGoogleMaps(apiKey: string): Promise<any> {
     return mapsPromise;
 }
 
-// Desenha a rota: coleta (C) + destinos na ordem (1..N), com a linha do trajeto.
-// O mapa SÓ desenha — distância/otimização vêm do backend (calculate-route).
-export const RouteMap: React.FC<{ origin: string; destinos: string[] }> = ({ origin, destinos }) => {
+// Error boundary local: qualquer falha do mapa mostra aviso só nesta área, nunca branqueia a tela.
+export class MapErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+    constructor(props: any) { super(props); this.state = { hasError: false }; }
+    static getDerivedStateFromError() { return { hasError: true }; }
+    componentDidCatch(err: any) { console.error('RouteMap error:', err); }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="mt-3 w-full h-40 rounded-lg border border-[#e5e7eb] bg-[#f9fafb] flex items-center justify-center">
+                    <p className="text-sm font-normal text-[#6b7280]">Não foi possível exibir o mapa. A cotação segue normalmente.</p>
+                </div>
+            );
+        }
+        return this.props.children as any;
+    }
+}
+
+// Desenha a rota a partir dos dados do BACKEND: polyline (codificada) + coords das paradas.
+// Cliente só renderiza (Map + Polyline + Marker). Sem DirectionsService (deprecado/bloqueado).
+export const RouteMap: React.FC<{ polyline?: string; stops?: { lat: number; lng: number }[] }> = ({ polyline, stops }) => {
     const ref = useRef<HTMLDivElement>(null);
     const mapRef = useRef<any>(null);
-    const rendererRef = useRef<any>(null);
-    const markersRef = useRef<any[]>([]);
+    const overlaysRef = useRef<any[]>([]);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
-
-    const stops = destinos.map(d => (d || '').trim()).filter(Boolean);
 
     useEffect(() => {
         const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
         if (!apiKey) { setError('Chave do Google Maps não configurada neste ambiente (só ativa em produção).'); setLoading(false); return; }
-        if (!origin.trim() || stops.length === 0) { setError('Defina a coleta e ao menos um destino.'); setLoading(false); return; }
+        if (!polyline && (!stops || stops.length === 0)) { setError('Clique em "Recalcular rota" para gerar o trajeto.'); setLoading(false); return; }
 
         let cancelled = false;
         setLoading(true);
         loadGoogleMaps(apiKey).then((maps) => {
             if (cancelled || !ref.current) return;
+            setLoading(false);
+            setError('');
             if (!mapRef.current) {
                 mapRef.current = new maps.Map(ref.current, {
                     center: { lat: -20.3, lng: -40.3 }, zoom: 6,
                     disableDefaultUI: true, zoomControl: true, gestureHandling: 'cooperative',
                 });
-                rendererRef.current = new maps.DirectionsRenderer({
-                    map: mapRef.current, suppressMarkers: true,
-                    polylineOptions: { strokeColor: '#1d6fb8', strokeWeight: 5, strokeOpacity: 0.9 },
-                });
             }
-            const svc = new maps.DirectionsService();
-            svc.route({
-                origin,
-                destination: stops[stops.length - 1],
-                waypoints: stops.slice(0, -1).map((location) => ({ location, stopover: true })),
-                travelMode: maps.TravelMode.DRIVING,
-                region: 'br',
-            }, (result: any, status: string) => {
-                if (cancelled) return;
-                setLoading(false);
-                if (status !== 'OK' || !result?.routes?.length) { setError('Não foi possível traçar a rota com esses endereços.'); return; }
-                setError('');
-                rendererRef.current.setDirections(result);
-                markersRef.current.forEach((m) => m.setMap(null));
-                markersRef.current = [];
-                const legs = result.routes[0].legs;
-                const makeMarker = (position: any, label: string, color: string) => new maps.Marker({
-                    position, map: mapRef.current,
-                    label: { text: label, color: '#fff', fontSize: '11px', fontWeight: '700' },
-                    icon: { path: maps.SymbolPath.CIRCLE, scale: 11, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 },
+            // Limpa overlays anteriores (redesenho ao mudar a ordem).
+            overlaysRef.current.forEach((o) => o.setMap(null));
+            overlaysRef.current = [];
+
+            const bounds = new maps.LatLngBounds();
+
+            // Linha da rota (decodifica a polyline do backend com a lib geometry).
+            if (polyline) {
+                const path = maps.geometry.encoding.decodePath(polyline);
+                const line = new maps.Polyline({ path, strokeColor: '#1d6fb8', strokeWeight: 5, strokeOpacity: 0.9, map: mapRef.current });
+                overlaysRef.current.push(line);
+                path.forEach((p: any) => bounds.extend(p));
+            }
+
+            // Marcadores: C (coleta) + 1..N (destinos), nas coords vindas do backend.
+            (stops || []).forEach((s, i) => {
+                const pos = { lat: s.lat, lng: s.lng };
+                const marker = new maps.Marker({
+                    position: pos, map: mapRef.current,
+                    label: { text: i === 0 ? 'C' : String(i), color: '#fff', fontSize: '11px', fontWeight: '700' },
+                    icon: { path: maps.SymbolPath.CIRCLE, scale: 11, fillColor: i === 0 ? '#059669' : '#1d6fb8', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 },
                 });
-                if (legs.length) {
-                    markersRef.current.push(makeMarker(legs[0].start_location, 'C', '#059669')); // coleta
-                    legs.forEach((leg: any, i: number) => markersRef.current.push(makeMarker(leg.end_location, String(i + 1), '#1d6fb8')));
-                }
+                overlaysRef.current.push(marker);
+                bounds.extend(pos);
             });
+
+            if (!bounds.isEmpty()) mapRef.current.fitBounds(bounds, 48);
         }).catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
 
         return () => { cancelled = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [origin, JSON.stringify(stops)]);
+    }, [polyline, JSON.stringify(stops)]);
 
     return (
         <div className="mt-3">

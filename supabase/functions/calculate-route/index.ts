@@ -129,7 +129,7 @@ async function getMultiRoute(origin: string, destinations: string[], axles: numb
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-        'X-Goog-FieldMask': 'routes.distanceMeters,routes.polyline.encodedPolyline,routes.travelAdvisory.tollInfo,routes.optimizedIntermediateWaypointIndex',
+        'X-Goog-FieldMask': 'routes.distanceMeters,routes.polyline.encodedPolyline,routes.travelAdvisory.tollInfo,routes.optimizedIntermediateWaypointIndex,routes.legs.startLocation,routes.legs.endLocation',
       },
       body: JSON.stringify(body),
     });
@@ -143,11 +143,24 @@ async function getMultiRoute(origin: string, destinations: string[], axles: numb
     const axleFactor = axles && axles > 0 ? axles / 2 : 1;
     const baseToll = sumTollPrice(route.travelAdvisory?.tollInfo);
     const estimatedTolls = baseToll > 0 ? Math.round(baseToll * axleFactor) : Math.round(km * 0.06 * (axles || 2));
+    // Coordenadas das paradas na ordem do trajeto (coleta = início da 1ª perna; destinos = fim de cada perna).
+    // O cliente usa isto para os marcadores — sem precisar geocodificar (chave restrita à Maps JS API).
+    const legs = route.legs || [];
+    const stops: { lat: number; lng: number }[] = [];
+    if (legs.length) {
+      const s0 = legs[0].startLocation?.latLng;
+      if (s0) stops.push({ lat: s0.latitude, lng: s0.longitude });
+      for (const leg of legs) {
+        const e = leg.endLocation?.latLng;
+        if (e) stops.push({ lat: e.latitude, lng: e.longitude });
+      }
+    }
     return {
       km,
       estimatedTolls,
       polyline: route.polyline?.encodedPolyline || '',
       optimizedIntermediateOrder: route.optimizedIntermediateWaypointIndex || null,
+      stops,
       multi: true,
     };
   } catch (err) {

@@ -12,7 +12,7 @@ import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt';
 import { estimateDistance, estimateMultiRoute, parseRequest } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
-import { RouteMap } from './components/RouteMap';
+import { RouteMap, MapErrorBoundary } from './components/RouteMap';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
     getProfile,
@@ -96,6 +96,7 @@ const App: React.FC = () => {
     const [destinations, setDestinations] = useState<string[]>([]);
     const [showMap, setShowMap] = useState(false);
     const [routeLoading, setRouteLoading] = useState(false);
+    const [routeGeometry, setRouteGeometry] = useState<{ polyline: string; stops: { lat: number; lng: number }[] } | null>(null);
     const [clientReference, setClientReference] = useState('');
     const [distanceKm, setDistanceKm] = useState<string>('0');
     const [vehicleType, setVehicleType] = useState<string>(Object.keys(vehicleConfigs)[0] || "Truck");
@@ -744,6 +745,7 @@ const App: React.FC = () => {
             }
             setDistanceKm(String(res.km));
             setTolls(maskCurrency(res.estimatedTolls || 0));
+            setRouteGeometry({ polyline: res.polyline || '', stops: Array.isArray(res.stops) ? res.stops : [] });
         } catch (err: any) {
             showFeedback(`Falha na rota: ${err.message}`, 'error');
         } finally {
@@ -855,7 +857,7 @@ const App: React.FC = () => {
     };
 
     const loadQuote = (quote: FreightCalculation) => {
-        setOrigin(quote.origin); setDestination(quote.destination); setDestinations(quote.destinations || []); setShowMap(false); setClientReference(quote.clientReference || ''); setDistanceKm(quote.distanceKm.toString());
+        setOrigin(quote.origin); setDestination(quote.destination); setDestinations(quote.destinations || []); setShowMap(false); setRouteGeometry(null); setClientReference(quote.clientReference || ''); setDistanceKm(quote.distanceKm.toString());
         setVehicleType(quote.vehicleType); setWeight(quote.weight.toString()); setSelectedCustomerId(quote.customerId); setBaseFreight(maskCurrency(quote.baseFreight));
         setTolls(maskCurrency(quote.tolls)); setExtraCosts(maskCurrency(quote.extraCosts || 0)); setExtraCostsDescription(quote.extraCostsDescription || '');
         setGoodsValue(maskCurrency(quote.goodsValue)); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
@@ -868,7 +870,7 @@ const App: React.FC = () => {
     };
 
     const resetForm = () => {
-        setOrigin(''); setDestination(''); setDestinations([]); setShowMap(false); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
+        setOrigin(''); setDestination(''); setDestinations([]); setShowMap(false); setRouteGeometry(null); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
         setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setEditingId(null);
         setDisponibilidade("Imediato"); setMerchandiseType(''); setCargoType('Carga geral'); setOtherCosts([]);
         setSolicitante('');
@@ -1641,14 +1643,16 @@ Disponibilidade: ${disponibilidade}`;
                                                         <button type="button" disabled={routeLoading} onClick={() => fetchMultiRoute(true)} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e5e7eb] rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors disabled:opacity-50">
                                                             <Zap className="w-3.5 h-3.5 text-[#1d6fb8]" strokeWidth={1.75} /> Otimizar ordem
                                                         </button>
-                                                        <button type="button" onClick={() => setShowMap(v => !v)} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e5e7eb] rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors">
+                                                        <button type="button" onClick={async () => { if (!showMap && !routeGeometry) { await fetchMultiRoute(false); } setShowMap(v => !v); }} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e5e7eb] rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors">
                                                             <MapIcon className="w-3.5 h-3.5 text-[#1d6fb8]" strokeWidth={1.75} /> {showMap ? 'Ocultar rota' : 'Ver rota'}
                                                         </button>
                                                     </>
                                                 )}
                                             </div>
                                             {showMap && destinations.length > 0 && (
-                                                <RouteMap origin={origin} destinos={[destination, ...destinations]} />
+                                                <MapErrorBoundary>
+                                                    <RouteMap polyline={routeGeometry?.polyline} stops={routeGeometry?.stops} />
+                                                </MapErrorBoundary>
                                             )}
                                         </div>
 
