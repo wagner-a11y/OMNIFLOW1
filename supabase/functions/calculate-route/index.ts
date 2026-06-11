@@ -101,6 +101,61 @@ async function getRouteFromGoogle(origin: string, destination: string, axles: nu
   }
 }
 
+// Rota multi-parada (coleta + vários destinos) via Routes API v2 com intermediates.
+// Retorna distância total, pedágio (escalado por eixos), polyline (p/ desenhar o mapa) e a
+// ordem otimizada dos intermediários (o destino final fica fixo, conforme a Routes API).
+async function getMultiRoute(origin: string, destinations: string[], axles: number, optimize: boolean) {
+  if (!GOOGLE_MAPS_API_KEY) return { error: 'GOOGLE_MAPS_API_KEY_MISSING' };
+  try {
+    const finalDest = destinations[destinations.length - 1];
+    const intermediates = destinations.slice(0, -1).map((a) => ({ address: a }));
+    const body: any = {
+      origin: { address: origin },
+      destination: { address: finalDest },
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_UNAWARE',
+      extraComputations: ['TOLLS'],
+      routeModifiers: { vehicleInfo: { emissionType: 'DIESEL' } },
+      languageCode: 'pt-BR',
+      regionCode: 'BR',
+      units: 'METRIC',
+    };
+    if (intermediates.length) {
+      body.intermediates = intermediates;
+      if (optimize) body.optimizeWaypointOrder = true;
+    }
+    const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+        'X-Goog-FieldMask': 'routes.distanceMeters,routes.polyline.encodedPolyline,routes.travelAdvisory.tollInfo,routes.optimizedIntermediateWaypointIndex',
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.routes?.length) {
+      const msg = data?.error?.message || data?.error?.status || `HTTP ${res.status}`;
+      return { error: `GOOGLE_ROUTES_ERROR: ${msg}` };
+    }
+    const route = data.routes[0];
+    const km = Math.round((route.distanceMeters || 0) / 1000);
+    const axleFactor = axles && axles > 0 ? axles / 2 : 1;
+    const baseToll = sumTollPrice(route.travelAdvisory?.tollInfo);
+    const estimatedTolls = baseToll > 0 ? Math.round(baseToll * axleFactor) : Math.round(km * 0.06 * (axles || 2));
+    return {
+      km,
+      estimatedTolls,
+      polyline: route.polyline?.encodedPolyline || '',
+      optimizedIntermediateOrder: route.optimizedIntermediateWaypointIndex || null,
+      multi: true,
+    };
+  } catch (err) {
+    console.error('Multi route error:', err);
+    return { error: 'GOOGLE_ROUTES_FETCH_FAILURE' };
+  }
+}
+
 function simplifyAddress(addr: string): string {
   const noCountry = addr.replace(/,?\\s*Bra[sz]il$/i, '').trim();
   const noCep = noCountry.replace(/,?\\s*\\d{5}-?\\d{3}/g, '').trim();
@@ -148,7 +203,16 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { origin, destination, vehicleType = 'Truck', axles = 6 } = await req.json();
+    const { origin, destination, destinations, vehicleType = 'Truck', axles = 6, optimize = false } = await req.json();
+
+    // --- Modo multi-parada (coleta + vários destinos). Caminho single-destino fica intacto abaixo. ---
+    if (Array.isArray(destinations) && destinations.length > 0) {
+      if (!origin) {
+        return new Response(JSON.stringify({ error: 'Origin is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const multi = await getMultiRoute(origin, destinations.map((d: string) => String(d)), axles, !!optimize);
+      return new Response(JSON.stringify(multi), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+    }
 
     if (!origin || !destination) {
       return new Response(
