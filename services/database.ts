@@ -30,6 +30,30 @@ export const getProfiles = async (): Promise<User[]> => {
     return (data || []).map((p: any) => ({ id: p.id, name: p.name, username: p.email, role: p.role }));
 };
 
+// Cria usuário via Edge Function (convite por e-mail + perfil). Só master (validado no servidor).
+export const createUserAccount = async (payload: { email: string; name: string; role: string; redirectTo?: string }) => {
+    try {
+        const { data, error } = await supabase.functions.invoke('create-user', { body: { action: 'create', ...payload } });
+        if (error) return { error: error.message };
+        if (data?.error) return { error: data.error };
+        return data;
+    } catch (e: any) {
+        return { error: e?.message || 'Erro ao criar usuário.' };
+    }
+};
+
+// Remove usuário (Auth + perfil) via Edge Function. Só master.
+export const deleteUserAccount = async (userId: string) => {
+    try {
+        const { data, error } = await supabase.functions.invoke('create-user', { body: { action: 'delete', userId } });
+        if (error) return { error: error.message };
+        if (data?.error) return { error: data.error };
+        return data;
+    } catch (e: any) {
+        return { error: e?.message || 'Erro ao remover usuário.' };
+    }
+};
+
 // =================== USERS (LEGADO — removido do login na Etapa A) ===================
 export const getUsers = async (): Promise<User[]> => {
     const { data, error } = await supabase

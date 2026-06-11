@@ -16,6 +16,8 @@ import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
     getProfile,
     getProfiles,
+    createUserAccount,
+    deleteUserAccount,
     getCustomers,
     createCustomer,
     deleteCustomer,
@@ -51,6 +53,10 @@ const App: React.FC = () => {
     // Estados de Autenticação (sessão nativa do Supabase Auth)
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [authLoading, setAuthLoading] = useState(true); // enquanto restaura a sessão
+    // Definição de senha (convite/recuperação): usuário chega pelo link do e-mail e cria a senha.
+    const [recoveryMode, setRecoveryMode] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [savingPassword, setSavingPassword] = useState(false);
     const [loginSubmitting, setLoginSubmitting] = useState(false);
     const [users, setUsers] = useState<User[]>([]); // perfis (tela de gestão do master)
     const [loginForm, setLoginForm] = useState({ username: '', password: '' }); // username = e-mail
@@ -151,6 +157,9 @@ const App: React.FC = () => {
     // onAuthStateChange (evita o deadlock do lock interno do auth).
     useEffect(() => {
         let mounted = true;
+        // Convite/recuperação: o link do e-mail traz type=invite|recovery no hash.
+        const hash = window.location.hash || '';
+        if (hash.includes('type=invite') || hash.includes('type=recovery')) setRecoveryMode(true);
         const resolveSession = (session: any) => {
             if (!session?.user) {
                 if (mounted) { setCurrentUser(null); setAuthLoading(false); }
@@ -170,9 +179,29 @@ const App: React.FC = () => {
             }, 0);
         };
         supabase.auth.getSession().then(({ data }) => resolveSession(data.session));
-        const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => resolveSession(session));
+        const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+            resolveSession(session);
+        });
         return () => { mounted = false; sub.subscription.unsubscribe(); };
     }, []);
+
+    // Define a senha do usuário convidado/recuperando e entra na plataforma.
+    const handleSetPassword = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (newPassword.trim().length < 6) { showFeedback('A senha deve ter ao menos 6 caracteres.', 'error'); return; }
+        setSavingPassword(true);
+        try {
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) { showFeedback(`Erro ao definir senha: ${error.message}`, 'error'); return; }
+            setNewPassword('');
+            setRecoveryMode(false);
+            window.history.replaceState(null, '', window.location.pathname);
+            showFeedback('Senha definida! Bem-vindo.');
+        } finally {
+            setSavingPassword(false);
+        }
+    };
 
     const loadAllData = async () => {
         try {
@@ -1173,6 +1202,28 @@ Disponibilidade: ${disponibilidade}`;
             reader.readAsDataURL(file);
         }
     };
+
+    if (recoveryMode) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa] p-6">
+                <div className="bg-white w-full max-w-md rounded-xl border border-[#e5e7eb] shadow-sm p-10 space-y-6">
+                    <div className="flex flex-col items-center">
+                        <div className="w-20 h-20 bg-[#f9fafb] border border-[#e5e7eb] p-4 rounded-xl mb-5 flex items-center justify-center overflow-hidden">
+                            {appLogo ? <img src={appLogo} alt="Logo" className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full" />}
+                        </div>
+                        <h1 className="text-xl font-medium text-[#111827] tracking-tight text-center">Defina sua senha</h1>
+                        <p className="text-sm font-normal text-[#6b7280] text-center mt-1">Crie a senha de acesso à sua conta OmniFlow.</p>
+                    </div>
+                    <form onSubmit={handleSetPassword} className="space-y-4">
+                        <input type="password" autoComplete="new-password" className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" placeholder="Nova senha (mín. 6 caracteres)" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                        <button type="submit" disabled={savingPassword} className="w-full py-3 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm cursor-pointer hover:bg-[#1a5f9e] active:scale-[0.99] transition-all disabled:opacity-50">
+                            {savingPassword ? 'Salvando...' : 'Definir senha e entrar'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        );
+    }
 
     if (authLoading) {
         return (
@@ -2564,18 +2615,14 @@ Disponibilidade: ${disponibilidade}`;
                                                     <Users className="w-5 h-5 text-blue-600" />
                                                     <h3 className="font-medium text-[#111827] uppercase text-xs">Cadastrar Novo Usuário</h3>
                                                 </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                                                     <div>
                                                         <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Nome Completo</label>
                                                         <input type="text" id="new-user-name" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="Ex: João Silva" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Login (Usuário)</label>
-                                                        <input type="text" id="new-user-username" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="Ex: joao.silva" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Senha</label>
-                                                        <input type="password" id="new-user-password" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="••••••••" />
+                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">E-mail</label>
+                                                        <input type="email" id="new-user-email" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="ex: joao@empresa.com" />
                                                     </div>
                                                     <div>
                                                         <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Perfil</label>
@@ -2585,8 +2632,31 @@ Disponibilidade: ${disponibilidade}`;
                                                         </select>
                                                     </div>
                                                 </div>
+                                                <p className="text-[10px] font-normal text-[#6b7280] mb-3">O usuário receberá um e-mail de convite para definir a própria senha. O login dele será o e-mail.</p>
                                                 <button
-                                                    onClick={() => showFeedback('Criação de usuários será ativada na Etapa B (Supabase Auth).', 'info')}
+                                                    onClick={async () => {
+                                                        const nameEl = document.getElementById('new-user-name') as HTMLInputElement;
+                                                        const emailEl = document.getElementById('new-user-email') as HTMLInputElement;
+                                                        const roleEl = document.getElementById('new-user-role') as HTMLSelectElement;
+                                                        if (!nameEl.value.trim() || !emailEl.value.trim()) {
+                                                            showFeedback('Preencha nome e e-mail.', 'error');
+                                                            return;
+                                                        }
+                                                        showFeedback('Enviando convite...', 'info');
+                                                        const res = await createUserAccount({
+                                                            email: emailEl.value.trim(),
+                                                            name: nameEl.value.trim(),
+                                                            role: roleEl.value,
+                                                            redirectTo: window.location.origin,
+                                                        });
+                                                        if (res?.error) {
+                                                            showFeedback(`Erro ao cadastrar: ${res.error}`, 'error');
+                                                        } else {
+                                                            nameEl.value = ''; emailEl.value = '';
+                                                            getProfiles().then(setUsers);
+                                                            showFeedback('Convite enviado! O usuário define a senha pelo e-mail.');
+                                                        }
+                                                    }}
                                                     className="w-full py-5 bg-blue-600 text-white rounded-lg font-medium uppercase text-xs shadow-sm shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
                                                 >
                                                     <Save className="w-4 h-4" /> Cadastrar Usuário
@@ -2608,7 +2678,12 @@ Disponibilidade: ${disponibilidade}`;
                                                         </div>
                                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                                             {currentUser.role === 'master' && u.id !== currentUser.id && (
-                                                                <button onClick={() => showFeedback('Remoção de usuários será ativada na Etapa B (Supabase Auth).', 'info')} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
+                                                                <button onClick={async () => {
+                                                                    if (!confirm(`Remover o usuário ${u.name}? Esta ação apaga o acesso dele.`)) return;
+                                                                    const res = await deleteUserAccount(u.id);
+                                                                    if (res?.error) { showFeedback(`Erro ao remover: ${res.error}`, 'error'); }
+                                                                    else { setUsers(users.filter(i => i.id !== u.id)); showFeedback('Usuário removido!'); }
+                                                                }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
                                                                     <Trash2 className="w-4 h-4" />
                                                                 </button>
                                                             )}
