@@ -11,7 +11,12 @@ export const createRamperCard = async (payload: {
 }) => {
     try {
         const { data, error } = await supabase.functions.invoke('create-ramper-card', { body: payload });
-        if (error) return { error: error.message };
+        if (error) {
+            // supabase.functions.invoke devolve só "non-2xx status code"; lê o erro real do corpo.
+            let msg = error.message;
+            try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* noop */ }
+            return { error: msg };
+        }
         if (data?.error) return { error: data.error };
         return data;
     } catch (error: any) {

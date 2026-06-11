@@ -965,21 +965,26 @@ Disponibilidade: ${disponibilidade}`;
 
     // Envia a cotação salva como card no Ramper Pipeline (etapa "Cotações"). Erro é exibido, nunca engolido.
     const handleSendToRamper = async () => {
+        const customerName = customers.find(c => c.id === selectedCustomerId)?.name || '';
+        // O Ramper exige uma organização (ou pessoa). Sem cliente, o card não pode ser criado.
+        if (!customerName && !solicitante) {
+            showFeedback('Selecione um cliente (ou solicitante) na cotação antes de mandar pro Ramper.', 'error');
+            return;
+        }
         setRamperSending(true);
         try {
-            const customerName = customers.find(c => c.id === selectedCustomerId)?.name || '';
             const today = new Date().toLocaleDateString('pt-BR');
             const title = `Cotação de Frete SPOT - ${origin || '—'} x ${destination || '—'} - ${today}`;
             const res = await createRamperCard({
                 title,
                 value: calcData.finalFreight,
-                organizationName: customerName,
+                organizationName: customerName || solicitante, // garante uma organização
                 personName: solicitante,
                 stageName: 'Cotações',
             });
             if (res?.error) {
                 console.error('Ramper error:', res.error);
-                showFeedback('Falha ao criar card no Ramper, verifique a conexão', 'error');
+                showFeedback(`Falha ao criar card no Ramper: ${res.error}`, 'error');
             } else {
                 showFeedback('Card criado no Ramper');
                 setShowPostSaveModal(false);
