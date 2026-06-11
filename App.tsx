@@ -57,6 +57,7 @@ const App: React.FC = () => {
     const [recoveryMode, setRecoveryMode] = useState(false);
     const [newPassword, setNewPassword] = useState('');
     const [savingPassword, setSavingPassword] = useState(false);
+    const [showChangePassword, setShowChangePassword] = useState(false);
     const [loginSubmitting, setLoginSubmitting] = useState(false);
     const [users, setUsers] = useState<User[]>([]); // perfis (tela de gestão do master)
     const [loginForm, setLoginForm] = useState({ username: '', password: '' }); // username = e-mail
@@ -198,6 +199,22 @@ const App: React.FC = () => {
             setRecoveryMode(false);
             window.history.replaceState(null, '', window.location.pathname);
             showFeedback('Senha definida! Bem-vindo.');
+        } finally {
+            setSavingPassword(false);
+        }
+    };
+
+    // Troca de senha do usuário logado (ex.: trocar a senha temporária no 1º acesso).
+    const handleChangePassword = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (newPassword.trim().length < 6) { showFeedback('A senha deve ter ao menos 6 caracteres.', 'error'); return; }
+        setSavingPassword(true);
+        try {
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) { showFeedback(`Erro ao trocar senha: ${error.message}`, 'error'); return; }
+            setNewPassword('');
+            setShowChangePassword(false);
+            showFeedback('Senha atualizada com sucesso!');
         } finally {
             setSavingPassword(false);
         }
@@ -1287,6 +1304,10 @@ Disponibilidade: ${disponibilidade}`;
                             <span className="font-medium text-sm">Configurações</span>
                         </button>
                     )}
+                    <button onClick={() => { setNewPassword(''); setShowChangePassword(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
+                        <Lock className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                        <span className="font-medium text-sm">Trocar senha</span>
+                    </button>
                     <div className="flex items-center gap-3 px-3 py-2">
                         <div className="w-8 h-8 rounded-full bg-[#1d6fb8] flex items-center justify-center font-medium text-xs text-white">{currentUser.name.charAt(0)}</div>
                         <div className="flex-1 min-w-0"><p className="text-sm font-medium text-[#111827] truncate">{currentUser.name}</p></div>
@@ -2010,6 +2031,26 @@ Disponibilidade: ${disponibilidade}`;
             </main >
 
             {/* Modal de Validação de Margem */}
+            {/* Modal: Trocar senha (usuário logado) */}
+            {showChangePassword && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="bg-white w-full max-w-sm rounded-xl border border-[#e5e7eb] shadow-sm p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-medium text-[#111827]">Trocar senha</h3>
+                            <button onClick={() => { setShowChangePassword(false); setNewPassword(''); }} className="p-1.5 text-[#6b7280] hover:bg-[#f9fafb] rounded-md transition-colors">
+                                <X className="w-4 h-4" strokeWidth={1.75} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleChangePassword} className="space-y-4">
+                            <input type="password" autoComplete="new-password" className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" placeholder="Nova senha (mín. 6 caracteres)" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                            <button type="submit" disabled={savingPassword} className="w-full py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm hover:bg-[#1a5f9e] transition-colors disabled:opacity-50">
+                                {savingPassword ? 'Salvando...' : 'Salvar nova senha'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Modal: Importar Solicitação (leitura inteligente via Gemini) */}
             {showImportModal && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-6 animate-fade-in">
