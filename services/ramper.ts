@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 export const createRamperCard = async (payload: {
     title: string;
     value?: number;
+    basePrice?: number;
     organizationName?: string;
     personName?: string;
     stageId?: string | number;

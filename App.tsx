@@ -973,11 +973,13 @@ Disponibilidade: ${disponibilidade}`;
         }
         setRamperSending(true);
         try {
-            const today = new Date().toLocaleDateString('pt-BR');
-            const title = `Cotação de Frete SPOT - ${origin || '—'} x ${destination || '—'} - ${today}`;
+            // Título: "[REF] - Cotação de Frete SPOT - origem x destino" (omite o prefixo se não houver Ref).
+            const refPart = clientReference.trim() ? `${clientReference.trim()} - ` : '';
+            const title = `${refPart}Cotação de Frete SPOT - ${origin || '—'} x ${destination || '—'}`;
             const res = await createRamperCard({
                 title,
                 value: calcData.finalFreight,
+                basePrice: num(baseFreight), // vai na nota do card (campo history)
                 organizationName: customerName || solicitante, // garante uma organização
                 personName: solicitante,
                 stageName: 'Cotações',

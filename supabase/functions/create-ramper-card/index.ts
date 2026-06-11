@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     }
 
     // --- Modo criação de card (oportunidade) ---
-    const { title, value, organizationName, personName, stageId, stageName } = body;
+    const { title, value, basePrice, organizationName, personName, stageId, stageName } = body;
     if (!title) throw new Error('title é obrigatório.');
 
     // Resolve o stage_id: usa o informado, senão busca pela etapa "Cotações" (por nome).
@@ -64,6 +64,11 @@ Deno.serve(async (req) => {
     if (value != null && !isNaN(Number(value))) form.set('value', Number(value).toFixed(2));
     if (organizationName) form.set('organizations[name]', String(organizationName));
     if (personName) form.set('organizations_person[name]', String(personName));
+    // Nota da oportunidade (campo "history" = Notas, conforme doc LSCRM): preço base interno.
+    if (basePrice != null && !isNaN(Number(basePrice))) {
+      const v = Number(basePrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      form.set('history', `Preço base: R$ ${v}`);
+    }
 
     const res = await fetch(`${RAMPER_BASE}/opportunities`, {
       method: 'POST',
