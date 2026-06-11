@@ -37,6 +37,15 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const action = body.action || 'create';
 
+    if (action === 'reset') {
+      const { userId, password } = body;
+      if (!userId || !password) return json({ error: 'userId e password são obrigatórios.' }, 400);
+      if (String(password).length < 6) return json({ error: 'A senha deve ter ao menos 6 caracteres.' }, 400);
+      const { error: resetErr } = await admin.auth.admin.updateUserById(userId, { password });
+      if (resetErr) return json({ error: `Falha ao redefinir senha: ${resetErr.message}` }, 400);
+      return json({ ok: true });
+    }
+
     if (action === 'delete') {
       const { userId } = body;
       if (!userId) return json({ error: 'userId é obrigatório.' }, 400);
@@ -60,7 +69,9 @@ Deno.serve(async (req) => {
       user_metadata: { name },
     });
     if (createErr || !created?.user) {
-      return json({ error: `Falha ao criar usuário: ${createErr?.message || 'desconhecido'}` }, 400);
+      const m = createErr?.message || 'desconhecido';
+      const friendly = /already|registered|exists/i.test(m) ? 'E-mail já cadastrado.' : `Falha ao criar usuário: ${m}`;
+      return json({ error: friendly }, 400);
     }
 
     const { error: profErr } = await admin.from('profiles').upsert({

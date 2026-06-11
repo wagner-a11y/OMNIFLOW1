@@ -30,29 +30,34 @@ export const getProfiles = async (): Promise<User[]> => {
     return (data || []).map((p: any) => ({ id: p.id, name: p.name, username: p.email, role: p.role }));
 };
 
-// Cria usuário via Edge Function (senha inicial + perfil, sem e-mail). Só master (validado no servidor).
-export const createUserAccount = async (payload: { email: string; name: string; role: string; password: string }) => {
+// Invoca a Edge Function de gestão de usuários e SURFA o erro real do corpo da função
+// (supabase.functions.invoke devolve só "non-2xx status code" no erro — lemos o JSON do contexto).
+const invokeUserFn = async (body: any, fallbackMsg: string) => {
     try {
-        const { data, error } = await supabase.functions.invoke('create-user', { body: { action: 'create', ...payload } });
-        if (error) return { error: error.message };
+        const { data, error } = await supabase.functions.invoke('create-user', { body });
+        if (error) {
+            let msg = error.message;
+            try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* noop */ }
+            return { error: msg };
+        }
         if (data?.error) return { error: data.error };
         return data;
     } catch (e: any) {
-        return { error: e?.message || 'Erro ao criar usuário.' };
+        return { error: e?.message || fallbackMsg };
     }
 };
 
-// Remove usuário (Auth + perfil) via Edge Function. Só master.
-export const deleteUserAccount = async (userId: string) => {
-    try {
-        const { data, error } = await supabase.functions.invoke('create-user', { body: { action: 'delete', userId } });
-        if (error) return { error: error.message };
-        if (data?.error) return { error: data.error };
-        return data;
-    } catch (e: any) {
-        return { error: e?.message || 'Erro ao remover usuário.' };
-    }
-};
+// Cria usuário (senha inicial + perfil, sem e-mail). Só master.
+export const createUserAccount = (payload: { email: string; name: string; role: string; password: string }) =>
+    invokeUserFn({ action: 'create', ...payload }, 'Erro ao criar usuário.');
+
+// Remove usuário (Auth + perfil). Só master.
+export const deleteUserAccount = (userId: string) =>
+    invokeUserFn({ action: 'delete', userId }, 'Erro ao remover usuário.');
+
+// Redefine a senha de um usuário existente (sem e-mail). Só master.
+export const resetUserPassword = (userId: string, password: string) =>
+    invokeUserFn({ action: 'reset', userId, password }, 'Erro ao redefinir senha.');
 
 // =================== USERS (LEGADO — removido do login na Etapa A) ===================
 export const getUsers = async (): Promise<User[]> => {

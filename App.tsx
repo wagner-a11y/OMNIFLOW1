@@ -18,6 +18,7 @@ import {
     getProfiles,
     createUserAccount,
     deleteUserAccount,
+    resetUserPassword,
     getCustomers,
     createCustomer,
     deleteCustomer,
@@ -2731,8 +2732,20 @@ Disponibilidade: ${disponibilidade}`;
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                            {currentUser.role === 'master' && (
+                                                                <button title="Redefinir senha" onClick={async () => {
+                                                                    const np = prompt(`Nova senha para ${u.name} (mín. 6 caracteres):`);
+                                                                    if (np === null) return;
+                                                                    if (np.trim().length < 6) { showFeedback('Senha muito curta (mín. 6).', 'error'); return; }
+                                                                    const res = await resetUserPassword(u.id, np.trim());
+                                                                    if (res?.error) { showFeedback(`Erro ao redefinir: ${res.error}`, 'error'); }
+                                                                    else { showFeedback(`Senha de ${u.name} redefinida. Repasse a nova senha.`); }
+                                                                }} className="p-2 text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#1d6fb8] rounded-lg">
+                                                                    <Key className="w-4 h-4" />
+                                                                </button>
+                                                            )}
                                                             {currentUser.role === 'master' && u.id !== currentUser.id && (
-                                                                <button onClick={async () => {
+                                                                <button title="Remover usuário" onClick={async () => {
                                                                     if (!confirm(`Remover o usuário ${u.name}? Esta ação apaga o acesso dele.`)) return;
                                                                     const res = await deleteUserAccount(u.id);
                                                                     if (res?.error) { showFeedback(`Erro ao remover: ${res.error}`, 'error'); }
