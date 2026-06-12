@@ -84,6 +84,11 @@ const App: React.FC = () => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [showCelebration, setShowCelebration] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+    // Relatório diário (só master): período + resultado calculado do banco (determinístico).
+    const [reportPreset, setReportPreset] = useState<'hoje' | 'ontem' | '7d' | '30d' | 'mes'>('hoje');
+    const [dailyReport, setDailyReport] = useState<any>(null);
+    const [reportText, setReportText] = useState('');
+    const [reportTextLoading, setReportTextLoading] = useState(false);
 
     // Estados de Edição de Clientes
     const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -565,6 +570,103 @@ const App: React.FC = () => {
             filteredCount: filteredHistory.length
         };
     }, [history, customers, selectedMonth]);
+
+    // ===== Relatório diário (números determinísticos, calculados do histórico) =====
+    const formatMin = (sec: number) => {
+        const s = Math.max(0, Math.round(sec || 0));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return `${m}m ${r.toString().padStart(2, '0')}s`;
+    };
+
+    const getReportRange = (preset: string, now: number) => {
+        const d = new Date(now);
+        const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const DAY = 86400000;
+        let start: number, end: number, label: string;
+        switch (preset) {
+            case 'ontem': start = startOfDay - DAY; end = startOfDay; label = 'Ontem'; break;
+            case '7d': end = now; start = now - 7 * DAY; label = 'Últimos 7 dias'; break;
+            case '30d': end = now; start = now - 30 * DAY; label = 'Últimos 30 dias'; break;
+            case 'mes': start = new Date(d.getFullYear(), d.getMonth(), 1).getTime(); end = now; label = 'Este mês'; break;
+            case 'hoje': default: start = startOfDay; end = startOfDay + DAY; label = 'Hoje'; break;
+        }
+        return { start, end, prevStart: start - (end - start), prevEnd: start, label };
+    };
+
+    const generateReport = () => {
+        const now = Date.now();
+        const { start, end, prevStart, prevEnd, label } = getReportRange(reportPreset, now);
+        const tsOf = (h: FreightCalculation) => Number(h.createdAt) || 0;
+        const inRange = history.filter(h => { const t = tsOf(h); return t >= start && t < end; });
+        const prevRange = history.filter(h => { const t = tsOf(h); return t >= prevStart && t < prevEnd; });
+        const custName = (id: string) => customers.find(c => c.id === id)?.name || 'Sem cliente';
+
+        // Top clientes (qtd de cotações no período)
+        const clientMap = new Map<string, number>();
+        inRange.forEach(h => clientMap.set(h.customerId || '', (clientMap.get(h.customerId || '') || 0) + 1));
+        const topClients = Array.from(clientMap.entries()).map(([id, count]) => ({ name: custName(id), count }))
+            .sort((a, b) => b.count - a.count).slice(0, 6);
+
+        // Ranking de operadores (quem mais cotou) + tempo médio por operador (só tempo > 0)
+        const opMap = new Map<string, { count: number; timeSum: number; timed: number }>();
+        inRange.forEach(h => {
+            const op = h.createdByName || h.updatedByName || '—';
+            const cur = opMap.get(op) || { count: 0, timeSum: 0, timed: 0 };
+            cur.count += 1;
+            const sec = Number(h.elaborationSeconds) || 0;
+            if (sec > 0) { cur.timeSum += sec; cur.timed += 1; }
+            opMap.set(op, cur);
+        });
+        const operators = Array.from(opMap.entries()).map(([name, v]) => ({ name, count: v.count, avgSec: v.timed > 0 ? v.timeSum / v.timed : 0, timed: v.timed }))
+            .sort((a, b) => b.count - a.count);
+
+        // Tempo médio geral (só cotações com tempo > 0)
+        const timed = inRange.filter(h => (Number(h.elaborationSeconds) || 0) > 0);
+        const avgSec = timed.length ? timed.reduce((a, h) => a + Number(h.elaborationSeconds), 0) / timed.length : 0;
+
+        // Variação de volume vs período anterior
+        const total = inRange.length;
+        const prevTotal = prevRange.length;
+        const variation = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : (total > 0 ? 100 : 0);
+
+        // ---- Insights por regras (sem IA) ----
+        const insights: string[] = [];
+
+        // 1) Cliente recorrente (>=3 cotações no total) sem cotar há > 7 dias
+        const histByClient = new Map<string, number[]>();
+        history.forEach(h => { if (h.customerId) { const arr = histByClient.get(h.customerId) || []; arr.push(tsOf(h)); histByClient.set(h.customerId, arr); } });
+        const sleeping: { name: string; days: number }[] = [];
+        histByClient.forEach((times, id) => {
+            if (times.length >= 3) {
+                const last = Math.max(...times);
+                const days = Math.floor((now - last) / 86400000);
+                if (days > 7) sleeping.push({ name: custName(id), days });
+            }
+        });
+        sleeping.sort((a, b) => b.days - a.days);
+        sleeping.slice(0, 3).forEach(s => insights.push(`Cliente recorrente sem cotar há ${s.days} dias: ${s.name}.`));
+
+        // 2) Variação de volume
+        if (prevTotal > 0) {
+            const dir = variation > 0 ? 'acima' : variation < 0 ? 'abaixo' : 'igual ao';
+            insights.push(`Volume ${variation === 0 ? '' : Math.abs(variation) + '% '}${dir} do período anterior (${total} vs ${prevTotal}).`);
+        }
+
+        // 3) Operador com tempo médio acima/abaixo da média do time
+        const timedOps = operators.filter(o => o.timed > 0);
+        if (timedOps.length >= 2) {
+            const teamAvg = timedOps.reduce((a, o) => a + o.avgSec, 0) / timedOps.length;
+            timedOps.forEach(o => {
+                const diff = teamAvg > 0 ? (o.avgSec - teamAvg) / teamAvg : 0;
+                if (diff >= 0.25) insights.push(`${o.name} está com tempo médio ${Math.round(diff * 100)}% acima da média do time (${formatMin(o.avgSec)}).`);
+                else if (diff <= -0.25) insights.push(`${o.name} está com tempo médio ${Math.round(Math.abs(diff) * 100)}% abaixo da média do time (${formatMin(o.avgSec)}).`);
+            });
+        }
+
+        setReportText('');
+        setDailyReport({ label, total, prevTotal, variation, avgSec, topClients, operators, insights, generatedAt: now });
+    };
 
     const handleCRMStatusUpdate = async (id: string, newStatus: QuoteStatus, lostData?: { reason: any; obs: string; fileUrl: string }) => {
         const quote = history.find(h => h.id === id);
@@ -1411,6 +1513,97 @@ Disponibilidade: ${disponibilidade}`;
                                     </div>
                                     <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl px-4 py-2 font-medium text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors uppercase text-xs" />
                                 </div>
+                            </div>
+
+                            {/* ===== Relatório Diário (só master) ===== */}
+                            <div className="bg-white p-6 rounded-xl shadow-sm border border-[#e5e7eb] space-y-5">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <h3 className="text-sm font-medium text-[#111827] flex items-center gap-2"><FileText className="w-4 h-4 text-[#1d6fb8]" strokeWidth={1.75} /> Relatório Diário</h3>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {([['hoje', 'Hoje'], ['ontem', 'Ontem'], ['7d', '7 dias'], ['30d', '30 dias'], ['mes', 'Mês']] as const).map(([val, lbl]) => (
+                                            <button key={val} onClick={() => setReportPreset(val)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${reportPreset === val ? 'bg-[#eff6ff] border-[#bfdbfe] text-[#1d6fb8]' : 'bg-white border-[#e5e7eb] text-[#6b7280] hover:bg-[#f9fafb]'}`}>{lbl}</button>
+                                        ))}
+                                        <button onClick={generateReport} className="px-4 py-1.5 bg-[#1d6fb8] text-white rounded-lg text-xs font-medium hover:bg-[#1a5f9e] transition-colors flex items-center gap-1.5">
+                                            <BarChart3 className="w-3.5 h-3.5" strokeWidth={1.75} /> Gerar relatório
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {!dailyReport ? (
+                                    <p className="text-sm font-normal text-[#6b7280]">Escolha o período e clique em "Gerar relatório". Os números são calculados direto do banco.</p>
+                                ) : (
+                                    <div className="space-y-5">
+                                        <p className="text-[11px] font-normal text-[#6b7280]">Período: <span className="font-medium text-[#111827]">{dailyReport.label}</span></p>
+
+                                        {/* KPIs do relatório */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4">
+                                                <p className="text-[10px] font-medium text-[#6b7280] uppercase">Cotações no período</p>
+                                                <p className="text-2xl font-medium text-[#111827]">{dailyReport.total}</p>
+                                            </div>
+                                            <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4">
+                                                <p className="text-[10px] font-medium text-[#6b7280] uppercase">Variação vs anterior</p>
+                                                <p className={`text-2xl font-medium ${dailyReport.variation > 0 ? 'text-emerald-600' : dailyReport.variation < 0 ? 'text-red-600' : 'text-[#111827]'}`}>
+                                                    {dailyReport.variation > 0 ? '+' : ''}{dailyReport.variation}% <span className="text-xs font-normal text-[#6b7280]">({dailyReport.prevTotal} antes)</span>
+                                                </p>
+                                            </div>
+                                            <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4">
+                                                <p className="text-[10px] font-medium text-[#6b7280] uppercase">Tempo médio de montagem</p>
+                                                <p className="text-2xl font-medium text-[#111827]">{dailyReport.avgSec > 0 ? formatMin(dailyReport.avgSec) : '—'}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                                            {/* Top clientes (gráfico de barras) */}
+                                            <div>
+                                                <p className="text-[11px] font-medium text-[#6b7280] uppercase mb-2">Clientes que mais cotaram</p>
+                                                {dailyReport.topClients.length === 0 ? <p className="text-xs text-[#9ca3af]">Sem cotações no período.</p> : (
+                                                    <div className="space-y-2">
+                                                        {dailyReport.topClients.map((c: any, i: number) => {
+                                                            const max = dailyReport.topClients[0].count || 1;
+                                                            return (
+                                                                <div key={i} className="flex items-center gap-2">
+                                                                    <span className="w-32 truncate text-xs font-medium text-[#111827]">{c.name}</span>
+                                                                    <div className="flex-1 h-4 bg-[#f3f4f6] rounded-full overflow-hidden">
+                                                                        <div className="h-full bg-[#1d6fb8] rounded-full" style={{ width: `${Math.max(8, (c.count / max) * 100)}%` }}></div>
+                                                                    </div>
+                                                                    <span className="w-6 text-right text-xs font-medium text-[#111827]">{c.count}</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Ranking de operadores */}
+                                            <div>
+                                                <p className="text-[11px] font-medium text-[#6b7280] uppercase mb-2">Operador que mais cotou</p>
+                                                {dailyReport.operators.length === 0 ? <p className="text-xs text-[#9ca3af]">Sem cotações no período.</p> : (
+                                                    <div className="space-y-1.5">
+                                                        {dailyReport.operators.map((o: any, i: number) => (
+                                                            <div key={i} className="flex items-center justify-between bg-[#f9fafb] border border-[#e5e7eb] rounded-lg px-3 py-2">
+                                                                <span className="text-xs font-medium text-[#111827] truncate">{i + 1}. {o.name}</span>
+                                                                <span className="text-[11px] font-normal text-[#6b7280]">{o.count} cot. · {o.timed > 0 ? formatMin(o.avgSec) : '—'}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Avisos e insights (por regras) */}
+                                        {dailyReport.insights.length > 0 && (
+                                            <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
+                                                <p className="text-[11px] font-medium text-amber-700 uppercase mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" strokeWidth={1.75} /> Avisos e insights</p>
+                                                <ul className="space-y-1">
+                                                    {dailyReport.insights.map((ins: string, i: number) => (
+                                                        <li key={i} className="text-xs font-normal text-[#111827]">• {ins}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Cards de KPIs Principais */}
