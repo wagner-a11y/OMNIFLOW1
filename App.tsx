@@ -10,7 +10,7 @@ import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt';
-import { estimateDistance, estimateMultiRoute, parseRequest } from './services/geminiService';
+import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
 import { RouteMap, MapErrorBoundary } from './components/RouteMap';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
@@ -666,6 +666,48 @@ const App: React.FC = () => {
 
         setReportText('');
         setDailyReport({ label, total, prevTotal, variation, avgSec, topClients, operators, insights, generatedAt: now });
+    };
+
+    // Resumo (números prontos) enviado à IA — ela só escreve o texto, não calcula.
+    const buildReportSummary = (r: any) => ({
+        label: r.label,
+        total: r.total,
+        prevTotal: r.prevTotal,
+        variation: r.variation,
+        avgTime: r.avgSec > 0 ? formatMin(r.avgSec) : '—',
+        topClients: r.topClients.slice(0, 5).map((c: any) => ({ name: c.name, count: c.count })),
+        topOperators: r.operators.slice(0, 5).map((o: any) => ({ name: o.name, count: o.count, avgTime: o.timed > 0 ? formatMin(o.avgSec) : '—' })),
+        insights: r.insights,
+    });
+
+    // Fallback de última instância (se a própria chamada à função falhar) — texto-modelo no cliente.
+    const buildReportTemplateClient = (s: any): string => {
+        const lines: string[] = [];
+        lines.push(`📊 Relatório de cotações — ${s.label || 'período'}`);
+        lines.push(`• Cotações: ${s.total ?? 0}${typeof s.variation === 'number' ? ` (${s.variation > 0 ? '+' : ''}${s.variation}% vs período anterior)` : ''}`);
+        if (s.avgTime && s.avgTime !== '—') lines.push(`• Tempo médio de montagem: ${s.avgTime}`);
+        if (s.topClients?.length) lines.push(`• Clientes que mais cotaram: ${s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count})`).join(', ')}`);
+        if (s.topOperators?.length) lines.push(`• Destaque do time: ${s.topOperators[0].name} (${s.topOperators[0].count} cotações)`);
+        if (s.insights?.length) { lines.push(''); lines.push('⚠️ Atenção:'); s.insights.slice(0, 4).forEach((i: string) => lines.push(`• ${i}`)); }
+        return lines.join('\n');
+    };
+
+    const handleCompileText = async () => {
+        if (!dailyReport) return;
+        setReportTextLoading(true);
+        try {
+            const summary = buildReportSummary(dailyReport);
+            const res = await compileReportText(summary);
+            if (res?.text) {
+                setReportText(res.text);
+                showFeedback(res.source === 'ai' ? 'Texto compilado pela IA!' : 'Texto gerado (modelo — IA indisponível).', res.source === 'ai' ? 'success' : 'info');
+            } else {
+                setReportText(buildReportTemplateClient(summary));
+                showFeedback('Texto gerado (modelo — IA indisponível).', 'info');
+            }
+        } finally {
+            setReportTextLoading(false);
+        }
     };
 
     const handleCRMStatusUpdate = async (id: string, newStatus: QuoteStatus, lostData?: { reason: any; obs: string; fileUrl: string }) => {
@@ -1602,6 +1644,24 @@ Disponibilidade: ${disponibilidade}`;
                                                 </ul>
                                             </div>
                                         )}
+
+                                        {/* Camada de IA: texto pro grupo (com fallback no servidor) */}
+                                        <div className="pt-4 border-t border-[#e5e7eb]">
+                                            <div className="flex items-center justify-between gap-3 mb-2">
+                                                <p className="text-[11px] font-medium text-[#6b7280] uppercase">Texto pro grupo (WhatsApp)</p>
+                                                <button onClick={handleCompileText} disabled={reportTextLoading} className="px-4 py-2 bg-[#1d6fb8] text-white rounded-lg text-xs font-medium hover:bg-[#1a5f9e] transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                                                    <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} /> {reportTextLoading ? 'Compilando...' : 'Compilar texto pro grupo'}
+                                                </button>
+                                            </div>
+                                            {reportText && (
+                                                <div className="space-y-2">
+                                                    <textarea readOnly value={reportText} rows={8} className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none resize-none" />
+                                                    <button onClick={() => navigator.clipboard.writeText(reportText).then(() => showFeedback('Texto copiado!'))} className="px-4 py-2 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg text-xs font-medium hover:bg-[#f9fafb] transition-colors flex items-center gap-1.5">
+                                                        <ClipboardCopy className="w-3.5 h-3.5" strokeWidth={1.75} /> Copiar
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>

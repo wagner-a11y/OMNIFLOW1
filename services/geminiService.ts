@@ -81,6 +81,18 @@ export const extractDataFromDoc = async (fileBase64: string, fileType: string) =
     }
 };
 
+// Compila o texto do relatório (IA só escreve, a partir dos números prontos). A função
+// sempre devolve texto (fallback no servidor); aqui só repassamos. Erro de rede -> { error }.
+export const compileReportText = async (summary: any): Promise<{ text?: string; source?: string; error?: string }> => {
+    try {
+        const { data, error } = await supabase.functions.invoke('compile-report-text', { body: { summary } });
+        if (error) return { error: error.message };
+        return data;
+    } catch (e: any) {
+        return { error: e?.message || 'Falha ao compilar texto.' };
+    }
+};
+
 // Leitura inteligente de solicitação de frete (texto colado ou arquivo) via Gemini.
 // Retorna { origem, destino, tipoCarga, peso, valorMercadoria, disponibilidade, solicitante, observacoes } ou { error }.
 export const parseRequest = async (params: { content?: string; fileBase64?: string; fileType?: string }) => {
