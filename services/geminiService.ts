@@ -85,20 +85,30 @@ export const extractDataFromDoc = async (fileBase64: string, fileType: string) =
 // Retorna { origem, destino, tipoCarga, peso, valorMercadoria, disponibilidade, solicitante, observacoes } ou { error }.
 export const parseRequest = async (params: { content?: string; fileBase64?: string; fileType?: string }) => {
     console.log('--- IMPORT: parseRequest started ---', { hasFile: !!params.fileBase64, hasText: !!params.content });
+    // Mensagem amigável para erros conhecidos do upstream (ex.: cota do Gemini).
+    const friendly = (raw: string): string => {
+        const m = raw || '';
+        if (/RESOURCE_EXHAUSTED|429|quota/i.test(m)) return 'Cota do Gemini excedida no momento. Tente novamente mais tarde.';
+        if (/API_KEY_INVALID|API key/i.test(m)) return 'Chave do Gemini inválida/expirada. Avise o administrador.';
+        return m;
+    };
     try {
         const { data, error } = await supabase.functions.invoke('parse-request', { body: params });
         if (error) {
-            console.error('--- IMPORT ERROR: Supabase Function Invoke (parse-request) ---', error);
-            return { error: error.message };
+            // supabase.functions.invoke só devolve "non-2xx status code"; lê o erro real do corpo.
+            let msg = error.message;
+            try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* noop */ }
+            console.error('--- IMPORT ERROR (parse-request) ---', msg);
+            return { error: friendly(msg) };
         }
         if (data?.error) {
             console.error('--- IMPORT FAILED (Gemini internal) ---', data.error);
-            return { error: data.error };
+            return { error: friendly(data.error) };
         }
         return data;
     } catch (error: any) {
         console.error('--- IMPORT CRITICAL ERROR: catch block ---', error);
-        return { error: error.message };
+        return { error: friendly(error.message) };
     }
 };
 
