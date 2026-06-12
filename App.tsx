@@ -618,6 +618,36 @@ const App: React.FC = () => {
         const totalValue = inRange.reduce((a, h) => a + (Number(h.totalFreight) || 0), 0);
         const prevValue = prevRange.reduce((a, h) => a + (Number(h.totalFreight) || 0), 0);
 
+        // Veículos cotados no período (ranking por tipo) + valor cotado por tipo
+        const vehicleMap = new Map<string, { count: number; value: number }>();
+        inRange.forEach(h => {
+            const v = (h.vehicleType || '—').toString();
+            const cur = vehicleMap.get(v) || { count: 0, value: 0 };
+            cur.count += 1;
+            cur.value += Number(h.totalFreight) || 0;
+            vehicleMap.set(v, cur);
+        });
+        const topVehicles = Array.from(vehicleMap.entries()).map(([name, v]) => ({ name, count: v.count, value: v.value }))
+            .sort((a, b) => b.count - a.count);
+
+        // Rotas mais quentes (origem → destino final). Multidestino usa o último destino.
+        const routeLabel = (h: any) => {
+            const o = (h.origin || '').toString().trim();
+            const ds = Array.isArray(h.destinations) && h.destinations.length ? h.destinations[h.destinations.length - 1] : h.destination;
+            const d = (ds || '').toString().trim();
+            return `${o || '—'} → ${d || '—'}`;
+        };
+        const routeMap = new Map<string, { count: number; value: number }>();
+        inRange.forEach(h => {
+            const r = routeLabel(h);
+            const cur = routeMap.get(r) || { count: 0, value: 0 };
+            cur.count += 1;
+            cur.value += Number(h.totalFreight) || 0;
+            routeMap.set(r, cur);
+        });
+        const topRoutes = Array.from(routeMap.entries()).map(([name, v]) => ({ name, count: v.count, value: v.value }))
+            .sort((a, b) => b.count - a.count).slice(0, 6);
+
         // Ranking de operadores (quem mais cotou) + tempo médio por operador (só tempo > 0)
         const opMap = new Map<string, { count: number; timeSum: number; timed: number }>();
         inRange.forEach(h => {
@@ -675,7 +705,7 @@ const App: React.FC = () => {
         }
 
         setReportText('');
-        setDailyReport({ label, total, prevTotal, variation, totalValue, prevValue, avgSec, topClients, operators, insights, generatedAt: now });
+        setDailyReport({ label, total, prevTotal, variation, totalValue, prevValue, avgSec, topClients, topVehicles, topRoutes, operators, insights, generatedAt: now });
     };
 
     // Resumo (números prontos) enviado à IA — ela só escreve o texto, não calcula.
@@ -687,6 +717,8 @@ const App: React.FC = () => {
         totalValue: `R$ ${formatCur(r.totalValue || 0)}`,
         avgTime: r.avgSec > 0 ? formatMin(r.avgSec) : '—',
         topClients: r.topClients.slice(0, 5).map((c: any) => ({ name: c.name, count: c.count, value: `R$ ${formatCur(c.value || 0)}` })),
+        topVehicles: (r.topVehicles || []).slice(0, 5).map((v: any) => ({ name: v.name, count: v.count })),
+        topRoutes: (r.topRoutes || []).slice(0, 5).map((rt: any) => ({ name: rt.name, count: rt.count })),
         topOperators: r.operators.slice(0, 5).map((o: any) => ({ name: o.name, count: o.count, avgTime: o.timed > 0 ? formatMin(o.avgSec) : '—' })),
         insights: r.insights,
     });
@@ -699,6 +731,8 @@ const App: React.FC = () => {
         if (s.totalValue) lines.push(`• Valor cotado: ${s.totalValue}`);
         if (s.avgTime && s.avgTime !== '—') lines.push(`• Tempo médio de montagem: ${s.avgTime}`);
         if (s.topClients?.length) lines.push(`• Clientes que mais cotaram: ${s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count}${c.value ? ` · ${c.value}` : ''})`).join(', ')}`);
+        if (s.topVehicles?.length) lines.push(`• Veículos cotados: ${s.topVehicles.slice(0, 4).map((v: any) => `${v.name} (${v.count})`).join(', ')}`);
+        if (s.topRoutes?.length) lines.push(`• Rotas mais quentes: ${s.topRoutes.slice(0, 3).map((rt: any) => `${rt.name} (${rt.count})`).join('; ')}`);
         if (s.topOperators?.length) lines.push(`• Destaque do time: ${s.topOperators[0].name} (${s.topOperators[0].count} cotações)`);
         if (s.insights?.length) { lines.push(''); lines.push('⚠️ Atenção:'); s.insights.slice(0, 4).forEach((i: string) => lines.push(`• ${i}`)); }
         return lines.join('\n');
@@ -1644,6 +1678,44 @@ Disponibilidade: ${disponibilidade}`;
                                                             <div key={i} className="flex items-center justify-between bg-[#f9fafb] border border-[#e5e7eb] rounded-lg px-3 py-2">
                                                                 <span className="text-xs font-medium text-[#111827] truncate">{i + 1}. {o.name}</span>
                                                                 <span className="text-[11px] font-normal text-[#6b7280]">{o.count} cot. · {o.timed > 0 ? formatMin(o.avgSec) : '—'}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                                            {/* Veículos cotados (gráfico de barras) */}
+                                            <div>
+                                                <p className="text-[11px] font-medium text-[#6b7280] uppercase mb-2">Veículos cotados</p>
+                                                {(!dailyReport.topVehicles || dailyReport.topVehicles.length === 0) ? <p className="text-xs text-[#9ca3af]">Sem cotações no período.</p> : (
+                                                    <div className="space-y-2">
+                                                        {dailyReport.topVehicles.map((v: any, i: number) => {
+                                                            const max = dailyReport.topVehicles[0].count || 1;
+                                                            return (
+                                                                <div key={i} className="flex items-center gap-2">
+                                                                    <span className="w-32 truncate text-xs font-medium text-[#111827]">{v.name}</span>
+                                                                    <div className="flex-1 h-4 bg-[#f3f4f6] rounded-full overflow-hidden">
+                                                                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.max(8, (v.count / max) * 100)}%` }}></div>
+                                                                    </div>
+                                                                    <span className="w-6 text-right text-xs font-medium text-[#111827]">{v.count}</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Rotas mais quentes */}
+                                            <div>
+                                                <p className="text-[11px] font-medium text-[#6b7280] uppercase mb-2">Rotas mais quentes</p>
+                                                {(!dailyReport.topRoutes || dailyReport.topRoutes.length === 0) ? <p className="text-xs text-[#9ca3af]">Sem cotações no período.</p> : (
+                                                    <div className="space-y-1.5">
+                                                        {dailyReport.topRoutes.map((rt: any, i: number) => (
+                                                            <div key={i} className="flex items-center justify-between gap-2 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg px-3 py-2">
+                                                                <span className="text-xs font-medium text-[#111827] truncate" title={rt.name}>{i + 1}. {rt.name}</span>
+                                                                <span className="text-[11px] font-normal text-[#6b7280] whitespace-nowrap">{rt.count} cot. · R$ {formatCur(rt.value || 0)}</span>
                                                             </div>
                                                         ))}
                                                     </div>

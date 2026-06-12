@@ -24,6 +24,12 @@ function buildTemplate(s: any): string {
   if (Array.isArray(s.topClients) && s.topClients.length) {
     lines.push(`• Clientes que mais cotaram: ${s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count}${c.value ? ` · ${c.value}` : ''})`).join(', ')}`);
   }
+  if (Array.isArray(s.topVehicles) && s.topVehicles.length) {
+    lines.push(`• Veículos cotados: ${s.topVehicles.slice(0, 4).map((v: any) => `${v.name} (${v.count})`).join(', ')}`);
+  }
+  if (Array.isArray(s.topRoutes) && s.topRoutes.length) {
+    lines.push(`• Rotas mais quentes: ${s.topRoutes.slice(0, 3).map((rt: any) => `${rt.name} (${rt.count})`).join('; ')}`);
+  }
   if (Array.isArray(s.topOperators) && s.topOperators.length) {
     const o = s.topOperators[0];
     lines.push(`• Destaque do time: ${o.name} (${o.count} cotações)`);
