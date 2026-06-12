@@ -88,7 +88,7 @@ export const parseRequest = async (params: { content?: string; fileBase64?: stri
     // Mensagem amigável para erros conhecidos do upstream (ex.: cota do Gemini).
     const friendly = (raw: string): string => {
         const m = raw || '';
-        if (/RESOURCE_EXHAUSTED|429|quota/i.test(m)) return 'Cota do Gemini excedida no momento. Tente novamente mais tarde.';
+        if (/RESOURCE_EXHAUSTED|429|quota/i.test(m)) return 'Cota excedida por hoje, daqui pra frente é só no manual. Amanhã tem mais!';
         if (/API_KEY_INVALID|API key/i.test(m)) return 'Chave do Gemini inválida/expirada. Avise o administrador.';
         return m;
     };
