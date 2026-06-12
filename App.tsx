@@ -602,11 +602,21 @@ const App: React.FC = () => {
         const prevRange = history.filter(h => { const t = tsOf(h); return t >= prevStart && t < prevEnd; });
         const custName = (id: string) => customers.find(c => c.id === id)?.name || 'Sem cliente';
 
-        // Top clientes (qtd de cotações no período)
-        const clientMap = new Map<string, number>();
-        inRange.forEach(h => clientMap.set(h.customerId || '', (clientMap.get(h.customerId || '') || 0) + 1));
-        const topClients = Array.from(clientMap.entries()).map(([id, count]) => ({ name: custName(id), count }))
+        // Top clientes (qtd de cotações + valor cotado no período)
+        const clientMap = new Map<string, { count: number; value: number }>();
+        inRange.forEach(h => {
+            const k = h.customerId || '';
+            const cur = clientMap.get(k) || { count: 0, value: 0 };
+            cur.count += 1;
+            cur.value += Number(h.totalFreight) || 0;
+            clientMap.set(k, cur);
+        });
+        const topClients = Array.from(clientMap.entries()).map(([id, v]) => ({ name: custName(id), count: v.count, value: v.value }))
             .sort((a, b) => b.count - a.count).slice(0, 6);
+
+        // Valor financeiro total cotado no período (soma do frete final). Não altera fórmula.
+        const totalValue = inRange.reduce((a, h) => a + (Number(h.totalFreight) || 0), 0);
+        const prevValue = prevRange.reduce((a, h) => a + (Number(h.totalFreight) || 0), 0);
 
         // Ranking de operadores (quem mais cotou) + tempo médio por operador (só tempo > 0)
         const opMap = new Map<string, { count: number; timeSum: number; timed: number }>();
@@ -665,7 +675,7 @@ const App: React.FC = () => {
         }
 
         setReportText('');
-        setDailyReport({ label, total, prevTotal, variation, avgSec, topClients, operators, insights, generatedAt: now });
+        setDailyReport({ label, total, prevTotal, variation, totalValue, prevValue, avgSec, topClients, operators, insights, generatedAt: now });
     };
 
     // Resumo (números prontos) enviado à IA — ela só escreve o texto, não calcula.
@@ -674,8 +684,9 @@ const App: React.FC = () => {
         total: r.total,
         prevTotal: r.prevTotal,
         variation: r.variation,
+        totalValue: `R$ ${formatCur(r.totalValue || 0)}`,
         avgTime: r.avgSec > 0 ? formatMin(r.avgSec) : '—',
-        topClients: r.topClients.slice(0, 5).map((c: any) => ({ name: c.name, count: c.count })),
+        topClients: r.topClients.slice(0, 5).map((c: any) => ({ name: c.name, count: c.count, value: `R$ ${formatCur(c.value || 0)}` })),
         topOperators: r.operators.slice(0, 5).map((o: any) => ({ name: o.name, count: o.count, avgTime: o.timed > 0 ? formatMin(o.avgSec) : '—' })),
         insights: r.insights,
     });
@@ -685,8 +696,9 @@ const App: React.FC = () => {
         const lines: string[] = [];
         lines.push(`📊 Relatório de cotações — ${s.label || 'período'}`);
         lines.push(`• Cotações: ${s.total ?? 0}${typeof s.variation === 'number' ? ` (${s.variation > 0 ? '+' : ''}${s.variation}% vs período anterior)` : ''}`);
+        if (s.totalValue) lines.push(`• Valor cotado: ${s.totalValue}`);
         if (s.avgTime && s.avgTime !== '—') lines.push(`• Tempo médio de montagem: ${s.avgTime}`);
-        if (s.topClients?.length) lines.push(`• Clientes que mais cotaram: ${s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count})`).join(', ')}`);
+        if (s.topClients?.length) lines.push(`• Clientes que mais cotaram: ${s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count}${c.value ? ` · ${c.value}` : ''})`).join(', ')}`);
         if (s.topOperators?.length) lines.push(`• Destaque do time: ${s.topOperators[0].name} (${s.topOperators[0].count} cotações)`);
         if (s.insights?.length) { lines.push(''); lines.push('⚠️ Atenção:'); s.insights.slice(0, 4).forEach((i: string) => lines.push(`• ${i}`)); }
         return lines.join('\n');
@@ -1578,10 +1590,15 @@ Disponibilidade: ${disponibilidade}`;
                                         <p className="text-[11px] font-normal text-[#6b7280]">Período: <span className="font-medium text-[#111827]">{dailyReport.label}</span></p>
 
                                         {/* KPIs do relatório */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                             <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4">
                                                 <p className="text-[10px] font-medium text-[#6b7280] uppercase">Cotações no período</p>
                                                 <p className="text-2xl font-medium text-[#111827]">{dailyReport.total}</p>
+                                            </div>
+                                            <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4">
+                                                <p className="text-[10px] font-medium text-[#6b7280] uppercase">Valor cotado no período</p>
+                                                <p className="text-2xl font-medium text-[#1d6fb8]">R$ {formatCur(dailyReport.totalValue || 0)}</p>
+                                                {(dailyReport.prevValue || 0) > 0 && <p className="text-[10px] font-normal text-[#6b7280] mt-0.5">antes: R$ {formatCur(dailyReport.prevValue)}</p>}
                                             </div>
                                             <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4">
                                                 <p className="text-[10px] font-medium text-[#6b7280] uppercase">Variação vs anterior</p>
@@ -1605,11 +1622,12 @@ Disponibilidade: ${disponibilidade}`;
                                                             const max = dailyReport.topClients[0].count || 1;
                                                             return (
                                                                 <div key={i} className="flex items-center gap-2">
-                                                                    <span className="w-32 truncate text-xs font-medium text-[#111827]">{c.name}</span>
+                                                                    <span className="w-28 truncate text-xs font-medium text-[#111827]">{c.name}</span>
                                                                     <div className="flex-1 h-4 bg-[#f3f4f6] rounded-full overflow-hidden">
                                                                         <div className="h-full bg-[#1d6fb8] rounded-full" style={{ width: `${Math.max(8, (c.count / max) * 100)}%` }}></div>
                                                                     </div>
                                                                     <span className="w-6 text-right text-xs font-medium text-[#111827]">{c.count}</span>
+                                                                    <span className="w-24 text-right text-[11px] font-medium text-[#1d6fb8]">R$ {formatCur(c.value || 0)}</span>
                                                                 </div>
                                                             );
                                                         })}

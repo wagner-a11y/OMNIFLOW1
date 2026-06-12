@@ -19,9 +19,10 @@ function buildTemplate(s: any): string {
   lines.push(`📊 Relatório de cotações — ${s.label || 'período'}`);
   const varStr = typeof s.variation === 'number' ? ` (${s.variation > 0 ? '+' : ''}${s.variation}% vs período anterior)` : '';
   lines.push(`• Cotações: ${s.total ?? 0}${varStr}`);
+  if (s.totalValue) lines.push(`• Valor cotado: ${s.totalValue}`);
   if (s.avgTime && s.avgTime !== '—') lines.push(`• Tempo médio de montagem: ${s.avgTime}`);
   if (Array.isArray(s.topClients) && s.topClients.length) {
-    lines.push(`• Clientes que mais cotaram: ${s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count})`).join(', ')}`);
+    lines.push(`• Clientes que mais cotaram: ${s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count}${c.value ? ` · ${c.value}` : ''})`).join(', ')}`);
   }
   if (Array.isArray(s.topOperators) && s.topOperators.length) {
     const o = s.topOperators[0];
