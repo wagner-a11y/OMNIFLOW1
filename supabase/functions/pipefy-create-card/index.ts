@@ -165,6 +165,20 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Amostra READ-ONLY de registros das tabelas Clientes e Solicitantes (pra pegar nomes com grafia exata).
+  if (body.inspect === 'samples') {
+    try {
+      const sample = async (tid: string) => {
+        const q = `query($tid: ID!) { table_records(table_id: $tid, first: 15) { edges { node { id title } } } }`;
+        const data: any = await gql(token, q, { tid });
+        return (data?.table_records?.edges || []).map((e: any) => ({ id: e.node.id, title: e.node.title }));
+      };
+      return json({ ok: true, clientes: await sample(TABLE_CLIENTES), solicitantes: await sample(TABLE_SOLICITANTES) });
+    } catch (e) {
+      return json({ error: (e as Error).message }, 502);
+    }
+  }
+
   // Campos obrigatórios
   const rota = (body.rota == null ? '' : String(body.rota)).trim();
   const receita = numOrNull(body.receita);
@@ -280,13 +294,13 @@ Deno.serve(async (req) => {
 
   try {
     const mutation = `mutation CreateCard($input: CreateCardInput!) {
-      createCard(input: $input) { card { id title url } }
+      createCard(input: $input) { card { id title url fields { name value } } }
     }`;
     const input = { pipe_id: PIPE_ID, phase_id: PHASE_FECHADAS, title: titulo, fields_attributes: fields };
     const data = await gql(token, mutation, { input });
     const card = data?.createCard?.card;
     if (!card?.id) return json({ error: 'Pipefy não retornou o card criado.' }, 502);
-    return json({ ok: true, cardId: card.id, cardUrl: card.url, title: card.title });
+    return json({ ok: true, cardId: card.id, cardUrl: card.url, title: card.title, fields: card.fields || [] });
   } catch (e) {
     return json({ error: (e as Error).message }, 502);
   }
