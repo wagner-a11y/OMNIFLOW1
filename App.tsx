@@ -45,6 +45,23 @@ const DefaultLogo: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+// Opções de mercadoria — grafia IDÊNTICA à do campo tipo_de_mercadoria do Pipefy (espelho exato).
+// "Tintas, Vernizes, Solvente e derivados" é UM valor único (as vírgulas fazem parte do nome).
+// "Cargas Diversas" é a opção quando nada encaixa.
+const MERCADORIA_OPTIONS = [
+    'Amido', 'Andaimes', 'Autopeças', 'Artigos de Higiene e Limpeza', 'Bebidas em Geral', 'Cargas Diversas',
+    'Defensivos Agrícolas e Fertilizantes', 'Ferramentas Manuais ou Elétricas', 'Máquinas e Equipamentos',
+    'Papel em Bobinas', 'Papel e derivados diversos', 'Pallet Vazio', 'Pneus', 'Produtos Alimentícios',
+    'Tintas, Vernizes, Solvente e derivados', 'Transformadores',
+];
+// Casa um texto (ex.: vindo da importação inteligente) com uma das 16 opções, ignorando caixa/acento.
+// Sem correspondência, retorna '' (operador escolhe; "Cargas Diversas" é o curinga manual).
+const matchMercadoriaOption = (v: string): string => {
+        const norm = (s: string) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    const n = norm(v);
+    return MERCADORIA_OPTIONS.find(o => norm(o) === n) || '';
+};
+
 // Veículos utilitários: frete base = KM × tarifa fixa (ignoram a tabela ANTT).
 const UTILITARIO_KM_RATES: Record<string, number> = {
     [VehicleType.Fiorino]: 2.40,
@@ -1206,7 +1223,8 @@ Disponibilidade: ${disponibilidade}`;
 
         if (origem) setOrigin(origem);
         if (destino) setDestination(destino);
-        if (tipoCarga) setMerchandiseType(tipoCarga);
+        // Mercadoria agora é select (16 opções): só preenche se o texto lido casar com uma opção; senão deixa o operador escolher.
+        if (tipoCarga) { const op = matchMercadoriaOption(tipoCarga); if (op) setMerchandiseType(op); }
 
         const pesoNum = parseFloat(pesoRaw.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.'));
         if (pesoRaw && !isNaN(pesoNum)) setWeight(String(pesoNum));
@@ -2082,7 +2100,7 @@ Disponibilidade: ${disponibilidade}`;
                                                 </select>
                                                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
                                             </div>
-                                            <div className="relative col-span-1 md:col-span-2"><Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={merchandiseType} onChange={e => setMerchandiseType(e.target.value)} placeholder="Tipo da Mercadoria" /></div>
+                                            <div className="relative col-span-1 md:col-span-2"><Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none z-10" /><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" /><select className="w-full pl-10 pr-10 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none appearance-none cursor-pointer" value={merchandiseType} onChange={e => setMerchandiseType(e.target.value)}><option value="">Tipo da Mercadoria</option>{MERCADORIA_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
                                             <div className="relative">
                                                 <Scale className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                                                 <input type="text" className="w-full pl-10 pr-4 py-4 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all" value={weight} onChange={e => setWeight(e.target.value)} placeholder="Peso KG" />
