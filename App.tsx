@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send
+    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, CopyPlus, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { WonInfoModal } from './components/WonInfoModal';
@@ -1057,6 +1057,25 @@ const App: React.FC = () => {
         setOtherCosts(quote.otherCosts || []);
         setElapsedSeconds(quote.elaborationSeconds || 0); setIsTimerRunning(false);
         setActiveTab('new'); showFeedback("Editando...");
+    };
+
+    // Duplica uma cotação como NOVA: copia todos os campos, mas zera id (editingId null -> created_by
+    // passa a ser quem duplicou), cronômetro do zero e não salva nada. A original fica intacta;
+    // a duplicada só vira registro quando o operador salvar. Não altera a fórmula de cálculo.
+    const duplicateQuote = (quote: FreightCalculation) => {
+        setOrigin(quote.origin); setDestination(quote.destination); setDestinations(quote.destinations ? [...quote.destinations] : []);
+        setShowMap(false); setRouteGeometry(null); setClientReference(quote.clientReference || ''); setDistanceKm(quote.distanceKm.toString());
+        setVehicleType(quote.vehicleType); setWeight(quote.weight.toString()); setSelectedCustomerId(quote.customerId); setBaseFreight(maskCurrency(quote.baseFreight));
+        setTolls(maskCurrency(quote.tolls)); setExtraCosts(maskCurrency(quote.extraCosts || 0)); setExtraCostsDescription(quote.extraCostsDescription || '');
+        setGoodsValue(maskCurrency(quote.goodsValue)); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
+        setIcmsPercent(quote.icmsPercent.toString()); setDisponibilidade(quote.disponibilidade || "Imediato");
+        setMerchandiseType(quote.merchandiseType || '');
+        setSolicitante(quote.solicitante || '');
+        setOtherCosts(quote.otherCosts ? quote.otherCosts.map(c => ({ ...c })) : []);
+        setEditingId(null);                       // cotação NOVA, não edição
+        setElapsedSeconds(0); setIsTimerRunning(false);  // cronômetro do zero
+        setOpenCostToClient(false);
+        setActiveTab('new'); showFeedback("Cotação duplicada — ajuste e salve como nova.");
     };
 
     const resetForm = () => {
@@ -2445,9 +2464,12 @@ Disponibilidade: ${disponibilidade}`;
                                                 <p className="text-[8px] font-medium text-[#6b7280] uppercase">Lucro: R$ {formatCur(profitValue)}</p>
                                             </div>
                                             <div className="w-32 text-right"><p className="text-base font-medium text-[#111827]">R$ {formatCur(h.totalFreight)}</p></div>
-                                            <div className="w-20 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                                <button onClick={() => loadQuote(h)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg">
+                                            <div className="w-28 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                <button onClick={() => loadQuote(h)} title="Editar" className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg">
                                                     <Edit3 className="w-4 h-4" />
+                                                </button>
+                                                <button onClick={() => duplicateQuote(h)} title="Duplicar como nova cotação" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                                                    <CopyPlus className="w-4 h-4" />
                                                 </button>
                                                 {currentUser.role === 'master' && (
                                                     <button onClick={async () => { if (await deleteFreightCalculation(h.id)) setHistory(prev => prev.filter(i => i.id !== h.id)); }} className="p-2 text-red-400 hover:bg-red-50 rounded-lg">
