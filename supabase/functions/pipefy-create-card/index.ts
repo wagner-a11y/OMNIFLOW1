@@ -65,6 +65,15 @@ function mapMercadoria(v: string): string {
   return exact || ''; // só correspondência exata; senão, branco
 }
 
+// Outras Necessidades -> select [Compulog, Comprovei]. Só correspondência exata; senão branco.
+const OUTRAS_NEC_OPCOES = ['Compulog', 'Comprovei'];
+function mapOutrasNec(v: string): string {
+  const n = norm(v);
+  if (!n) return '';
+  const exact = OUTRAS_NEC_OPCOES.find(o => norm(o) === n);
+  return exact || '';
+}
+
 // datetime-local "2026-06-13T10:00" -> "2026-06-13 10:00" (formato aceito pelo Pipefy). Branco se inválido.
 function fmtDateTime(v: unknown): string {
   const s = (v == null ? '' : String(v)).trim();
@@ -118,8 +127,9 @@ Deno.serve(async (req) => {
 
   // Mapeamentos
   const veiculo = mapVeiculo(body.veiculo);
-  const mercadoria = mapMercadoria(body.mercadoria);
+  const mercadoria = mapMercadoria(body.mercadoria);     // "Material" = Mercadoria a Transportar (select)
   const implemento = mapImplemento(body.implemento);
+  const outrasNec = mapOutrasNec(body.outrasNecessidades); // Outras Necessidades (select Compulog/Comprovei)
   const peso = numOrNull(body.peso);
   const dataColeta = fmtDateTime(body.dataColeta);
   const dataEntrega = fmtDateTime(body.dataEntrega);
@@ -127,6 +137,13 @@ Deno.serve(async (req) => {
   const localEntrega = (body.localEntrega == null ? '' : String(body.localEntrega)).trim();
   const observacoes = (body.observacoes == null ? '' : String(body.observacoes)).trim();
   const titulo = (body.titulo == null ? '' : String(body.titulo)).trim() || rota;
+
+  // Origens dos campos que NÃO aceitam texto (só reportadas no dryRun, nunca enviadas):
+  const clienteRaw = (body.cliente == null ? '' : String(body.cliente)).trim();          // -> conexão "Cliente"
+  const solicitanteRaw = (body.solicitante == null ? '' : String(body.solicitante)).trim(); // -> conexão "Solicitante"
+  const referenciaRaw = (body.referencia == null ? '' : String(body.referencia)).trim();   // -> "Documento" (anexo)
+  const outrasNecRaw = (body.outrasNecessidades == null ? '' : String(body.outrasNecessidades)).trim();
+  const mercadoriaRaw = (body.mercadoria == null ? '' : String(body.mercadoria)).trim();
 
   // Monta fields_attributes; só inclui campos com valor (branco => omitido).
   const fields: { field_id: string; field_value: any }[] = [];
@@ -146,9 +163,55 @@ Deno.serve(async (req) => {
   push('local_da_coleta', localColeta);
   push('local_da_entrega', localEntrega);
   push('observa_es_1', observacoes);
+  push('outras_necessidades_', outrasNec);            // Outras Necessidades (select) — só se casar exato
 
   if (dryRun) {
-    return json({ ok: true, dryRun: true, pipe_id: PIPE_ID, phase_id: PHASE_FECHADAS, title: titulo, fields_attributes: fields, mapeamento: { veiculo, mercadoria, implemento } });
+    // Relatório dos 5 campos solicitados: status + motivo de cada um.
+    const camposAlvo = [
+      {
+        campo: 'Cliente', field_id: 'conex_o_de_database', tipo: 'connector (conexão)',
+        origemOmniflow: 'cliente da cotação', valorOrigem: clienteRaw || '(vazio)',
+        status: 'NÃO PREENCHIDO',
+        motivo: 'Campo de CONEXÃO: não aceita texto (quebraria o card). Precisa do id do registro no cadastro vinculado — definir junto.',
+      },
+      {
+        campo: 'Solicitante', field_id: 'solicitante_da_carga', tipo: 'connector (conexão)',
+        origemOmniflow: 'solicitante do formulário de carga ganha', valorOrigem: solicitanteRaw || '(vazio)',
+        status: 'NÃO PREENCHIDO',
+        motivo: 'Campo de CONEXÃO: não aceita texto. Precisa do id do registro no cadastro vinculado — definir junto.',
+      },
+      {
+        campo: 'Documento', field_id: 'documento_do_frete', tipo: 'attachment (anexo/arquivo)',
+        origemOmniflow: 'Referência do Cliente da cotação', valorOrigem: referenciaRaw || '(vazio)',
+        status: 'NÃO PREENCHIDO',
+        motivo: 'Campo de ANEXO (arquivo): não aceita texto. Para a Referência (texto) existe o campo short_text "Solicitação (STE, Coleta, etc)" (solicita_o_ste_coleta_etc) — confirmar se pode usar esse.',
+      },
+      {
+        campo: 'Material', field_id: 'tipo_de_mercadoria', tipo: 'select',
+        origemOmniflow: 'tipo de carga / mercadoria da cotação', valorOrigem: mercadoriaRaw || '(vazio)',
+        valorPipefy: mercadoria || null,
+        status: mercadoria ? 'PREENCHIDO' : 'NÃO PREENCHIDO',
+        motivo: mercadoria ? 'Casou com opção exata do Pipefy.' : (mercadoriaRaw ? `"${mercadoriaRaw}" não casa com nenhuma opção do select.` : 'Origem vazia.'),
+      },
+      {
+        campo: 'Outras Necessidades', field_id: 'outras_necessidades_', tipo: 'select [Compulog, Comprovei]',
+        origemOmniflow: 'campo "Outras Necessidades" do formulário de carga ganha (texto livre)', valorOrigem: outrasNecRaw || '(vazio)',
+        valorPipefy: outrasNec || null,
+        status: outrasNec ? 'PREENCHIDO' : 'NÃO PREENCHIDO',
+        motivo: outrasNec ? 'Casou com opção exata.' : (outrasNecRaw ? `"${outrasNecRaw}" não casa com Compulog/Comprovei (só essas 2 opções existem no Pipefy).` : 'Origem vazia.'),
+      },
+    ];
+    const selectsSemMatch = camposAlvo
+      .filter(c => c.tipo.startsWith('select') && c.status === 'NÃO PREENCHIDO' && c.valorOrigem !== '(vazio)')
+      .map(c => ({ campo: c.campo, field_id: c.field_id, valorOmniflow: c.valorOrigem }));
+
+    return json({
+      ok: true, dryRun: true, pipe_id: PIPE_ID, phase_id: PHASE_FECHADAS, title: titulo,
+      fields_attributes: fields,
+      mapeamento: { veiculo, mercadoria, implemento, outrasNec },
+      camposAlvo,
+      selectsSemMatch,
+    });
   }
 
   try {
