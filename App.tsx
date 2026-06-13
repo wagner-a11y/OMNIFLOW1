@@ -818,8 +818,12 @@ const App: React.FC = () => {
             const q = selectedWonQuote;
             const dests = (q.destinations && q.destinations.length) ? q.destinations : (q.destination ? [q.destination] : []);
             const rota = [q.origin, ...dests].map(s => (s || '').trim()).filter(Boolean).join(' → ');
-            // Observações = só observações gerais (Outras Necessidades NÃO repete aqui; vai só pro select se casar).
-            const obs = (wonData.observacoesGerais || '').trim();
+            // Observações = observações gerais + "Outras Necessidades" rotulado (pra não perder a info; o
+            // select Outras Necessidades do Pipefy fica pra operação usar Compulog/Comprovei se precisar).
+            const obs = [
+                (wonData.observacoesGerais || '').trim(),
+                (wonData.outrasNecessidades || '').trim() ? `Necessidades: ${(wonData.outrasNecessidades || '').trim()}` : '',
+            ].filter(Boolean).join('\n');
             const pipefyRes = await createPipefyCard({
                 rota,
                 receita: Number(wonData.nossoFrete) || 0,

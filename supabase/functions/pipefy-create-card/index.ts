@@ -65,15 +65,6 @@ function mapMercadoria(v: string): string {
   return exact || ''; // só correspondência exata; senão, branco
 }
 
-// Outras Necessidades -> select [Compulog, Comprovei]. Só correspondência exata; senão branco.
-const OUTRAS_NEC_OPCOES = ['Compulog', 'Comprovei'];
-function mapOutrasNec(v: string): string {
-  const n = norm(v);
-  if (!n) return '';
-  const exact = OUTRAS_NEC_OPCOES.find(o => norm(o) === n);
-  return exact || '';
-}
-
 // datetime-local "2026-06-13T10:00" -> "2026-06-13 10:00" (formato aceito pelo Pipefy). Branco se inválido.
 function fmtDateTime(v: unknown): string {
   const s = (v == null ? '' : String(v)).trim();
@@ -99,6 +90,40 @@ async function gql(token: string, query: string, variables: unknown) {
     throw new Error(`Pipefy GraphQL (HTTP ${res.status}): ${JSON.stringify(data.errors || data)}`);
   }
   return data.data;
+}
+
+// Tabelas de cadastro vinculadas às conexões (descobertas via inspect read-only).
+const TABLE_CLIENTES = 'n4RglqvR';
+const TABLE_SOLICITANTES = 'NRSsu5wv';
+
+// Casa um nome com um registro da tabela do Pipefy SÓ por correspondência EXATA (título idêntico,
+// ignorando caixa/acento/espaços nas pontas). Nada de busca aproximada. Nunca cria registro.
+// Retorna { id } se achou um único exato; senão { id: null, motivo }.
+async function findRecordIdExact(token: string, tableId: string, name: string): Promise<{ id: string | null; motivo: string }> {
+  const alvo = (name || '').trim();
+  if (!alvo) return { id: null, motivo: 'origem vazia' };
+  const eq = (a: string, b: string) => norm(a) === norm(b);
+  // Varre páginas (50/pág, até 600 registros) e compara título exato. Sem search aproximado.
+  let after: string | null = null;
+  const exatos: { id: string; title: string }[] = [];
+  for (let i = 0; i < 12; i++) {
+    const q = `query($tid: ID!, $after: String) {
+      table_records(table_id: $tid, first: 50, after: $after) {
+        edges { node { id title } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`;
+    const data: any = await gql(token, q, { tid: tableId, after });
+    const conn = data?.table_records;
+    for (const e of (conn?.edges || [])) {
+      if (eq(e.node.title || '', alvo)) exatos.push({ id: e.node.id, title: e.node.title });
+    }
+    if (!conn?.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  if (exatos.length === 1) return { id: exatos[0].id, motivo: `match exato: "${exatos[0].title}"` };
+  if (exatos.length > 1) return { id: null, motivo: `${exatos.length} registros com nome idêntico — ambíguo, deixado vazio` };
+  return { id: null, motivo: `nenhum registro idêntico a "${alvo}" no cadastro` };
 }
 
 Deno.serve(async (req) => {
@@ -157,7 +182,6 @@ Deno.serve(async (req) => {
   const veiculo = mapVeiculo(body.veiculo);
   const mercadoria = mapMercadoria(body.mercadoria);     // "Material" = Mercadoria a Transportar (select)
   const implemento = mapImplemento(body.implemento);
-  const outrasNec = mapOutrasNec(body.outrasNecessidades); // Outras Necessidades (select Compulog/Comprovei)
   const peso = numOrNull(body.peso);
   const dataColeta = fmtDateTime(body.dataColeta);
   const dataEntrega = fmtDateTime(body.dataEntrega);
@@ -166,12 +190,16 @@ Deno.serve(async (req) => {
   const observacoes = (body.observacoes == null ? '' : String(body.observacoes)).trim();
   const titulo = (body.titulo == null ? '' : String(body.titulo)).trim() || rota;
 
-  // Origens dos campos que NÃO aceitam texto (só reportadas no dryRun, nunca enviadas):
-  const clienteRaw = (body.cliente == null ? '' : String(body.cliente)).trim();          // -> conexão "Cliente"
-  const solicitanteRaw = (body.solicitante == null ? '' : String(body.solicitante)).trim(); // -> conexão "Solicitante"
-  const referenciaRaw = (body.referencia == null ? '' : String(body.referencia)).trim();   // -> "Documento" (anexo)
-  const outrasNecRaw = (body.outrasNecessidades == null ? '' : String(body.outrasNecessidades)).trim();
+  // Origens dos campos especiais:
+  const clienteRaw = (body.cliente == null ? '' : String(body.cliente)).trim();          // -> conexão "Cliente" (tabela Clientes)
+  const solicitanteRaw = (body.solicitante == null ? '' : String(body.solicitante)).trim(); // -> conexão "Solicitante" (tabela Solicitantes)
+  const referenciaRaw = (body.referencia == null ? '' : String(body.referencia)).trim();   // -> "Solicitação (STE...)" (short_text)
+  const outrasNecRaw = (body.outrasNecessidades == null ? '' : String(body.outrasNecessidades)).trim(); // -> vai nas Observações (rótulo), NÃO no select
   const mercadoriaRaw = (body.mercadoria == null ? '' : String(body.mercadoria)).trim();
+
+  // Conexões: casa por nome SÓ exato (read-only). Nunca cria registro. Sem match -> vazio.
+  const clienteMatch = await findRecordIdExact(token, TABLE_CLIENTES, clienteRaw);
+  const solicitanteMatch = await findRecordIdExact(token, TABLE_SOLICITANTES, solicitanteRaw);
 
   // Monta fields_attributes; só inclui campos com valor (branco => omitido).
   const fields: { field_id: string; field_value: any }[] = [];
@@ -190,24 +218,28 @@ Deno.serve(async (req) => {
   push('data_e_hora_de_entrega', dataEntrega);
   push('local_da_coleta', localColeta);
   push('local_da_entrega', localEntrega);
-  push('observa_es_1', observacoes);
-  push('outras_necessidades_', outrasNec);            // Outras Necessidades (select) — só se casar exato
+  push('observa_es_1', observacoes);                  // já vem com "Necessidades: ..." embutido (montado no app)
   push('solicita_o_ste_coleta_etc', referenciaRaw);   // "Solicitação (STE...)" recebe a Referência do Cliente (short_text)
+  // Conexões: só envia se houve match EXATO de nome (id do registro). Sem match -> nada (vazio). Nunca cria.
+  if (clienteMatch.id) push('conex_o_de_database', [clienteMatch.id]);
+  if (solicitanteMatch.id) push('solicitante_da_carga', [solicitanteMatch.id]);
 
   if (dryRun) {
     // Relatório dos 5 campos solicitados: status + motivo de cada um.
     const camposAlvo = [
       {
-        campo: 'Cliente', field_id: 'conex_o_de_database', tipo: 'connector (conexão)',
+        campo: 'Cliente', field_id: 'conex_o_de_database', tipo: 'connector → tabela "Clientes"',
         origemOmniflow: 'cliente da cotação', valorOrigem: clienteRaw || '(vazio)',
-        status: 'NÃO PREENCHIDO',
-        motivo: 'Campo de CONEXÃO: não aceita texto (quebraria o card). Precisa do id do registro no cadastro vinculado — definir junto.',
+        valorPipefy: clienteMatch.id || null,
+        status: clienteMatch.id ? 'PREENCHIDO (id do registro)' : 'NÃO PREENCHIDO',
+        motivo: `Match SÓ exato por nome (sem aproximação, nunca cria registro). ${clienteMatch.motivo}.`,
       },
       {
-        campo: 'Solicitante', field_id: 'solicitante_da_carga', tipo: 'connector (conexão)',
+        campo: 'Solicitante', field_id: 'solicitante_da_carga', tipo: 'connector → tabela "Solicitantes"',
         origemOmniflow: 'solicitante do formulário de carga ganha', valorOrigem: solicitanteRaw || '(vazio)',
-        status: 'NÃO PREENCHIDO',
-        motivo: 'Campo de CONEXÃO: não aceita texto. Precisa do id do registro no cadastro vinculado — definir junto.',
+        valorPipefy: solicitanteMatch.id || null,
+        status: solicitanteMatch.id ? 'PREENCHIDO (id do registro)' : 'NÃO PREENCHIDO',
+        motivo: `Match SÓ exato por nome (sem aproximação, nunca cria registro). ${solicitanteMatch.motivo}.`,
       },
       {
         campo: 'Documento → Referência', field_id: 'solicita_o_ste_coleta_etc', tipo: 'short_text (texto)',
@@ -226,21 +258,21 @@ Deno.serve(async (req) => {
         motivo: mercadoria ? 'Casou com opção exata do Pipefy.' : (mercadoriaRaw ? `"${mercadoriaRaw}" não casa com nenhuma opção do select.` : 'Origem vazia.'),
       },
       {
-        campo: 'Outras Necessidades', field_id: 'outras_necessidades_', tipo: 'select [Compulog, Comprovei]',
+        campo: 'Outras Necessidades', field_id: 'observa_es_1 (Observações)', tipo: 'texto (dentro das Observações)',
         origemOmniflow: 'campo "Outras Necessidades" do formulário de carga ganha (texto livre)', valorOrigem: outrasNecRaw || '(vazio)',
-        valorPipefy: outrasNec || null,
-        status: outrasNec ? 'PREENCHIDO' : 'NÃO PREENCHIDO',
-        motivo: outrasNec ? 'Casou com opção exata.' : (outrasNecRaw ? `"${outrasNecRaw}" não casa com Compulog/Comprovei (só essas 2 opções existem no Pipefy).` : 'Origem vazia.'),
+        valorPipefy: outrasNecRaw ? `incluído nas Observações com rótulo "Necessidades: ..."` : null,
+        status: outrasNecRaw ? 'PREENCHIDO (via Observações)' : 'NÃO PREENCHIDO',
+        motivo: 'Por decisão: o texto livre NÃO força o select Compulog/Comprovei (esse fica pra operação). O conteúdo vai dentro das Observações com rótulo "Necessidades: ..." pra não perder a informação.',
       },
     ];
     const selectsSemMatch = camposAlvo
-      .filter(c => c.tipo.startsWith('select') && c.status === 'NÃO PREENCHIDO' && c.valorOrigem !== '(vazio)')
+      .filter(c => c.tipo === 'select' && c.status === 'NÃO PREENCHIDO' && c.valorOrigem !== '(vazio)')
       .map(c => ({ campo: c.campo, field_id: c.field_id, valorOmniflow: c.valorOrigem }));
 
     return json({
       ok: true, dryRun: true, pipe_id: PIPE_ID, phase_id: PHASE_FECHADAS, title: titulo,
       fields_attributes: fields,
-      mapeamento: { veiculo, mercadoria, implemento, outrasNec },
+      mapeamento: { veiculo, mercadoria, implemento, clienteRecordId: clienteMatch.id, solicitanteRecordId: solicitanteMatch.id },
       camposAlvo,
       selectsSemMatch,
     });
