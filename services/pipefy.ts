@@ -17,6 +17,8 @@ export interface PipefyCardPayload {
     localColeta?: string;
     localEntrega?: string;
     observacoes?: string;
+    referencia?: string;
+    outrasNecessidades?: string;
     titulo?: string;
     dryRun?: boolean;
 }

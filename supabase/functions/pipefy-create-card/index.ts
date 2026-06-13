@@ -112,6 +112,34 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { return json({ error: 'Corpo inválido.' }, 400); }
   const dryRun = body.dryRun === true;
 
+  // Inspeção READ-ONLY das conexões (a que cadastro Cliente/Solicitante estão ligados). Não cria card.
+  if (body.inspect === 'connectors') {
+    try {
+      // 1) descobre os tipos possíveis da union PublicRepoUnion
+      const introspect = await gql(token, `{ __type(name: "PublicRepoUnion") { possibleTypes { name } } }`, {});
+      const tipos: string[] = (introspect?.__type?.possibleTypes || []).map((t: any) => t.name);
+      // 2) monta fragments dinâmicos só com os tipos que existem
+      const frags = tipos.map(t => `... on ${t} { id name }`).join('\n');
+      const q = `query {
+        pipe(id: ${PIPE_ID}) {
+          start_form_fields {
+            id label type
+            connectedRepo { __typename ${frags} }
+          }
+        }
+      }`;
+      const data = await gql(token, q, {});
+      const fields = (data?.pipe?.start_form_fields || []).filter((f: any) => f.type === 'connector')
+        .map((f: any) => ({
+          id: f.id, label: f.label,
+          cadastro: f.connectedRepo ? { tipo: f.connectedRepo.__typename, id: f.connectedRepo.id, nome: f.connectedRepo.name } : null,
+        }));
+      return json({ ok: true, unionTypes: tipos, connectors: fields });
+    } catch (e) {
+      return json({ error: (e as Error).message }, 502);
+    }
+  }
+
   // Campos obrigatórios
   const rota = (body.rota == null ? '' : String(body.rota)).trim();
   const receita = numOrNull(body.receita);
@@ -164,6 +192,7 @@ Deno.serve(async (req) => {
   push('local_da_entrega', localEntrega);
   push('observa_es_1', observacoes);
   push('outras_necessidades_', outrasNec);            // Outras Necessidades (select) — só se casar exato
+  push('solicita_o_ste_coleta_etc', referenciaRaw);   // "Solicitação (STE...)" recebe a Referência do Cliente (short_text)
 
   if (dryRun) {
     // Relatório dos 5 campos solicitados: status + motivo de cada um.
@@ -181,10 +210,13 @@ Deno.serve(async (req) => {
         motivo: 'Campo de CONEXÃO: não aceita texto. Precisa do id do registro no cadastro vinculado — definir junto.',
       },
       {
-        campo: 'Documento', field_id: 'documento_do_frete', tipo: 'attachment (anexo/arquivo)',
+        campo: 'Documento → Referência', field_id: 'solicita_o_ste_coleta_etc', tipo: 'short_text (texto)',
         origemOmniflow: 'Referência do Cliente da cotação', valorOrigem: referenciaRaw || '(vazio)',
-        status: 'NÃO PREENCHIDO',
-        motivo: 'Campo de ANEXO (arquivo): não aceita texto. Para a Referência (texto) existe o campo short_text "Solicitação (STE, Coleta, etc)" (solicita_o_ste_coleta_etc) — confirmar se pode usar esse.',
+        valorPipefy: referenciaRaw || null,
+        status: referenciaRaw ? 'PREENCHIDO' : 'NÃO PREENCHIDO',
+        motivo: referenciaRaw
+          ? 'Por decisão: a Referência vai no campo de texto "Solicitação (STE, Coleta, etc)". O anexo "Documento do Frete" (documento_do_frete) segue vazio (é arquivo).'
+          : 'Origem (Referência) vazia. O anexo "Documento do Frete" não recebe texto.',
       },
       {
         campo: 'Material', field_id: 'tipo_de_mercadoria', tipo: 'select',

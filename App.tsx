@@ -818,7 +818,8 @@ const App: React.FC = () => {
             const q = selectedWonQuote;
             const dests = (q.destinations && q.destinations.length) ? q.destinations : (q.destination ? [q.destination] : []);
             const rota = [q.origin, ...dests].map(s => (s || '').trim()).filter(Boolean).join(' → ');
-            const obs = [wonData.observacoesGerais, wonData.outrasNecessidades].map((s: string) => (s || '').trim()).filter(Boolean).join(' | ');
+            // Observações = só observações gerais (Outras Necessidades NÃO repete aqui; vai só pro select se casar).
+            const obs = (wonData.observacoesGerais || '').trim();
             const pipefyRes = await createPipefyCard({
                 rota,
                 receita: Number(wonData.nossoFrete) || 0,
@@ -833,6 +834,8 @@ const App: React.FC = () => {
                 localColeta: wonData.coletaEndereco,
                 localEntrega: wonData.entregaEndereco,
                 observacoes: obs,
+                referencia: wonData.referenciaClienteOperacao || q.clientReference,  // -> "Solicitação (STE...)" (short_text)
+                outrasNecessidades: wonData.outrasNecessidades,                      // -> select (só Compulog/Comprovei)
                 titulo: [wonData.clienteNomeOperacao, rota].map(s => (s || '').trim()).filter(Boolean).join(' — '),
             });
             if (pipefyRes.ok && pipefyRes.cardId) {
