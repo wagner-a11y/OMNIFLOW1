@@ -359,7 +359,9 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
         motoristaDocUrl: item.motorista_doc_url,
         placaCavaloDocUrl: item.placa_cavalo_doc_url,
         placaCarreta1DocUrl: item.placa_carreta_1_doc_url,
-        placaCarreta2DocUrl: item.placa_carreta_2_doc_url
+        placaCarreta2DocUrl: item.placa_carreta_2_doc_url,
+        pipefyCardId: item.pipefy_card_id || undefined,
+        pipefySentAt: item.pipefy_sent_at || undefined
     }));
 };
 
@@ -568,7 +570,9 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         motorista_doc_url: calc.motoristaDocUrl || null,
         placa_cavalo_doc_url: calc.placaCavaloDocUrl || null,
         placa_carreta_1_doc_url: calc.placaCarreta1DocUrl || null,
-        placa_carreta_2_doc_url: calc.placaCarreta2DocUrl || null
+        placa_carreta_2_doc_url: calc.placaCarreta2DocUrl || null,
+        pipefy_card_id: calc.pipefyCardId || null,
+        pipefy_sent_at: calc.pipefySentAt || null
     };
 
     const { error } = await supabase

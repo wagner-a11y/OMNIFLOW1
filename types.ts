@@ -109,6 +109,8 @@ export interface FreightCalculation {
     lostReason?: LostReason;
     lostObs?: string;
     lostFileUrl?: string;
+    pipefyCardId?: string;    // id do card na operação (Pipefy); presente = já enviado (trava duplicado)
+    pipefySentAt?: string;    // quando foi enviado pro Pipefy
     // Operation Pipeline Fields
     coletaDate?: string;
     entregaDate?: string;

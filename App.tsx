@@ -12,6 +12,7 @@ import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
+import { createPipefyCard } from './services/pipefy';
 import { RouteMap, MapErrorBoundary } from './components/RouteMap';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
@@ -800,22 +801,60 @@ const App: React.FC = () => {
         };
 
         const result = await updateFreightCalculation(updatedQuote);
-        if (result.success) {
-            setHistory(prev => prev.map(h => h.id === selectedWonQuote.id ? updatedQuote : h));
-            setIsWonModalOpen(false);
-            setSelectedWonQuote(null);
-            setShowCelebration(true);
-            setTimeout(() => setShowCelebration(false), 4000);
-            showFeedback('Carga confirmada e enviada para operação!');
-
-            // If we were on 'new' or 'crm', maybe move to history or operations?
-            // The prompt doesn't specify, but history seems safe.
-            resetForm();
-            setActiveTab('history');
-        } else {
+        if (!result.success) {
             console.error('Detailed Save Error:', result.error);
             showFeedback(`Erro ao salvar carga: ${result.error || 'Erro desconhecido'}`, 'error');
+            return;
         }
+
+        // Operação salva no OmniFlow. Agora envia pro Pipefy (controle operacional), com trava de
+        // duplicado: se já tem card, não manda de novo. Se o Pipefy falhar, a operação fica salva
+        // mesmo assim e mostramos aviso — sem perder dado. (Ramper segue intacto, etapa comercial.)
+        let finalQuote = updatedQuote;
+        let pipefyMsg = '';
+        if (selectedWonQuote.pipefyCardId) {
+            pipefyMsg = ' (já estava na operação do Pipefy — não dupliquei o card)';
+        } else {
+            const q = selectedWonQuote;
+            const dests = (q.destinations && q.destinations.length) ? q.destinations : (q.destination ? [q.destination] : []);
+            const rota = [q.origin, ...dests].map(s => (s || '').trim()).filter(Boolean).join(' → ');
+            const obs = [wonData.observacoesGerais, wonData.outrasNecessidades].map((s: string) => (s || '').trim()).filter(Boolean).join(' | ');
+            const pipefyRes = await createPipefyCard({
+                rota,
+                receita: Number(wonData.nossoFrete) || 0,
+                freteTerceiro: Number(wonData.freteTerceiro) || 0,
+                valorCarga: Number(wonData.valorCarga) || 0,
+                peso: Number(wonData.pesoCargaOperacao) || undefined,
+                veiculo: wonData.veiculoTipoOperacao || q.vehicleType,
+                mercadoria: wonData.materialTipo || q.merchandiseType,
+                implemento: wonData.carroceriaTipoOperacao,
+                dataColeta: wonData.coletaDate,
+                dataEntrega: wonData.entregaDate,
+                localColeta: wonData.coletaEndereco,
+                localEntrega: wonData.entregaEndereco,
+                observacoes: obs,
+                titulo: [wonData.clienteNomeOperacao, rota].map(s => (s || '').trim()).filter(Boolean).join(' — '),
+            });
+            if (pipefyRes.ok && pipefyRes.cardId) {
+                finalQuote = { ...updatedQuote, pipefyCardId: pipefyRes.cardId, pipefySentAt: new Date().toISOString() };
+                await updateFreightCalculation(finalQuote); // persiste a trava de duplicado
+                pipefyMsg = ' e enviada pro Pipefy';
+            } else {
+                pipefyMsg = ` — ⚠️ operação salva, mas falhou enviar pro Pipefy: ${pipefyRes.error || 'erro desconhecido'}`;
+            }
+        }
+
+        setHistory(prev => prev.map(h => h.id === selectedWonQuote.id ? finalQuote : h));
+        setIsWonModalOpen(false);
+        setSelectedWonQuote(null);
+        const pipefyFailed = pipefyMsg.includes('⚠️');
+        if (!pipefyFailed) {
+            setShowCelebration(true);
+            setTimeout(() => setShowCelebration(false), 4000);
+        }
+        showFeedback(`Carga confirmada${pipefyMsg}!`, pipefyFailed ? 'error' : 'success');
+        resetForm();
+        setActiveTab('history');
     };
 
     // Indica se o veículo selecionado possui tabela ANTT (piso mínimo aplicável).
