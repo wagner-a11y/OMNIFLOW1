@@ -45,6 +45,28 @@ export const searchPipefyRecords = async (
     }
 };
 
+export interface PipefyBoardCard {
+    id: string;
+    cliente: string;
+    rota: string;
+    referencia: string;
+    coleta: string;       // "DD/MM/YYYY HH:mm" (formato do Pipefy)
+    faseId: string;
+    faseNome: string;
+    desde: string | null; // ISO (quando entrou na fase atual)
+}
+
+// Painel de acompanhamento (read-only). Fail-soft: erro/rede -> null (a tela mantém o último estado).
+export const getPipefyBoard = async (): Promise<PipefyBoardCard[] | null> => {
+    try {
+        const { data, error } = await supabase.functions.invoke('pipefy-create-card', { body: { action: 'board' } });
+        if (error || !data?.ok || !Array.isArray(data.cards)) return null;
+        return data.cards as PipefyBoardCard[];
+    } catch {
+        return null;
+    }
+};
+
 export const createPipefyCard = async (
     payload: PipefyCardPayload
 ): Promise<{ ok?: boolean; cardId?: string; cardUrl?: string; title?: string; dryRun?: boolean; fields_attributes?: any[]; error?: string }> => {

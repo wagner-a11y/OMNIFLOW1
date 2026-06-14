@@ -195,6 +195,71 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Painel de acompanhamento READ-ONLY: puxa só as fases de PREPARAÇÃO (antes de Em Viagem), uma
+  // consulta leve por fase (evita o backlog gigante de cards finalizados). Não toca em nada no Pipefy.
+  if (body.action === 'board') {
+    // id da fase + nome canônico (não depende do nome exato vir do Pipefy).
+    const BOARD_PHASES = [
+      ['339926927', 'Cotações Fechadas'],
+      ['328712227', 'Motoristas em Contratação'],
+      ['342489603', 'GR'],
+      ['328712228', 'Motorista Contratado'],
+      ['328789115', 'Na Coleta'],
+      ['342489604', 'Faturamento'],
+      ['342512624', 'Pgto Adiantamento'],
+      ['338870349', 'Motorista Não encontrado'],
+    ];
+    const fieldVal = (fields: any[], id: string) => {
+      const f = (fields || []).find((x: any) => x?.field?.id === id);
+      return f ? (f.value || '') : '';
+    };
+    try {
+      const out: any[] = [];
+      for (const [faseId, faseNome] of BOARD_PHASES) {
+        let after: string | null = null;
+        for (let i = 0; i < 10; i++) { // até ~500 cards por fase de preparação (mais que suficiente)
+          const query = `query($phaseId: ID!, $after: String) {
+            phase(id: $phaseId) {
+              cards(first: 50, after: $after) {
+                pageInfo { hasNextPage endCursor }
+                edges { node {
+                  id title
+                  fields { value field { id } }
+                  phases_history { phase { id } lastTimeIn }
+                } }
+              }
+            }
+          }`;
+          const data: any = await gql(token, query, { phaseId: faseId, after });
+          const conn = data?.phase?.cards;
+          for (const e of (conn?.edges || [])) {
+            const n = e.node;
+            // "desde": entrada mais recente nesta fase (phases_history).
+            let desde: string | null = null;
+            for (const h of (n.phases_history || [])) {
+              if (String(h?.phase?.id) === String(faseId) && h?.lastTimeIn) {
+                if (!desde || h.lastTimeIn > desde) desde = h.lastTimeIn;
+              }
+            }
+            out.push({
+              id: n.id,
+              cliente: n.title || '',                                   // o pipe titula o card pelo Cliente
+              rota: fieldVal(n.fields, 'nome_da_rota_1'),
+              referencia: fieldVal(n.fields, 'solicita_o_ste_coleta_etc'),
+              coleta: fieldVal(n.fields, 'data_e_hora_para_coletar'),
+              faseId, faseNome, desde,
+            });
+          }
+          if (!conn?.pageInfo?.hasNextPage) break;
+          after = conn.pageInfo.endCursor;
+        }
+      }
+      return json({ ok: true, cards: out });
+    } catch (e) {
+      return json({ error: (e as Error).message }, 502);
+    }
+  }
+
   // Campos obrigatórios
   const rota = (body.rota == null ? '' : String(body.rota)).trim();
   const receita = numOrNull(body.receita);

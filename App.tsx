@@ -14,6 +14,7 @@ import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText }
 import { createRamperCard } from './services/ramper';
 import { createPipefyCard } from './services/pipefy';
 import { PipefyAutocomplete } from './components/PipefyAutocomplete';
+import { PipefyBoard } from './components/PipefyBoard';
 import { RouteMap, MapErrorBoundary } from './components/RouteMap';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
@@ -94,7 +95,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking'>('dashboard');
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -1652,6 +1653,7 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'dashboard', icon: BarChart3, label: 'Dashboard', adminOnly: true },
                         { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
                         { id: 'history', icon: History, label: 'Histórico' },
+                        { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
                         // { id: 'crm', icon: List, label: 'CRM' },
@@ -1687,7 +1689,8 @@ Disponibilidade: ${disponibilidade}`;
                         {editingId ? 'Editando Registro' :
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
                                 activeTab === 'crm' ? 'CRM' :
-                                    activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
+                                    activeTab === 'tracking' ? 'Acompanhamento de Cargas' :
+                                        activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
                         <div className="relative w-72">
@@ -1710,6 +1713,8 @@ Disponibilidade: ${disponibilidade}`;
                             />
                         </div>
                     )}
+
+                    {activeTab === 'tracking' && <PipefyBoard />}
 
                     {activeTab === 'dashboard' && (
                         <div className="space-y-8 animate-fade-in-up">
