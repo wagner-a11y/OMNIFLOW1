@@ -55,7 +55,9 @@ export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onS
         carroceriaTipoOperacao: quote.carroceriaTipoOperacao || '',
         materialTipo: quote.materialTipo || quote.merchandiseType || '',
         nossoFrete: quote.nossoFrete || quote.totalFreight || 0,
-        freteTerceiro: quote.freteTerceiro || 0,
+        // Frete Terceiro = preço base da cotação (o que pagamos pro terceiro). Pré-preenche com o baseFreight
+        // da cotação; editável caso o operador feche outro valor com o motorista. Vai pro card do Pipefy.
+        freteTerceiro: quote.freteTerceiro || quote.baseFreight || 0,
         valorCarga: quote.valorCarga || quote.goodsValue || 0,
         outrasNecessidades: quote.outrasNecessidades || '',
         observacoesGerais: quote.observacoesGerais || '',
