@@ -114,7 +114,8 @@ export const getCustomers = async (): Promise<Customer[]> => {
     return (data || []).map((item: any) => ({
         id: item.id,
         name: item.name,
-        logoUrl: item.logo_url
+        logoUrl: item.logo_url,
+        pipefyClientId: item.pipefy_client_id || undefined
     }));
 };
 
@@ -122,7 +123,8 @@ export const createCustomer = async (customer: Customer): Promise<Customer | nul
     const dbPayload = {
         id: customer.id,
         name: customer.name,
-        logo_url: customer.logoUrl
+        logo_url: customer.logoUrl,
+        pipefy_client_id: customer.pipefyClientId || null
     };
     const { data, error } = await supabase
         .from('customers')
@@ -134,13 +136,14 @@ export const createCustomer = async (customer: Customer): Promise<Customer | nul
         console.error('Error creating customer:', error);
         return null;
     }
-    return data ? { id: data.id, name: data.name, logoUrl: data.logo_url } : null;
+    return data ? { id: data.id, name: data.name, logoUrl: data.logo_url, pipefyClientId: data.pipefy_client_id || undefined } : null;
 };
 
 export const updateCustomer = async (customer: Customer): Promise<boolean> => {
     const dbPayload = {
         name: customer.name,
-        logo_url: customer.logoUrl
+        logo_url: customer.logoUrl,
+        pipefy_client_id: customer.pipefyClientId || null
     };
     const { error } = await supabase
         .from('customers')
@@ -417,6 +420,7 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         cliente_nome_operacao: calc.clienteNomeOperacao || null,
         referencia_cliente_operacao: calc.referenciaClienteOperacao || null,
         solicitante: calc.solicitante || null,
+        solicitante_pipefy_id: calc.solicitantePipefyId || null,
         coleta_endereco: calc.coletaEndereco || null,
         entrega_endereco: calc.entregaEndereco || null,
         peso_carga_operacao: calc.pesoCargaOperacao || null,

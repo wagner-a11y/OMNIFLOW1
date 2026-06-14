@@ -46,6 +46,7 @@ export interface Customer {
     id: string;
     name: string;
     logoUrl?: string;
+    pipefyClientId?: string;   // id do registro correspondente na tabela "Clientes" do Pipefy (ponte local↔Pipefy)
 }
 
 export interface FederalTaxes {

@@ -13,6 +13,7 @@ import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
 import { createPipefyCard } from './services/pipefy';
+import { PipefyAutocomplete } from './components/PipefyAutocomplete';
 import { RouteMap, MapErrorBoundary } from './components/RouteMap';
 import { getIcmsRate, getUF, getStandardIcmsRules } from './utils/icms';
 import {
@@ -61,6 +62,9 @@ const matchMercadoriaOption = (v: string): string => {
     const n = norm(v);
     return MERCADORIA_OPTIONS.find(o => norm(o) === n) || '';
 };
+
+// Opções de Implemento — grafia IDÊNTICA ao campo "Implemento" (qual_o_tipo_de_carreta) do Pipefy.
+const IMPLEMENTO_OPTIONS = ['Sider', 'Baú', 'Grade Baixa', 'Graneleiro', 'N/A', 'Prancha'];
 
 // Veículos utilitários: frete base = KM × tarifa fixa (ignoram a tabela ANTT).
 const UTILITARIO_KM_RATES: Record<string, number> = {
@@ -111,6 +115,9 @@ const App: React.FC = () => {
     // Estados de Edição de Clientes
     const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
     const [customerFilePreview, setCustomerFilePreview] = useState<string | null>(null);
+    // Vínculo Pipefy do cliente em edição (nome exibido + id do registro). Editável pra corrigir.
+    const [newCustomerPipefyId, setNewCustomerPipefyId] = useState<string | undefined>(undefined);
+    const [newCustomerPipefyName, setNewCustomerPipefyName] = useState('');
 
     // Form State
     const [origin, setOrigin] = useState('');
@@ -155,13 +162,11 @@ const App: React.FC = () => {
     // Abrir composição de custo ao cliente (cópia/PDF)
     const [openCostToClient, setOpenCostToClient] = useState(false);
 
-    // Solicitante (lista editável, persistida em localStorage por enquanto)
+    // Solicitante: agora via autocomplete do Pipefy (nome + id do registro). Texto livre = sem id.
     const [solicitante, setSolicitante] = useState('');
-    const [solicitantes, setSolicitantes] = useState<string[]>(() => {
-        try { return JSON.parse(localStorage.getItem('flow_solicitantes') || '[]'); } catch { return []; }
-    });
-    const [showSolicitanteManager, setShowSolicitanteManager] = useState(false);
-    const [newSolicitanteName, setNewSolicitanteName] = useState('');
+    const [solicitantePipefyId, setSolicitantePipefyId] = useState<string | undefined>(undefined);
+    // Implemento (espelha o select do Pipefy). Flui pra carga fechada e pro card como carroceriaTipoOperacao.
+    const [implemento, setImplemento] = useState('');
 
     // Modal pós-salvar (Mandar pro Ramper / Nova Cotação / Ver Histórico)
     const [showPostSaveModal, setShowPostSaveModal] = useState(false);
@@ -357,10 +362,6 @@ const App: React.FC = () => {
     }, [appLogo]);
 
     // Sessão é gerida pelo Supabase Auth (não persistimos o usuário em localStorage).
-
-    useEffect(() => {
-        localStorage.setItem('flow_solicitantes', JSON.stringify(solicitantes));
-    }, [solicitantes]);
 
     useEffect(() => {
         if (toast) {
@@ -779,8 +780,7 @@ const App: React.FC = () => {
         if (!quote) return;
 
         if (newStatus === 'won') {
-            setSelectedWonQuote(quote);
-            setIsWonModalOpen(true);
+            openWonModal(quote);
             return;
         }
 
@@ -804,6 +804,19 @@ const App: React.FC = () => {
         }
     };
 
+    // Abre o formulário de Carga Ganha já com a ponte do Cliente resolvida: nome do cliente local
+    // e, se já vinculado, o id do registro do Pipefy guardado no cadastro desse cliente (vínculo
+    // automático). Sem vínculo, o operador confirma uma vez no autocomplete do modal.
+    const openWonModal = (q: FreightCalculation) => {
+        const cust = customers.find(c => c.id === q.customerId);
+        setSelectedWonQuote({
+            ...q,
+            clienteNomeOperacao: q.clienteNomeOperacao || cust?.name || '',
+            clientePipefyId: q.clientePipefyId || cust?.pipefyClientId,
+        });
+        setIsWonModalOpen(true);
+    };
+
     const handleWonInfoSubmit = async (wonData: any) => {
         if (!selectedWonQuote) return;
 
@@ -822,6 +835,18 @@ const App: React.FC = () => {
             console.error('Detailed Save Error:', result.error);
             showFeedback(`Erro ao salvar carga: ${result.error || 'Erro desconhecido'}`, 'error');
             return;
+        }
+
+        // Ponte do Cliente: se o operador confirmou/escolheu o registro do Pipefy aqui (clientePipefyId)
+        // e o cadastro LOCAL desse cliente ainda não tinha esse id (ou tinha outro), aprende e guarda no
+        // cadastro local — das próximas vezes vincula automático, sem perguntar. Nunca cria no Pipefy.
+        if (wonData.clientePipefyId && selectedWonQuote.customerId) {
+            const cust = customers.find(c => c.id === selectedWonQuote.customerId);
+            if (cust && cust.pipefyClientId !== wonData.clientePipefyId) {
+                const updatedCust = { ...cust, pipefyClientId: wonData.clientePipefyId };
+                const ok = await updateCustomer(updatedCust);
+                if (ok) setCustomers(prev => prev.map(c => c.id === cust.id ? updatedCust : c));
+            }
         }
 
         // Operação salva no OmniFlow. Agora envia pro Pipefy (controle operacional), com trava de
@@ -1062,7 +1087,8 @@ const App: React.FC = () => {
             id: quoteId,
             proposalNumber: editingId ? (history.find(h => h.id === editingId)?.proposalNumber || '') : `CT-${new Date().getFullYear()}-${(history.length + 1).toString().padStart(4, '0')}`,
             clientReference, origin, destination, destinations: destinations.map(d => (d || '').trim()).filter(Boolean), distanceKm: parseFloat(distanceKm.replace(',', '.')) || 0, vehicleType: vehicleType as VehicleType, merchandiseType, weight: parseFloat(weight.replace(',', '.')) || 0,
-            customerId: selectedCustomerId, suggestedFreight: suggestedFreightANTT, solicitante,
+            customerId: selectedCustomerId, suggestedFreight: suggestedFreightANTT, solicitante, solicitantePipefyId,
+            carroceriaTipoOperacao: implemento || undefined,   // Implemento da calculadora -> flui pra carga fechada/card
             baseFreight: num(baseFreight),
             tolls: num(tolls), extraCosts: num(extraCosts), extraCostsDescription, goodsValue: num(goodsValue), insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
             pisPercent: fedTaxes.pis, cofinsPercent: fedTaxes.cofins, csllPercent: fedTaxes.csll, irpjPercent: fedTaxes.irpj,
@@ -1076,8 +1102,7 @@ const App: React.FC = () => {
         };
 
         if (status === 'won') {
-            setSelectedWonQuote(data);
-            setIsWonModalOpen(true);
+            openWonModal(data);
             return;
         }
 
@@ -1124,7 +1149,8 @@ const App: React.FC = () => {
         setGoodsValue(maskCurrency(quote.goodsValue)); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
         setIcmsPercent(quote.icmsPercent.toString()); setEditingId(quote.id); setDisponibilidade(quote.disponibilidade || "Imediato");
         setMerchandiseType(quote.merchandiseType || '');
-        setSolicitante(quote.solicitante || '');
+        setSolicitante(quote.solicitante || ''); setSolicitantePipefyId(quote.solicitantePipefyId);
+        setImplemento(quote.carroceriaTipoOperacao || '');
         setOtherCosts(quote.otherCosts || []);
         setElapsedSeconds(quote.elaborationSeconds || 0); setIsTimerRunning(false);
         setActiveTab('new'); showFeedback("Editando...");
@@ -1141,7 +1167,8 @@ const App: React.FC = () => {
         setGoodsValue(maskCurrency(quote.goodsValue)); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
         setIcmsPercent(quote.icmsPercent.toString()); setDisponibilidade(quote.disponibilidade || "Imediato");
         setMerchandiseType(quote.merchandiseType || '');
-        setSolicitante(quote.solicitante || '');
+        setSolicitante(quote.solicitante || ''); setSolicitantePipefyId(quote.solicitantePipefyId);
+        setImplemento(quote.carroceriaTipoOperacao || '');
         setOtherCosts(quote.otherCosts ? quote.otherCosts.map(c => ({ ...c })) : []);
         setEditingId(null);                       // cotação NOVA, não edição
         setElapsedSeconds(0); setIsTimerRunning(false);  // cronômetro do zero
@@ -1153,7 +1180,7 @@ const App: React.FC = () => {
         setOrigin(''); setDestination(''); setDestinations([]); setShowMap(false); setRouteGeometry(null); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
         setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setEditingId(null);
         setDisponibilidade("Imediato"); setMerchandiseType(''); setCargoType('Carga geral'); setOtherCosts([]);
-        setSolicitante('');
+        setSolicitante(''); setSolicitantePipefyId(undefined); setImplemento('');
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
     };
 
@@ -1245,8 +1272,10 @@ Disponibilidade: ${disponibilidade}`;
         else if (disp.includes('agendad') || disp.includes('program')) { setDisponibilidade('Conforme programação'); dispLabel = 'Conforme programação'; }
 
         if (sol) {
-            setSolicitantes(prev => prev.includes(sol) ? prev : [...prev, sol]);
+            // Importação inteligente: preenche o solicitante como texto livre (sem id do Pipefy;
+            // o operador pode confirmar o vínculo digitando e escolhendo no autocomplete).
             setSolicitante(sol);
+            setSolicitantePipefyId(undefined);
         }
 
         // Resumo para conferência do operador.
@@ -2133,20 +2162,28 @@ Disponibilidade: ${disponibilidade}`;
                                                 </button>
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                                            <div className="lg:col-span-2">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                            <div>
+                                                {/* Cliente: base LOCAL (alimenta dashboard/Ramper/PDF/logo). O vínculo com o Pipefy
+                                                    fica no cadastro do cliente e é resolvido no fechamento da carga. */}
                                                 <select className="w-full p-4 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}><option value="">Selecione Cliente...</option>{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
                                             </div>
-                                            <div className="lg:col-span-2 flex items-center gap-2">
-                                                <select className="flex-1 min-w-0 p-4 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all" value={solicitante} onChange={e => setSolicitante(e.target.value)}>
-                                                    <option value="">Solicitante...</option>
-                                                    {solicitantes.map(s => <option key={s} value={s}>{s}</option>)}
-                                                </select>
-                                                <button type="button" onClick={() => setShowSolicitanteManager(true)} title="Gerenciar solicitantes" className="shrink-0 p-3 bg-white border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
-                                                    <Users className="w-4 h-4" strokeWidth={1.75} />
-                                                </button>
+                                            <div>
+                                                {/* Solicitante: autocomplete do Pipefy (nome + id). Texto livre = sem id (fail-soft). */}
+                                                <PipefyAutocomplete tipo="solicitante" value={solicitante} selectedId={solicitantePipefyId}
+                                                    onChangeText={name => { setSolicitante(name); setSolicitantePipefyId(undefined); }}
+                                                    onPick={rec => { setSolicitante(rec.title); setSolicitantePipefyId(rec.id); }}
+                                                    placeholder="Solicitante..."
+                                                    className="w-full p-4 pr-16 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all" />
                                             </div>
-                                            <div className="lg:col-span-2">
+                                            <div>
+                                                {/* Implemento: espelha o select do Pipefy; flui pra carga fechada e pro card. */}
+                                                <select className="w-full p-4 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all" value={implemento} onChange={e => setImplemento(e.target.value)}>
+                                                    <option value="">Implemento...</option>
+                                                    {IMPLEMENTO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
                                                 <select className="w-full p-4 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all" value={disponibilidade} onChange={e => setDisponibilidade(e.target.value as Disponibilidade)}><option value="Imediato">Imediato</option><option value="Conforme programação">Programado</option></select>
                                             </div>
                                         </div>
@@ -2698,63 +2735,6 @@ Disponibilidade: ${disponibilidade}`;
                 </div>
             )}
 
-            {/* Gerenciador de solicitantes (lista editável em localStorage) */}
-            {showSolicitanteManager && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-6 animate-fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-xl border border-[#e5e7eb] shadow-sm overflow-hidden">
-                        <div className="p-5 border-b border-[#e5e7eb] flex items-center justify-between">
-                            <h3 className="text-base font-medium text-[#111827]">Solicitantes</h3>
-                            <button onClick={() => { setShowSolicitanteManager(false); setNewSolicitanteName(''); }} className="p-1.5 text-[#6b7280] hover:bg-[#f9fafb] rounded-md transition-colors">
-                                <X className="w-4 h-4" strokeWidth={1.75} />
-                            </button>
-                        </div>
-                        <div className="p-5 space-y-4">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="text"
-                                    value={newSolicitanteName}
-                                    onChange={e => setNewSolicitanteName(e.target.value)}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter') {
-                                            const name = newSolicitanteName.trim();
-                                            if (name && !solicitantes.includes(name)) { setSolicitantes(prev => [...prev, name]); setNewSolicitanteName(''); }
-                                        }
-                                    }}
-                                    placeholder="Nome do solicitante"
-                                    className="flex-1 px-4 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors"
-                                />
-                                <button
-                                    onClick={() => {
-                                        const name = newSolicitanteName.trim();
-                                        if (name && !solicitantes.includes(name)) { setSolicitantes(prev => [...prev, name]); setNewSolicitanteName(''); }
-                                    }}
-                                    className="shrink-0 px-4 py-2.5 bg-[#1d6fb8] text-white rounded-lg text-sm font-medium hover:bg-[#1a5f9e] transition-colors flex items-center gap-1"
-                                >
-                                    <Plus className="w-4 h-4" strokeWidth={1.75} /> Add
-                                </button>
-                            </div>
-                            {solicitantes.length === 0 ? (
-                                <p className="text-xs font-normal text-[#6b7280] text-center py-4">Nenhum solicitante cadastrado.</p>
-                            ) : (
-                                <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                                    {solicitantes.map(s => (
-                                        <div key={s} className="flex items-center justify-between bg-[#f9fafb] border border-[#e5e7eb] rounded-lg px-3 py-2">
-                                            <span className="text-sm font-normal text-[#111827] truncate">{s}</span>
-                                            <button
-                                                onClick={() => { setSolicitantes(prev => prev.filter(x => x !== s)); if (solicitante === s) setSolicitante(''); }}
-                                                className="shrink-0 p-1.5 text-[#6b7280] hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                                            >
-                                                <Trash2 className="w-4 h-4" strokeWidth={1.75} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {showMarginModal && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-fade-in">
                     <div className="bg-white w-full max-w-md rounded-xl shadow-sm overflow-hidden">
@@ -2867,6 +2847,23 @@ Disponibilidade: ${disponibilidade}`;
                                                                 </label>
                                                             </div>
                                                         </div>
+
+                                                        <div className="flex flex-col gap-2">
+                                                            <label className="text-[10px] font-medium text-[#6b7280] uppercase ml-2">Vínculo no Pipefy (tabela Clientes)</label>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="flex-1">
+                                                                    <PipefyAutocomplete tipo="cliente" value={newCustomerPipefyName} selectedId={newCustomerPipefyId}
+                                                                        onChangeText={name => { setNewCustomerPipefyName(name); setNewCustomerPipefyId(undefined); }}
+                                                                        onPick={rec => { setNewCustomerPipefyName(rec.title); setNewCustomerPipefyId(rec.id); }}
+                                                                        placeholder="Buscar cliente no Pipefy (opcional)"
+                                                                        className="w-full p-5 pr-16 bg-white rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all shadow-inner" />
+                                                                </div>
+                                                                {(newCustomerPipefyId || newCustomerPipefyName) && (
+                                                                    <button type="button" title="Remover vínculo" onClick={() => { setNewCustomerPipefyId(undefined); setNewCustomerPipefyName(''); }} className="shrink-0 p-3 bg-white border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-[9px] font-normal text-[#9ca3af] ml-2">Opcional. Vincula o card de operação automaticamente. Sem vínculo, o operador confirma no fechamento.</p>
+                                                        </div>
                                                     </div>
 
                                                     <div className="flex gap-3">
@@ -2874,13 +2871,13 @@ Disponibilidade: ${disponibilidade}`;
                                                             if (newCustomerName) {
                                                                 const logoFinal = customerFilePreview || newCustomerLogo;
                                                                 if (editingCustomer) {
-                                                                    const updated = await updateCustomer({ ...editingCustomer, name: newCustomerName, logoUrl: logoFinal });
+                                                                    const updated = await updateCustomer({ ...editingCustomer, name: newCustomerName, logoUrl: logoFinal, pipefyClientId: newCustomerPipefyId });
                                                                     if (updated) {
-                                                                        setCustomers(customers.map(c => c.id === editingCustomer.id ? { ...c, name: newCustomerName, logoUrl: logoFinal } : c));
+                                                                        setCustomers(customers.map(c => c.id === editingCustomer.id ? { ...c, name: newCustomerName, logoUrl: logoFinal, pipefyClientId: newCustomerPipefyId } : c));
                                                                         showFeedback("Cliente atualizado!");
                                                                     }
                                                                 } else {
-                                                                    const created = await createCustomer({ id: Date.now().toString(), name: newCustomerName, logoUrl: logoFinal });
+                                                                    const created = await createCustomer({ id: Date.now().toString(), name: newCustomerName, logoUrl: logoFinal, pipefyClientId: newCustomerPipefyId });
                                                                     if (created) {
                                                                         setCustomers([created, ...customers]);
                                                                         showFeedback("Cliente cadastrado!");
@@ -2890,6 +2887,8 @@ Disponibilidade: ${disponibilidade}`;
                                                                 setNewCustomerLogo('');
                                                                 setCustomerFilePreview(null);
                                                                 setEditingCustomer(null);
+                                                                setNewCustomerPipefyId(undefined);
+                                                                setNewCustomerPipefyName('');
                                                             }
                                                         }} className="flex-1 py-5 bg-blue-600 text-white rounded-lg font-medium uppercase text-xs shadow-sm shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
                                                             <Save className="w-4 h-4" /> {editingCustomer ? 'Salvar Alterações' : 'Cadastrar'}
@@ -2900,6 +2899,8 @@ Disponibilidade: ${disponibilidade}`;
                                                                 setNewCustomerName('');
                                                                 setNewCustomerLogo('');
                                                                 setCustomerFilePreview(null);
+                                                                setNewCustomerPipefyId(undefined);
+                                                                setNewCustomerPipefyName('');
                                                             }} className="px-6 bg-slate-200 text-[#111827] rounded-lg font-medium uppercase text-xs hover:bg-slate-300 transition-all">Cancelar</button>
                                                         )}
                                                     </div>
@@ -2915,7 +2916,7 @@ Disponibilidade: ${disponibilidade}`;
                                                             </div>
                                                             <div>
                                                                 <p className="font-medium text-[#111827] text-xs uppercase tracking-tight">{c.name}</p>
-                                                                <p className="text-[9px] font-medium text-slate-300 uppercase">Cliente Cadastrado</p>
+                                                                <p className={`text-[9px] font-medium uppercase ${c.pipefyClientId ? 'text-emerald-500' : 'text-slate-300'}`}>{c.pipefyClientId ? '🔗 Vinculado ao Pipefy' : 'Sem vínculo Pipefy'}</p>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
@@ -2924,6 +2925,8 @@ Disponibilidade: ${disponibilidade}`;
                                                                 setNewCustomerName(c.name);
                                                                 setNewCustomerLogo(c.logoUrl || '');
                                                                 setCustomerFilePreview(null);
+                                                                setNewCustomerPipefyId(c.pipefyClientId);
+                                                                setNewCustomerPipefyName(c.pipefyClientId ? c.name : '');
                                                             }} className="p-2 text-blue-400 hover:bg-blue-50 rounded-lg"><Edit3 className="w-4 h-4" /></button>
                                                             {currentUser.role === 'master' && (
                                                                 <button onClick={async () => { if (await deleteCustomer(c.id)) setCustomers(customers.filter(i => i.id !== c.id)); }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
