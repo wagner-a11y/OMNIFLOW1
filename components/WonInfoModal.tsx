@@ -112,7 +112,17 @@ export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onS
         freteTerceiro: quote.freteTerceiro || 0,
         valorCarga: quote.valorCarga || quote.goodsValue || 0,
         outrasNecessidades: quote.outrasNecessidades || '',
-        observacoesGerais: quote.observacoesGerais || ''
+        observacoesGerais: quote.observacoesGerais || '',
+        mercadoriaNovaUsada: quote.mercadoriaNovaUsada || '',
+        outrasNecessidadesPipefy: quote.outrasNecessidadesPipefy || '',
+        necessidadeGR: quote.necessidadeGR || []
+    });
+
+    // Opções EXATAS espelhadas do Pipefy (grafia idêntica). Não inventar nem alterar.
+    const GR_OPCOES = ['Consulta/Cadastro Gerenciadora', 'Rastreamento e Monitoramento', 'Escolta', 'Isca', 'Imobilizador Inteligente', 'Pernoitar das 22h até as 5h'];
+    const toggleGR = (op: string) => setFormData(p => {
+        const cur = Array.isArray(p.necessidadeGR) ? p.necessidadeGR : [];
+        return { ...p, necessidadeGR: cur.includes(op) ? cur.filter(x => x !== op) : [...cur, op] };
     });
 
     if (!isOpen) return null;
@@ -267,6 +277,14 @@ export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onS
                                         <input type="text" name="materialTipo" value={formData.materialTipo} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" required />
                                     </div>
                                 </div>
+                                <div>
+                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Mercadoria Nova/Usada?</label>
+                                    <select name="mercadoriaNovaUsada" value={formData.mercadoriaNovaUsada || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white">
+                                        <option value="">— não informar —</option>
+                                        <option value="Nova">Nova</option>
+                                        <option value="Usada">Usada</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
@@ -298,12 +316,31 @@ export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onS
                             </h3>
                             <div className="space-y-3">
                                 <div>
-                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Outras Necessidades</label>
-                                    <textarea name="outrasNecessidades" value={formData.outrasNecessidades} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none min-h-[80px]" placeholder="Ex: Ajudantes, Transbordo..." />
+                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Necessidades operacionais (vão pras Observações)</label>
+                                    <textarea name="outrasNecessidades" value={formData.outrasNecessidades} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none min-h-[60px]" placeholder="Ex: Ajudantes, Transbordo..." />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Outras Necessidades (sistema)</label>
+                                    <select name="outrasNecessidadesPipefy" value={formData.outrasNecessidadesPipefy || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white">
+                                        <option value="">— não informar —</option>
+                                        <option value="Compulog">Compulog</option>
+                                        <option value="Comprovei">Comprovei</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Necessidade GR</label>
+                                    <div className="space-y-1.5 border border-gray-200 rounded-lg p-2.5">
+                                        {GR_OPCOES.map(op => (
+                                            <label key={op} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                                <input type="checkbox" checked={(formData.necessidadeGR || []).includes(op)} onChange={() => toggleGR(op)} className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                                                {op}
+                                            </label>
+                                        ))}
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Observações Gerais</label>
-                                    <textarea name="observacoesGerais" value={formData.observacoesGerais} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none min-h-[80px]" placeholder="Informações adicionais..." />
+                                    <textarea name="observacoesGerais" value={formData.observacoesGerais} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none min-h-[60px]" placeholder="Informações adicionais..." />
                                 </div>
                             </div>
                         </div>

@@ -65,6 +65,18 @@ function mapMercadoria(v: string): string {
   return exact || ''; // só correspondência exata; senão, branco
 }
 
+// Opções EXATAS (grafia do JSON da estrutura do pipe). Match normalizado -> devolve a grafia canônica do Pipefy.
+const NOVA_USADA_OPCOES = ['Usada', 'Nova'];                                    // select mercadoria_nova_usada
+const OUTRAS_NEC_OPCOES = ['Compulog', 'Comprovei'];                           // select outras_necessidades_ (1 opção)
+const GR_OPCOES = ['Consulta/Cadastro Gerenciadora', 'Rastreamento e Monitoramento', 'Escolta', 'Isca', 'Imobilizador Inteligente', 'Pernoitar das 22h até as 5h']; // checklist_vertical necessidade_gr_1
+const matchOpcao = (v: unknown, opts: string[]): string => { const n = norm(v as string); return n ? (opts.find(o => norm(o) === n) || '') : ''; };
+const matchVarias = (arr: unknown, opts: string[]): string[] => {
+  if (!Array.isArray(arr)) return [];
+  const out: string[] = [];
+  for (const x of arr) { const m = matchOpcao(x, opts); if (m && !out.includes(m)) out.push(m); }
+  return out; // só os que casaram exato, sem duplicar; nada casou -> []
+};
+
 // datetime-local "2026-06-13T10:00" -> "2026-06-13 10:00" (formato aceito pelo Pipefy). Branco se inválido.
 function fmtDateTime(v: unknown): string {
   const s = (v == null ? '' : String(v)).trim();
@@ -220,6 +232,11 @@ Deno.serve(async (req) => {
   const clienteId = (body.clienteId == null ? '' : String(body.clienteId)).trim();
   const solicitanteId = (body.solicitanteId == null ? '' : String(body.solicitanteId)).trim();
 
+  // Três campos espelhados (match exato; nada escolhido/marcado -> branco; nunca força nem cria):
+  const novaUsada = matchOpcao(body.mercadoriaNovaUsada, NOVA_USADA_OPCOES);     // select (1)
+  const outrasNecSel = matchOpcao(body.outrasNecessidadesSelect, OUTRAS_NEC_OPCOES); // select (1) — separado da obs livre
+  const grMarcados = matchVarias(body.necessidadeGR, GR_OPCOES);                 // checklist (várias)
+
   // Monta fields_attributes; só inclui campos com valor (branco => omitido).
   const fields: { field_id: string; field_value: any }[] = [];
   const push = (id: string, val: any) => { if (val !== '' && val != null) fields.push({ field_id: id, field_value: val }); };
@@ -242,6 +259,10 @@ Deno.serve(async (req) => {
   // Conexões: só envia se veio um id escolhido no autocomplete. Sem id -> vazio. Nunca cria registro.
   if (clienteId) push('conex_o_de_database', [clienteId]);
   if (solicitanteId) push('solicitante_da_carga', [solicitanteId]);
+  // Três campos espelhados: só envia se casou (select) ou se há marcados (checklist). Branco -> omite.
+  push('mercadoria_nova_usada', novaUsada);
+  push('outras_necessidades_', outrasNecSel);
+  if (grMarcados.length) push('necessidade_gr_1', grMarcados);
 
   if (dryRun) {
     // Relatório dos 5 campos solicitados: status + motivo de cada um.
@@ -287,6 +308,27 @@ Deno.serve(async (req) => {
         status: outrasNecRaw ? 'PREENCHIDO (via Observações)' : 'NÃO PREENCHIDO',
         motivo: 'Por decisão: o texto livre NÃO força o select Compulog/Comprovei (esse fica pra operação). O conteúdo vai dentro das Observações com rótulo "Necessidades: ..." pra não perder a informação.',
       },
+      {
+        campo: 'Mercadoria Nova/Usada?', field_id: 'mercadoria_nova_usada', tipo: 'select (1 opção: Usada/Nova)',
+        origemOmniflow: 'campo de escolha do formulário de carga ganha', valorOrigem: (body.mercadoriaNovaUsada || '(vazio)'),
+        valorPipefy: novaUsada || null,
+        status: novaUsada ? 'PREENCHIDO' : 'NÃO PREENCHIDO',
+        motivo: novaUsada ? 'Casou com opção exata.' : (body.mercadoriaNovaUsada ? `"${body.mercadoriaNovaUsada}" não casa com Usada/Nova.` : 'Nada escolhido -> branco.'),
+      },
+      {
+        campo: 'Outras Necessidades (select)', field_id: 'outras_necessidades_', tipo: 'select (1 opção: Compulog/Comprovei)',
+        origemOmniflow: 'campo de escolha (separado da obs livre de ajudante/transbordo)', valorOrigem: (body.outrasNecessidadesSelect || '(vazio)'),
+        valorPipefy: outrasNecSel || null,
+        status: outrasNecSel ? 'PREENCHIDO' : 'NÃO PREENCHIDO',
+        motivo: outrasNecSel ? 'Casou com opção exata.' : (body.outrasNecessidadesSelect ? `"${body.outrasNecessidadesSelect}" não casa com Compulog/Comprovei.` : 'Nada escolhido -> branco.'),
+      },
+      {
+        campo: 'Necessidade GR', field_id: 'necessidade_gr_1', tipo: 'checklist_vertical (várias)',
+        origemOmniflow: 'caixas de marcar do formulário de carga ganha', valorOrigem: (Array.isArray(body.necessidadeGR) ? body.necessidadeGR.join(', ') : '(vazio)') || '(vazio)',
+        valorPipefy: grMarcados.length ? grMarcados : null,
+        status: grMarcados.length ? `PREENCHIDO (${grMarcados.length} marcado(s))` : 'NÃO PREENCHIDO',
+        motivo: grMarcados.length ? 'Manda a lista dos marcados que casaram exato.' : 'Nada marcado -> branco.',
+      },
     ];
     const selectsSemMatch = camposAlvo
       .filter(c => c.tipo === 'select' && c.status === 'NÃO PREENCHIDO' && c.valorOrigem !== '(vazio)')
@@ -295,7 +337,7 @@ Deno.serve(async (req) => {
     return json({
       ok: true, dryRun: true, pipe_id: PIPE_ID, phase_id: PHASE_FECHADAS, title: titulo,
       fields_attributes: fields,
-      mapeamento: { veiculo, mercadoria, implemento, clienteRecordId: clienteId || null, solicitanteRecordId: solicitanteId || null },
+      mapeamento: { veiculo, mercadoria, implemento, clienteRecordId: clienteId || null, solicitanteRecordId: solicitanteId || null, novaUsada: novaUsada || null, outrasNecSel: outrasNecSel || null, necessidadeGR: grMarcados },
       camposAlvo,
       selectsSemMatch,
     });

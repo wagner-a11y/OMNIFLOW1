@@ -23,6 +23,9 @@ export interface PipefyCardPayload {
     clienteId?: string;        // id do registro da tabela Clientes (vínculo da conexão); vazio = sem vínculo
     solicitante?: string;
     solicitanteId?: string;    // id do registro da tabela Solicitantes
+    mercadoriaNovaUsada?: string;       // select Nova/Usada
+    outrasNecessidadesSelect?: string;  // select Compulog/Comprovei
+    necessidadeGR?: string[];           // checklist (lista dos marcados)
     titulo?: string;
     dryRun?: boolean;
 }

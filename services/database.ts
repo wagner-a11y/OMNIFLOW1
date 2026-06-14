@@ -363,7 +363,10 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
         pipefyCardId: item.pipefy_card_id || undefined,
         pipefySentAt: item.pipefy_sent_at || undefined,
         clientePipefyId: item.cliente_pipefy_id || undefined,
-        solicitantePipefyId: item.solicitante_pipefy_id || undefined
+        solicitantePipefyId: item.solicitante_pipefy_id || undefined,
+        mercadoriaNovaUsada: item.mercadoria_nova_usada || undefined,
+        outrasNecessidadesPipefy: item.outras_necessidades_pipefy || undefined,
+        necessidadeGR: Array.isArray(item.necessidade_gr) ? item.necessidade_gr : undefined
     }));
 };
 
@@ -576,7 +579,10 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         pipefy_card_id: calc.pipefyCardId || null,
         pipefy_sent_at: calc.pipefySentAt || null,
         cliente_pipefy_id: calc.clientePipefyId || null,
-        solicitante_pipefy_id: calc.solicitantePipefyId || null
+        solicitante_pipefy_id: calc.solicitantePipefyId || null,
+        mercadoria_nova_usada: calc.mercadoriaNovaUsada || null,
+        outras_necessidades_pipefy: calc.outrasNecessidadesPipefy || null,
+        necessidade_gr: (calc.necessidadeGR && calc.necessidadeGR.length) ? calc.necessidadeGR : null
     };
 
     const { error } = await supabase

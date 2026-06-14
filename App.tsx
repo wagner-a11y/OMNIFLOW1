@@ -861,10 +861,13 @@ const App: React.FC = () => {
                 clienteId: wonData.clientePipefyId,                                  // id escolhido -> conexão Cliente
                 solicitante: wonData.solicitante,
                 solicitanteId: wonData.solicitantePipefyId,                          // id escolhido -> conexão Solicitante
+                mercadoriaNovaUsada: wonData.mercadoriaNovaUsada,                    // select Nova/Usada
+                outrasNecessidadesSelect: wonData.outrasNecessidadesPipefy,          // select Compulog/Comprovei
+                necessidadeGR: wonData.necessidadeGR,                                // checklist (lista dos marcados)
                 titulo: [wonData.clienteNomeOperacao, rota].map(s => (s || '').trim()).filter(Boolean).join(' — '),
             });
             if (pipefyRes.ok && pipefyRes.cardId) {
-                // Persiste a trava de duplicado + os ids escolhidos (cliente/solicitante).
+                // Persiste a trava de duplicado + os ids escolhidos + os 3 campos espelhados.
                 finalQuote = { ...updatedQuote, pipefyCardId: pipefyRes.cardId, pipefySentAt: new Date().toISOString(), clientePipefyId: wonData.clientePipefyId, solicitantePipefyId: wonData.solicitantePipefyId };
                 await updateFreightCalculation(finalQuote);
                 pipefyMsg = ' e enviada pro Pipefy';

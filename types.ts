@@ -113,6 +113,9 @@ export interface FreightCalculation {
     pipefySentAt?: string;    // quando foi enviado pro Pipefy
     clientePipefyId?: string;     // id do registro escolhido no autocomplete (tabela Clientes do Pipefy)
     solicitantePipefyId?: string; // id do registro escolhido (tabela Solicitantes do Pipefy)
+    mercadoriaNovaUsada?: string;     // select Pipefy "Mercadoria Nova/Usada?" (Usada/Nova)
+    outrasNecessidadesPipefy?: string; // select Pipefy "Outras Necessidades" (Compulog/Comprovei) — separado da obs livre
+    necessidadeGR?: string[];         // checklist Pipefy "Necessidade GR" (lista de marcados)
     // Operation Pipeline Fields
     coletaDate?: string;
     entregaDate?: string;
