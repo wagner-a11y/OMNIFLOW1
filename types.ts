@@ -33,6 +33,8 @@ export interface User {
     username: string;
     password?: string;
     role: UserRole;
+    active?: boolean;
+    mustChangePassword?: boolean;
 }
 
 export interface ANTTCoefficients {

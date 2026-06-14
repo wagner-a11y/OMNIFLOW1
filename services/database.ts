@@ -4,30 +4,33 @@ import { FreightCalculation, Customer, FederalTaxes, User, ANTTCoefficients } fr
 
 // =================== PROFILES (Supabase Auth) ===================
 // Perfil único do usuário autenticado (papel + nome), lido após o login via Auth.
-export const getProfile = async (id: string): Promise<{ id: string; name: string; email: string; role: string } | null> => {
+export const getProfile = async (id: string): Promise<{ id: string; name: string; email: string; role: string; active: boolean; must_change_password: boolean } | null> => {
     const { data, error } = await supabase
         .from('profiles')
-        .select('id,name,email,role')
+        .select('id,name,email,role,active,must_change_password')
         .eq('id', id)
         .single();
     if (error) {
         console.error('Error fetching profile:', error);
         return null;
     }
-    return data;
+    return data as any;
 };
 
 // Lista de perfis para a tela de gestão de usuários (master).
 export const getProfiles = async (): Promise<User[]> => {
     const { data, error } = await supabase
         .from('profiles')
-        .select('id,name,email,role')
+        .select('id,name,email,role,active,must_change_password')
         .order('created_at', { ascending: true });
     if (error) {
         console.error('Error fetching profiles:', error);
         return [];
     }
-    return (data || []).map((p: any) => ({ id: p.id, name: p.name, username: p.email, role: p.role }));
+    return (data || []).map((p: any) => ({
+        id: p.id, name: p.name, username: p.email, role: p.role,
+        active: p.active !== false, mustChangePassword: !!p.must_change_password,
+    }));
 };
 
 // Invoca a Edge Function de gestão de usuários e SURFA o erro real do corpo da função
@@ -47,17 +50,26 @@ const invokeUserFn = async (body: any, fallbackMsg: string) => {
     }
 };
 
-// Cria usuário (senha inicial + perfil, sem e-mail). Só master.
-export const createUserAccount = (payload: { email: string; name: string; role: string; password: string }) =>
+// Cria usuário (já confirmado; senha temporária forte gerada no servidor). Só master.
+// Retorna { tempPassword } pro master repassar por fora. Sem e-mail.
+export const createUserAccount = (payload: { email: string; name: string; role: string }) =>
     invokeUserFn({ action: 'create', ...payload }, 'Erro ao criar usuário.');
 
-// Remove usuário (Auth + perfil). Só master.
+// Remove usuário (Auth + perfil). Só master. (mantido; UI usa desativar)
 export const deleteUserAccount = (userId: string) =>
     invokeUserFn({ action: 'delete', userId }, 'Erro ao remover usuário.');
 
-// Redefine a senha de um usuário existente (sem e-mail). Só master.
-export const resetUserPassword = (userId: string, password: string) =>
-    invokeUserFn({ action: 'reset', userId, password }, 'Erro ao redefinir senha.');
+// Redefine a senha (gera nova temporária forte + confirma e-mail + obriga troca). Só master.
+export const resetUserPassword = (userId: string) =>
+    invokeUserFn({ action: 'reset', userId }, 'Erro ao redefinir senha.');
+
+// Ativa/desativa usuário (bane no Auth + reflete em profiles.active). Sem apagar. Só master.
+export const setUserActive = (userId: string, active: boolean) =>
+    invokeUserFn({ action: 'setActive', userId, active }, 'Erro ao alterar status do usuário.');
+
+// Conclui a troca de senha do 1º acesso: limpa a flag must_change_password do próprio usuário.
+export const finishPasswordChange = () =>
+    invokeUserFn({ action: 'finishPasswordChange' }, 'Erro ao concluir troca de senha.');
 
 // =================== USERS (LEGADO — removido do login na Etapa A) ===================
 export const getUsers = async (): Promise<User[]> => {

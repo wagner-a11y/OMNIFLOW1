@@ -23,6 +23,8 @@ import {
     createUserAccount,
     deleteUserAccount,
     resetUserPassword,
+    setUserActive,
+    finishPasswordChange,
     getCustomers,
     createCustomer,
     deleteCustomer,
@@ -83,6 +85,9 @@ const App: React.FC = () => {
     const [newPassword, setNewPassword] = useState('');
     const [savingPassword, setSavingPassword] = useState(false);
     const [showChangePassword, setShowChangePassword] = useState(false);
+    const [mustChangePwd, setMustChangePwd] = useState(false); // 1º acesso: troca obrigatória da senha temporária
+    const [credMsg, setCredMsg] = useState<{ title: string; email: string; password: string } | null>(null); // mensagem copiável (login+senha)
+    const [newUser, setNewUser] = useState({ name: '', email: '', role: 'operador' });
     const [loginSubmitting, setLoginSubmitting] = useState(false);
     const [users, setUsers] = useState<User[]>([]); // perfis (tela de gestão do master)
     const [loginForm, setLoginForm] = useState({ username: '', password: '' }); // username = e-mail
@@ -206,6 +211,14 @@ const App: React.FC = () => {
             setTimeout(async () => {
                 const profile = await getProfile(session.user.id);
                 if (!mounted) return;
+                // Usuário desativado: encerra a sessão e bloqueia o acesso (sem apagar nada).
+                if (profile && profile.active === false) {
+                    await supabase.auth.signOut();
+                    setCurrentUser(null); setAuthLoading(false);
+                    showFeedback('Acesso desativado. Fale com o administrador.', 'error');
+                    return;
+                }
+                setMustChangePwd(!!profile?.must_change_password); // 1º acesso: força troca da senha temporária
                 setCurrentUser({
                     id: session.user.id,
                     name: profile?.name || session.user.email || 'Usuário',
@@ -236,6 +249,23 @@ const App: React.FC = () => {
             setRecoveryMode(false);
             window.history.replaceState(null, '', window.location.pathname);
             showFeedback('Senha definida! Bem-vindo.');
+        } finally {
+            setSavingPassword(false);
+        }
+    };
+
+    // Troca OBRIGATÓRIA no 1º acesso: troca a senha temporária e limpa a flag no perfil.
+    const handleForcedPasswordChange = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (newPassword.trim().length < 6) { showFeedback('A senha deve ter ao menos 6 caracteres.', 'error'); return; }
+        setSavingPassword(true);
+        try {
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) { showFeedback(`Erro ao definir senha: ${error.message}`, 'error'); return; }
+            await finishPasswordChange();      // limpa must_change_password do próprio perfil
+            setNewPassword('');
+            setMustChangePwd(false);
+            showFeedback('Senha definida! Você já pode usar o sistema.');
         } finally {
             setSavingPassword(false);
         }
@@ -2626,6 +2656,48 @@ Disponibilidade: ${disponibilidade}`;
                 </div>
             )}
 
+            {/* Modal OBRIGATÓRIO: troca da senha temporária no 1º acesso (não fecha sem trocar) */}
+            {currentUser && mustChangePwd && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
+                    <div className="bg-white w-full max-w-sm rounded-xl border border-[#e5e7eb] shadow-lg p-6">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Key className="w-5 h-5 text-[#1d6fb8]" />
+                            <h3 className="text-base font-medium text-[#111827]">Defina sua senha</h3>
+                        </div>
+                        <p className="text-xs font-normal text-[#6b7280] mb-4">Primeiro acesso: troque a senha temporária por uma sua para continuar.</p>
+                        <form onSubmit={handleForcedPasswordChange} className="space-y-3">
+                            <input type="password" autoComplete="new-password" className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors" placeholder="Nova senha (mín. 6 caracteres)" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                            <button type="submit" disabled={savingPassword} className="w-full py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm hover:bg-[#1a5f9e] transition-colors disabled:opacity-50">
+                                {savingPassword ? 'Salvando...' : 'Salvar e continuar'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: credenciais prontas pra copiar (criar usuário / redefinir senha) */}
+            {credMsg && (() => {
+                const texto = `Acesso ao OmniFlow:\nLogin: ${credMsg.email}\nSenha temporária: ${credMsg.password}\n\nNo primeiro acesso o sistema vai pedir pra você trocar a senha.`;
+                return (
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[130] flex items-center justify-center p-6 animate-fade-in">
+                        <div className="bg-white w-full max-w-md rounded-xl border border-[#e5e7eb] shadow-sm p-6">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-base font-medium text-[#111827]">{credMsg.title} ✅</h3>
+                                <button onClick={() => setCredMsg(null)} className="p-1.5 text-[#6b7280] hover:bg-[#f9fafb] rounded-md"><X className="w-4 h-4" /></button>
+                            </div>
+                            <p className="text-xs font-normal text-[#6b7280] mb-2">Copie e mande pro usuário por fora (WhatsApp/mensagem). Não enviamos e-mail.</p>
+                            <textarea readOnly value={texto} rows={5} className="w-full px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none resize-none" />
+                            <div className="flex gap-2 mt-3">
+                                <button onClick={() => navigator.clipboard.writeText(texto).then(() => showFeedback('Mensagem copiada!'))} className="flex-1 px-4 py-2.5 bg-[#1d6fb8] text-white rounded-lg text-sm font-medium hover:bg-[#1a5f9e] transition-colors flex items-center justify-center gap-1.5">
+                                    <ClipboardCopy className="w-4 h-4" /> Copiar mensagem
+                                </button>
+                                <button onClick={() => setCredMsg(null)} className="px-4 py-2.5 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg text-sm font-medium hover:bg-[#f9fafb]">Fechar</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
             {/* Modal: Importar Solicitação (leitura inteligente via Gemini) */}
             {showImportModal && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-6 animate-fade-in">
@@ -3194,106 +3266,88 @@ Disponibilidade: ${disponibilidade}`;
                                     )}
                                     {configTab === 'users' && (
                                         <div className="space-y-8">
-                                            {/* User Creation Form */}
+                                            {/* Criar usuário: o sistema gera a senha temporária forte; nada de e-mail. */}
                                             <div className="bg-[#f9fafb] p-8 rounded-xl border border-[#e5e7eb] shadow-sm">
                                                 <div className="flex items-center gap-3 mb-6">
                                                     <Users className="w-5 h-5 text-blue-600" />
-                                                    <h3 className="font-medium text-[#111827] uppercase text-xs">Cadastrar Novo Usuário</h3>
+                                                    <h3 className="font-medium text-[#111827] uppercase text-xs">Criar Novo Usuário</h3>
                                                 </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                                     <div>
                                                         <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Nome Completo</label>
-                                                        <input type="text" id="new-user-name" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="Ex: João Silva" />
+                                                        <input type="text" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="Ex: João Silva" />
                                                     </div>
                                                     <div>
                                                         <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">E-mail (login)</label>
-                                                        <input type="email" id="new-user-email" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="ex: joao@empresa.com" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Senha inicial</label>
-                                                        <input type="text" id="new-user-password" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="mín. 6 caracteres" />
+                                                        <input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all" placeholder="ex: joao@empresa.com" />
                                                     </div>
                                                     <div>
                                                         <label className="text-[9px] font-medium text-[#6b7280] uppercase block mb-2">Perfil</label>
-                                                        <select id="new-user-role" className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all">
+                                                        <select value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })} className="w-full p-4 bg-white rounded-lg font-medium text-[#111827] border border-[#e5e7eb] outline-none focus:border-[#1d6fb8] transition-all">
                                                             <option value="operador">Operador</option>
                                                             <option value="master">Master</option>
                                                         </select>
                                                     </div>
                                                 </div>
-                                                <p className="text-[10px] font-normal text-[#6b7280] mb-3">Você define a senha inicial e repassa ao usuário. Ele entra com o e-mail + essa senha e troca depois em "Trocar senha".</p>
+                                                <p className="text-[10px] font-normal text-[#6b7280] mb-3">O sistema gera uma senha temporária forte e mostra a mensagem pronta pra você repassar ao usuário. No 1º acesso ele é obrigado a trocar a senha. Nenhum e-mail é enviado.</p>
                                                 <button
                                                     onClick={async () => {
-                                                        const nameEl = document.getElementById('new-user-name') as HTMLInputElement;
-                                                        const emailEl = document.getElementById('new-user-email') as HTMLInputElement;
-                                                        const passwordEl = document.getElementById('new-user-password') as HTMLInputElement;
-                                                        const roleEl = document.getElementById('new-user-role') as HTMLSelectElement;
-                                                        if (!nameEl.value.trim() || !emailEl.value.trim() || !passwordEl.value.trim()) {
-                                                            showFeedback('Preencha nome, e-mail e senha inicial.', 'error');
-                                                            return;
-                                                        }
-                                                        if (passwordEl.value.trim().length < 6) {
-                                                            showFeedback('A senha inicial deve ter ao menos 6 caracteres.', 'error');
-                                                            return;
-                                                        }
+                                                        const name = newUser.name.trim(), email = newUser.email.trim();
+                                                        if (!name || !email) { showFeedback('Preencha nome e e-mail.', 'error'); return; }
                                                         showFeedback('Criando usuário...', 'info');
-                                                        const res = await createUserAccount({
-                                                            email: emailEl.value.trim(),
-                                                            name: nameEl.value.trim(),
-                                                            role: roleEl.value,
-                                                            password: passwordEl.value.trim(),
-                                                        });
-                                                        if (res?.error) {
-                                                            showFeedback(`Erro ao cadastrar: ${res.error}`, 'error');
-                                                        } else {
-                                                            nameEl.value = ''; emailEl.value = ''; passwordEl.value = '';
-                                                            getProfiles().then(setUsers);
-                                                            showFeedback('Usuário criado! Repasse o e-mail e a senha inicial.');
-                                                        }
+                                                        const res = await createUserAccount({ email, name, role: newUser.role });
+                                                        if (res?.error) { showFeedback(`Erro ao criar: ${res.error}`, 'error'); return; }
+                                                        setNewUser({ name: '', email: '', role: 'operador' });
+                                                        getProfiles().then(setUsers);
+                                                        setCredMsg({ title: 'Usuário criado', email, password: res.tempPassword });
                                                     }}
                                                     className="w-full py-5 bg-blue-600 text-white rounded-lg font-medium uppercase text-xs shadow-sm shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
                                                 >
-                                                    <Save className="w-4 h-4" /> Cadastrar Usuário
+                                                    <Save className="w-4 h-4" /> Criar Usuário
                                                 </button>
                                             </div>
 
-                                            {/* Users List */}
+                                            {/* Lista de usuários: nome, e-mail, papel, status; ações de senha e ativar/desativar */}
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                 {users.map(u => (
-                                                    <div key={u.id} className="p-5 bg-white rounded-xl border border-[#e5e7eb] flex items-center justify-between group hover:border-blue-100 transition-all shadow-sm">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-12 h-12 rounded-lg bg-blue-50 flex items-center justify-center">
-                                                                <span className="font-medium text-blue-400 text-sm">{u.name.charAt(0)}</span>
+                                                    <div key={u.id} className={`p-5 bg-white rounded-xl border flex items-center justify-between group transition-all shadow-sm ${u.active === false ? 'border-red-100 opacity-70' : 'border-[#e5e7eb] hover:border-blue-100'}`}>
+                                                        <div className="flex items-center gap-4 min-w-0">
+                                                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${u.active === false ? 'bg-red-50' : 'bg-blue-50'}`}>
+                                                                <span className={`font-medium text-sm ${u.active === false ? 'text-red-300' : 'text-blue-400'}`}>{u.name.charAt(0)}</span>
                                                             </div>
-                                                            <div>
-                                                                <p className="font-medium text-[#111827] text-xs uppercase tracking-tight">{u.name}</p>
-                                                                <p className="text-[9px] font-medium text-slate-300 uppercase">@{u.username} • {u.role === 'master' ? 'Master' : 'Operador'}</p>
+                                                            <div className="min-w-0">
+                                                                <p className="font-medium text-[#111827] text-xs uppercase tracking-tight truncate">{u.name}</p>
+                                                                <p className="text-[9px] font-medium text-slate-400 truncate">{u.username}</p>
+                                                                <p className="text-[9px] font-medium uppercase mt-0.5">
+                                                                    <span className="text-slate-400">{u.role === 'master' ? 'Master' : 'Operador'}</span>
+                                                                    <span className={`ml-1.5 ${u.active === false ? 'text-red-500' : 'text-emerald-500'}`}>• {u.active === false ? 'Inativo' : 'Ativo'}</span>
+                                                                </p>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                            {currentUser.role === 'master' && (
-                                                                <button title="Redefinir senha" onClick={async () => {
-                                                                    const np = prompt(`Nova senha para ${u.name} (mín. 6 caracteres):`);
-                                                                    if (np === null) return;
-                                                                    if (np.trim().length < 6) { showFeedback('Senha muito curta (mín. 6).', 'error'); return; }
-                                                                    const res = await resetUserPassword(u.id, np.trim());
+                                                        {currentUser.role === 'master' && (
+                                                            <div className="flex items-center gap-1 shrink-0">
+                                                                <button title="Redefinir senha (gera nova temporária)" onClick={async () => {
+                                                                    if (!confirm(`Gerar nova senha temporária para ${u.name}?`)) return;
+                                                                    showFeedback('Redefinindo...', 'info');
+                                                                    const res = await resetUserPassword(u.id);
                                                                     if (res?.error) { showFeedback(`Erro ao redefinir: ${res.error}`, 'error'); }
-                                                                    else { showFeedback(`Senha de ${u.name} redefinida. Repasse a nova senha.`); }
+                                                                    else { getProfiles().then(setUsers); setCredMsg({ title: 'Senha redefinida', email: u.username, password: res.tempPassword }); }
                                                                 }} className="p-2 text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#1d6fb8] rounded-lg">
                                                                     <Key className="w-4 h-4" />
                                                                 </button>
-                                                            )}
-                                                            {currentUser.role === 'master' && u.id !== currentUser.id && (
-                                                                <button title="Remover usuário" onClick={async () => {
-                                                                    if (!confirm(`Remover o usuário ${u.name}? Esta ação apaga o acesso dele.`)) return;
-                                                                    const res = await deleteUserAccount(u.id);
-                                                                    if (res?.error) { showFeedback(`Erro ao remover: ${res.error}`, 'error'); }
-                                                                    else { setUsers(users.filter(i => i.id !== u.id)); showFeedback('Usuário removido!'); }
-                                                                }} className="p-2 text-red-300 hover:bg-red-50 rounded-lg">
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
-                                                            )}
-                                                        </div>
+                                                                {u.id !== currentUser.id && (
+                                                                    <button title={u.active === false ? 'Reativar usuário' : 'Desativar usuário'} onClick={async () => {
+                                                                        const novo = u.active === false;
+                                                                        if (!confirm(`${novo ? 'Reativar' : 'Desativar'} o usuário ${u.name}?`)) return;
+                                                                        const res = await setUserActive(u.id, novo);
+                                                                        if (res?.error) { showFeedback(`Erro: ${res.error}`, 'error'); }
+                                                                        else { setUsers(users.map(i => i.id === u.id ? { ...i, active: novo } : i)); showFeedback(novo ? 'Usuário reativado.' : 'Usuário desativado.'); }
+                                                                    }} className={`p-2 rounded-lg ${u.active === false ? 'text-emerald-500 hover:bg-emerald-50' : 'text-amber-500 hover:bg-amber-50'}`}>
+                                                                        {u.active === false ? <UserCheck className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
