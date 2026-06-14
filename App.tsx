@@ -1652,7 +1652,9 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'dashboard', icon: BarChart3, label: 'Dashboard', adminOnly: true },
                         { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
                         { id: 'history', icon: History, label: 'Histórico' },
-                        { id: 'crm', icon: List, label: 'CRM' }
+                        // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
+                        // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
+                        // { id: 'crm', icon: List, label: 'CRM' },
                     ].filter(item => !item.adminOnly || currentUser.role === 'master').map(item => (
                         <button key={item.id} onClick={() => { setActiveTab(item.id as any); if (item.id !== 'history' && item.id !== 'dashboard') resetForm(); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeTab === item.id ? 'bg-[#eff6ff] text-[#1d6fb8]' : 'text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827]'}`}>
                             <item.icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
@@ -1696,7 +1698,9 @@ Disponibilidade: ${disponibilidade}`;
                 </header>
 
                 <div className="p-8 max-w-7xl mx-auto space-y-8">
-                    {activeTab === 'crm' && (
+                    {/* Rota do CRM DESATIVADA (comercial migrou pro Ramper). Componente CRMBoard e dados
+                        preservados. Reversível: troque `false` por `activeTab === 'crm'` pra reativar. */}
+                    {false && (
                         <div className="h-full animate-fade-in">
                             <CRMBoard
                                 quotes={history}
