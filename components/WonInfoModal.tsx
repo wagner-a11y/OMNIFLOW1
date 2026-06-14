@@ -360,7 +360,7 @@ export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onS
                                 Cancelar
                             </button>
                             <button type="submit" className="px-8 py-2.5 bg-emerald-600 text-white font-medium rounded-xl hover:bg-emerald-700 shadow-sm shadow-emerald-200 transition-all flex items-center gap-2">
-                                Salvar e Iniciar Operação
+                                Salvar e enviar para o Pipefy
                             </button>
                         </div>
                     </div>
