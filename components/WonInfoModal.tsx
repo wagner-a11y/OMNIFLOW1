@@ -31,9 +31,18 @@ export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onS
         }).format(numberValue);
     };
 
+    // "Agora" no formato do input datetime-local (hora LOCAL): YYYY-MM-DDTHH:mm.
+    const nowLocal = () => {
+        const d = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
     const [formData, setFormData] = useState<Partial<FreightCalculation>>({
         coletaDate: quote.coletaDate || '',
         entregaDate: quote.entregaDate || '',
+        // Data de Fechamento: pré-preenche com o momento em que o formulário abre; editável.
+        dataFechamento: quote.dataFechamento || nowLocal(),
         clienteNomeOperacao: quote.clienteNomeOperacao || '',
         clientePipefyId: quote.clientePipefyId || undefined,
         referenciaClienteOperacao: quote.referenciaClienteOperacao || quote.clientReference || '',
@@ -133,6 +142,11 @@ export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onS
                                 <Calendar className="w-4 h-4 text-emerald-500" /> Agendamento
                             </h3>
                             <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Data de Fechamento</label>
+                                    <input type="datetime-local" name="dataFechamento" value={formData.dataFechamento} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 transition-all outline-none" />
+                                    <p className="text-[10px] text-gray-400 mt-1">Pré-preenchido com agora; ajuste se o fechamento foi em outro momento.</p>
+                                </div>
                                 <div>
                                     <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 block">Coleta (Data/Hora)</label>
                                     <input type="datetime-local" name="coletaDate" value={formData.coletaDate} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 transition-all outline-none" required />

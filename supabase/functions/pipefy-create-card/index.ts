@@ -249,7 +249,7 @@ Deno.serve(async (req) => {
   push('qual_o_ve_culo_para_o_transporte', veiculo);  // Veículo (select)
   push('tipo_de_mercadoria', mercadoria);             // Mercadoria (select)
   push('qual_o_tipo_de_carreta', implemento);         // Implemento (select)
-  push('data_de_fechamento', fmtDateTime(new Date().toISOString()));
+  push('data_de_fechamento', fmtDateTime(body.dataFechamento) || fmtDateTime(new Date().toISOString())); // vem do form (editável); fallback = agora
   push('data_e_hora_para_coletar', dataColeta);
   push('data_e_hora_de_entrega', dataEntrega);
   push('local_da_coleta', localColeta);

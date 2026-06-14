@@ -120,6 +120,7 @@ export interface FreightCalculation {
     // Operation Pipeline Fields
     coletaDate?: string;
     entregaDate?: string;
+    dataFechamento?: string;   // data/hora do fechamento da carga (espelha data_de_fechamento do Pipefy)
     clienteNomeOperacao?: string;
     referenciaClienteOperacao?: string;
     solicitante?: string;

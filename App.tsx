@@ -877,6 +877,7 @@ const App: React.FC = () => {
                 implemento: wonData.carroceriaTipoOperacao,
                 dataColeta: wonData.coletaDate,
                 dataEntrega: wonData.entregaDate,
+                dataFechamento: wonData.dataFechamento,
                 localColeta: wonData.coletaEndereco,
                 localEntrega: wonData.entregaEndereco,
                 observacoes: obs,
