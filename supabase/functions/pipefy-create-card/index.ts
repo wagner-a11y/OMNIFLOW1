@@ -96,36 +96,6 @@ async function gql(token: string, query: string, variables: unknown) {
 const TABLE_CLIENTES = 'n4RglqvR';
 const TABLE_SOLICITANTES = 'NRSsu5wv';
 
-// Casa um nome com um registro da tabela do Pipefy SÓ por correspondência EXATA (título idêntico,
-// ignorando caixa/acento/espaços nas pontas). Nada de busca aproximada. Nunca cria registro.
-// Retorna { id } se achou um único exato; senão { id: null, motivo }.
-async function findRecordIdExact(token: string, tableId: string, name: string): Promise<{ id: string | null; motivo: string }> {
-  const alvo = (name || '').trim();
-  if (!alvo) return { id: null, motivo: 'origem vazia' };
-  const eq = (a: string, b: string) => norm(a) === norm(b);
-  // Varre páginas (50/pág, até 600 registros) e compara título exato. Sem search aproximado.
-  let after: string | null = null;
-  const exatos: { id: string; title: string }[] = [];
-  for (let i = 0; i < 12; i++) {
-    const q = `query($tid: ID!, $after: String) {
-      table_records(table_id: $tid, first: 50, after: $after) {
-        edges { node { id title } }
-        pageInfo { hasNextPage endCursor }
-      }
-    }`;
-    const data: any = await gql(token, q, { tid: tableId, after });
-    const conn = data?.table_records;
-    for (const e of (conn?.edges || [])) {
-      if (eq(e.node.title || '', alvo)) exatos.push({ id: e.node.id, title: e.node.title });
-    }
-    if (!conn?.pageInfo?.hasNextPage) break;
-    after = conn.pageInfo.endCursor;
-  }
-  if (exatos.length === 1) return { id: exatos[0].id, motivo: `match exato: "${exatos[0].title}"` };
-  if (exatos.length > 1) return { id: null, motivo: `${exatos.length} registros com nome idêntico — ambíguo, deixado vazio` };
-  return { id: null, motivo: `nenhum registro idêntico a "${alvo}" no cadastro` };
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -179,6 +149,40 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Busca READ-ONLY para o autocomplete (Cliente/Solicitante). Retorna { id, title } dos registros
+  // cujo título contém o termo. Nunca cria/altera/apaga nada. Filtra por substring normalizada.
+  if (body.action === 'search') {
+    const q = (body.q == null ? '' : String(body.q)).trim();
+    const tipo = body.tipo === 'solicitante' ? 'solicitante' : 'cliente';
+    const tableId = tipo === 'solicitante' ? TABLE_SOLICITANTES : TABLE_CLIENTES;
+    if (q.length < 2) return json({ ok: true, results: [] });
+    try {
+      const alvo = norm(q);
+      const out: { id: string; title: string }[] = [];
+      let after: string | null = null;
+      // Varre até ~8 páginas (400 registros) e filtra por substring; para ao juntar 10 matches.
+      for (let i = 0; i < 8 && out.length < 10; i++) {
+        const query = `query($tid: ID!, $after: String) {
+          table_records(table_id: $tid, first: 50, after: $after) {
+            edges { node { id title } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }`;
+        const data: any = await gql(token, query, { tid: tableId, after });
+        const conn = data?.table_records;
+        for (const e of (conn?.edges || [])) {
+          if (norm(e.node.title || '').includes(alvo)) { out.push({ id: e.node.id, title: e.node.title }); if (out.length >= 10) break; }
+        }
+        if (!conn?.pageInfo?.hasNextPage) break;
+        after = conn.pageInfo.endCursor;
+      }
+      return json({ ok: true, results: out });
+    } catch (e) {
+      // Fail-soft: erro na busca não trava nada; o front segue com texto livre.
+      return json({ ok: true, results: [], warning: (e as Error).message });
+    }
+  }
+
   // Campos obrigatórios
   const rota = (body.rota == null ? '' : String(body.rota)).trim();
   const receita = numOrNull(body.receita);
@@ -205,15 +209,16 @@ Deno.serve(async (req) => {
   const titulo = (body.titulo == null ? '' : String(body.titulo)).trim() || rota;
 
   // Origens dos campos especiais:
-  const clienteRaw = (body.cliente == null ? '' : String(body.cliente)).trim();          // -> conexão "Cliente" (tabela Clientes)
-  const solicitanteRaw = (body.solicitante == null ? '' : String(body.solicitante)).trim(); // -> conexão "Solicitante" (tabela Solicitantes)
+  const clienteRaw = (body.cliente == null ? '' : String(body.cliente)).trim();          // nome (vai no título/resumo)
+  const solicitanteRaw = (body.solicitante == null ? '' : String(body.solicitante)).trim();
   const referenciaRaw = (body.referencia == null ? '' : String(body.referencia)).trim();   // -> "Solicitação (STE...)" (short_text)
   const outrasNecRaw = (body.outrasNecessidades == null ? '' : String(body.outrasNecessidades)).trim(); // -> vai nas Observações (rótulo), NÃO no select
   const mercadoriaRaw = (body.mercadoria == null ? '' : String(body.mercadoria)).trim();
 
-  // Conexões: casa por nome SÓ exato (read-only). Nunca cria registro. Sem match -> vazio.
-  const clienteMatch = await findRecordIdExact(token, TABLE_CLIENTES, clienteRaw);
-  const solicitanteMatch = await findRecordIdExact(token, TABLE_SOLICITANTES, solicitanteRaw);
+  // Conexões: usa o ID do registro JÁ ESCOLHIDO no autocomplete (vínculo por id, não por grafia).
+  // Sem id (cliente/solicitante digitado livre, fora do cadastro) -> conexão fica vazia. Nunca cria registro.
+  const clienteId = (body.clienteId == null ? '' : String(body.clienteId)).trim();
+  const solicitanteId = (body.solicitanteId == null ? '' : String(body.solicitanteId)).trim();
 
   // Monta fields_attributes; só inclui campos com valor (branco => omitido).
   const fields: { field_id: string; field_value: any }[] = [];
@@ -234,26 +239,30 @@ Deno.serve(async (req) => {
   push('local_da_entrega', localEntrega);
   push('observa_es_1', observacoes);                  // já vem com "Necessidades: ..." embutido (montado no app)
   push('solicita_o_ste_coleta_etc', referenciaRaw);   // "Solicitação (STE...)" recebe a Referência do Cliente (short_text)
-  // Conexões: só envia se houve match EXATO de nome (id do registro). Sem match -> nada (vazio). Nunca cria.
-  if (clienteMatch.id) push('conex_o_de_database', [clienteMatch.id]);
-  if (solicitanteMatch.id) push('solicitante_da_carga', [solicitanteMatch.id]);
+  // Conexões: só envia se veio um id escolhido no autocomplete. Sem id -> vazio. Nunca cria registro.
+  if (clienteId) push('conex_o_de_database', [clienteId]);
+  if (solicitanteId) push('solicitante_da_carga', [solicitanteId]);
 
   if (dryRun) {
     // Relatório dos 5 campos solicitados: status + motivo de cada um.
     const camposAlvo = [
       {
         campo: 'Cliente', field_id: 'conex_o_de_database', tipo: 'connector → tabela "Clientes"',
-        origemOmniflow: 'cliente da cotação', valorOrigem: clienteRaw || '(vazio)',
-        valorPipefy: clienteMatch.id || null,
-        status: clienteMatch.id ? 'PREENCHIDO (id do registro)' : 'NÃO PREENCHIDO',
-        motivo: `Match SÓ exato por nome (sem aproximação, nunca cria registro). ${clienteMatch.motivo}.`,
+        origemOmniflow: 'cliente escolhido no autocomplete', valorOrigem: clienteRaw || '(vazio)',
+        valorPipefy: clienteId || null,
+        status: clienteId ? 'PREENCHIDO (id do registro)' : 'NÃO PREENCHIDO',
+        motivo: clienteId
+          ? `Vínculo por id do registro escolhido (${clienteId}). Conexão casa sempre, sem depender de grafia.`
+          : 'Sem id (cliente digitado livre, fora do cadastro do Pipefy). Conexão fica vazia; nome segue no título/resumo. Nunca cria registro.',
       },
       {
         campo: 'Solicitante', field_id: 'solicitante_da_carga', tipo: 'connector → tabela "Solicitantes"',
-        origemOmniflow: 'solicitante do formulário de carga ganha', valorOrigem: solicitanteRaw || '(vazio)',
-        valorPipefy: solicitanteMatch.id || null,
-        status: solicitanteMatch.id ? 'PREENCHIDO (id do registro)' : 'NÃO PREENCHIDO',
-        motivo: `Match SÓ exato por nome (sem aproximação, nunca cria registro). ${solicitanteMatch.motivo}.`,
+        origemOmniflow: 'solicitante escolhido no autocomplete', valorOrigem: solicitanteRaw || '(vazio)',
+        valorPipefy: solicitanteId || null,
+        status: solicitanteId ? 'PREENCHIDO (id do registro)' : 'NÃO PREENCHIDO',
+        motivo: solicitanteId
+          ? `Vínculo por id do registro escolhido (${solicitanteId}). Conexão casa sempre, sem depender de grafia.`
+          : 'Sem id (solicitante digitado livre). Conexão fica vazia; nunca cria registro.',
       },
       {
         campo: 'Documento → Referência', field_id: 'solicita_o_ste_coleta_etc', tipo: 'short_text (texto)',
@@ -286,7 +295,7 @@ Deno.serve(async (req) => {
     return json({
       ok: true, dryRun: true, pipe_id: PIPE_ID, phase_id: PHASE_FECHADAS, title: titulo,
       fields_attributes: fields,
-      mapeamento: { veiculo, mercadoria, implemento, clienteRecordId: clienteMatch.id, solicitanteRecordId: solicitanteMatch.id },
+      mapeamento: { veiculo, mercadoria, implemento, clienteRecordId: clienteId || null, solicitanteRecordId: solicitanteId || null },
       camposAlvo,
       selectsSemMatch,
     });

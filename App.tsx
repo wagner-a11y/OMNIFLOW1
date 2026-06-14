@@ -856,12 +856,17 @@ const App: React.FC = () => {
                 localEntrega: wonData.entregaEndereco,
                 observacoes: obs,
                 referencia: wonData.referenciaClienteOperacao || q.clientReference,  // -> "Solicitação (STE...)" (short_text)
-                outrasNecessidades: wonData.outrasNecessidades,                      // -> select (só Compulog/Comprovei)
+                outrasNecessidades: wonData.outrasNecessidades,                      // texto livre -> Observações (rótulo)
+                cliente: wonData.clienteNomeOperacao,                                // nome (título/resumo)
+                clienteId: wonData.clientePipefyId,                                  // id escolhido -> conexão Cliente
+                solicitante: wonData.solicitante,
+                solicitanteId: wonData.solicitantePipefyId,                          // id escolhido -> conexão Solicitante
                 titulo: [wonData.clienteNomeOperacao, rota].map(s => (s || '').trim()).filter(Boolean).join(' — '),
             });
             if (pipefyRes.ok && pipefyRes.cardId) {
-                finalQuote = { ...updatedQuote, pipefyCardId: pipefyRes.cardId, pipefySentAt: new Date().toISOString() };
-                await updateFreightCalculation(finalQuote); // persiste a trava de duplicado
+                // Persiste a trava de duplicado + os ids escolhidos (cliente/solicitante).
+                finalQuote = { ...updatedQuote, pipefyCardId: pipefyRes.cardId, pipefySentAt: new Date().toISOString(), clientePipefyId: wonData.clientePipefyId, solicitantePipefyId: wonData.solicitantePipefyId };
+                await updateFreightCalculation(finalQuote);
                 pipefyMsg = ' e enviada pro Pipefy';
             } else {
                 pipefyMsg = ` — ⚠️ operação salva, mas falhou enviar pro Pipefy: ${pipefyRes.error || 'erro desconhecido'}`;

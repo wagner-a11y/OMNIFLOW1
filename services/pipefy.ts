@@ -19,9 +19,27 @@ export interface PipefyCardPayload {
     observacoes?: string;
     referencia?: string;
     outrasNecessidades?: string;
+    cliente?: string;          // nome (vai no título/resumo)
+    clienteId?: string;        // id do registro da tabela Clientes (vínculo da conexão); vazio = sem vínculo
+    solicitante?: string;
+    solicitanteId?: string;    // id do registro da tabela Solicitantes
     titulo?: string;
     dryRun?: boolean;
 }
+
+// Busca read-only nas tabelas do Pipefy pro autocomplete. Fail-soft: erro/rede -> lista vazia,
+// nunca lança (não pode travar a cotação). O token fica só no servidor.
+export const searchPipefyRecords = async (
+    tipo: 'cliente' | 'solicitante', q: string
+): Promise<{ id: string; title: string }[]> => {
+    try {
+        const { data, error } = await supabase.functions.invoke('pipefy-create-card', { body: { action: 'search', tipo, q } });
+        if (error || !data?.ok || !Array.isArray(data.results)) return [];
+        return data.results;
+    } catch {
+        return [];
+    }
+};
 
 export const createPipefyCard = async (
     payload: PipefyCardPayload
