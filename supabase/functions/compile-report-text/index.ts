@@ -34,6 +34,10 @@ function buildTemplate(s: any): string {
     const o = s.topOperators[0];
     lines.push(`• Destaque do time: ${o.name} (${o.count} cotações)`);
   }
+  if (s.hoje) lines.push(`• Hoje: ${s.hoje.cotadas} cotadas, ${s.hoje.fechadas} fechadas (${s.hoje.conversao}% conversão)`);
+  if (s.melhorAderencia) lines.push(`• Melhor aderência: ${s.melhorAderencia.nome} (${s.melhorAderencia.conv}% · ${s.melhorAderencia.fechadas}/${s.melhorAderencia.cotadas})`);
+  if (s.cotaMuitoFechaPouco) lines.push(`• Cota muito e fecha pouco: ${s.cotaMuitoFechaPouco.nome} (${s.cotaMuitoFechaPouco.conv}% · ${s.cotaMuitoFechaPouco.cotadas} cotadas)`);
+  if (Array.isArray(s.naoCotaramHoje) && s.naoCotaramHoje.length) lines.push(`• Clientes a chamar (não cotaram hoje): ${s.naoCotaramHoje.slice(0, 5).join(', ')}`);
   if (Array.isArray(s.insights) && s.insights.length) {
     lines.push('');
     lines.push('⚠️ Atenção:');

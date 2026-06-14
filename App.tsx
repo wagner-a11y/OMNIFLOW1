@@ -69,6 +69,57 @@ const matchMercadoriaOption = (v: string): string => {
 // Opções de Implemento — grafia IDÊNTICA ao campo "Implemento" (qual_o_tipo_de_carreta) do Pipefy.
 const IMPLEMENTO_OPTIONS = ['Sider', 'Baú', 'Grade Baixa', 'Graneleiro', 'N/A', 'Prancha'];
 
+// Insights determinísticos (sempre do banco; a IA nunca calcula número). Mesma fonte pro dashboard e
+// pro relatório do WhatsApp. REGRA: "carga fechada" = cotação enviada pro Pipefy (tem card / pipefy_sent_at).
+const VOLUME_RELEVANTE = 5; // mínimo de cotações p/ um solicitante entrar nos rankings de conversão
+const computeDashboardInsights = (history: FreightCalculation[], customers: Customer[], now: number) => {
+    const DAY = 86400000;
+    const d = new Date(now); d.setHours(0, 0, 0, 0); const today0 = d.getTime();
+    const win30 = now - 30 * DAY;
+    const custName = (id: string) => customers.find(c => c.id === id)?.name || 'Sem cliente';
+    const isFechada = (h: any) => !!(h.pipefyCardId || h.pipefySentAt); // enviada pro Pipefy
+    const tsOf = (h: any) => Number(h.createdAt) || 0;
+
+    // Números do dia (hoje)
+    const hojeArr = history.filter(h => tsOf(h) >= today0);
+    const hojeCotadas = hojeArr.length;
+    const hojeFechadas = hojeArr.filter(isFechada).length;
+    const hoje = { cotadas: hojeCotadas, fechadas: hojeFechadas, conversao: hojeCotadas ? Math.round(hojeFechadas / hojeCotadas * 100) : 0 };
+
+    // Clientes ativos nos últimos 30 dias que NÃO cotaram hoje (pro comercial saber quem chamar)
+    const byClient = new Map<string, { last: number; today: number; c30: number }>();
+    history.forEach(h => {
+        if (!h.customerId) return;
+        const t = tsOf(h);
+        const cur = byClient.get(h.customerId) || { last: 0, today: 0, c30: 0 };
+        if (t > cur.last) cur.last = t;
+        if (t >= today0) cur.today++;
+        if (t >= win30) cur.c30++;
+        byClient.set(h.customerId, cur);
+    });
+    const naoCotaramHoje: { name: string; dias: number }[] = [];
+    byClient.forEach((v, id) => { if (v.c30 > 0 && v.today === 0) naoCotaramHoje.push({ name: custName(id), dias: Math.floor((now - v.last) / DAY) }); });
+    naoCotaramHoje.sort((a, b) => b.dias - a.dias); // mais parado primeiro
+
+    // Conversão por solicitante (últimos 30 dias): fechadas / cotadas
+    const last30 = history.filter(h => tsOf(h) >= win30);
+    const solMap = new Map<string, { cotadas: number; fechadas: number }>();
+    last30.forEach(h => {
+        const s = (h.solicitante || '').trim(); if (!s) return;
+        const cur = solMap.get(s) || { cotadas: 0, fechadas: 0 };
+        cur.cotadas++; if (isFechada(h)) cur.fechadas++;
+        solMap.set(s, cur);
+    });
+    const rankingSolicitantes = Array.from(solMap.entries())
+        .map(([nome, v]) => ({ nome, cotadas: v.cotadas, fechadas: v.fechadas, conv: v.cotadas ? Math.round(v.fechadas / v.cotadas * 100) : 0 }))
+        .sort((a, b) => b.cotadas - a.cotadas);
+    const relevantes = rankingSolicitantes.filter(s => s.cotadas >= VOLUME_RELEVANTE);
+    const melhorAderencia = relevantes.length ? [...relevantes].sort((a, b) => b.conv - a.conv || b.cotadas - a.cotadas)[0] : null;
+    const cotaMuitoFechaPouco = relevantes.length ? [...relevantes].sort((a, b) => a.conv - b.conv || b.cotadas - a.cotadas)[0] : null;
+
+    return { hoje, naoCotaramHoje, rankingSolicitantes, melhorAderencia, cotaMuitoFechaPouco, minVolume: VOLUME_RELEVANTE };
+};
+
 // Veículos utilitários: frete base = KM × tarifa fixa (ignoram a tabela ANTT).
 const UTILITARIO_KM_RATES: Record<string, number> = {
     [VehicleType.Fiorino]: 2.40,
@@ -541,6 +592,9 @@ const App: React.FC = () => {
     }, [history, searchQuery, customers]);
 
     /* Lógica do Dashboard Analítico Multi-Filtro */
+    // Insights determinísticos do dia/30d (mesma fonte do relatório do WhatsApp).
+    const insights = useMemo(() => computeDashboardInsights(history, customers, Date.now()), [history, customers]);
+
     const dashboardData = useMemo(() => {
         const filteredHistory = history.filter(h => {
             const dateObj = h.updatedAt ? new Date(h.updatedAt) : new Date(h.createdAt);
@@ -754,8 +808,11 @@ const App: React.FC = () => {
             });
         }
 
+        // Mesmas métricas determinísticas do dashboard (dia/30d) — pro relatório do WhatsApp.
+        const painel = computeDashboardInsights(history, customers, now);
+
         setReportText('');
-        setDailyReport({ label, total, prevTotal, variation, totalValue, prevValue, avgSec, topClients, topVehicles, topRoutes, operators, insights, generatedAt: now });
+        setDailyReport({ label, total, prevTotal, variation, totalValue, prevValue, avgSec, topClients, topVehicles, topRoutes, operators, insights, painel, generatedAt: now });
     };
 
     // Resumo (números prontos) enviado à IA — ela só escreve o texto, não calcula.
@@ -771,6 +828,11 @@ const App: React.FC = () => {
         topRoutes: (r.topRoutes || []).slice(0, 5).map((rt: any) => ({ name: rt.name, count: rt.count })),
         topOperators: r.operators.slice(0, 5).map((o: any) => ({ name: o.name, count: o.count, avgTime: o.timed > 0 ? formatMin(o.avgSec) : '—' })),
         insights: r.insights,
+        // Painel do dia (mesma fonte do dashboard). Fechada = enviada pro Pipefy.
+        hoje: r.painel ? { cotadas: r.painel.hoje.cotadas, fechadas: r.painel.hoje.fechadas, conversao: r.painel.hoje.conversao } : null,
+        melhorAderencia: r.painel?.melhorAderencia ? { nome: r.painel.melhorAderencia.nome, conv: r.painel.melhorAderencia.conv, fechadas: r.painel.melhorAderencia.fechadas, cotadas: r.painel.melhorAderencia.cotadas } : null,
+        cotaMuitoFechaPouco: r.painel?.cotaMuitoFechaPouco ? { nome: r.painel.cotaMuitoFechaPouco.nome, conv: r.painel.cotaMuitoFechaPouco.conv, cotadas: r.painel.cotaMuitoFechaPouco.cotadas } : null,
+        naoCotaramHoje: (r.painel?.naoCotaramHoje || []).slice(0, 6).map((c: any) => c.name),
     });
 
     // Fallback de última instância (se a própria chamada à função falhar) — texto-modelo no cliente.
@@ -784,6 +846,10 @@ const App: React.FC = () => {
         if (s.topVehicles?.length) lines.push(`• Veículos cotados: ${s.topVehicles.slice(0, 4).map((v: any) => `${v.name} (${v.count})`).join(', ')}`);
         if (s.topRoutes?.length) lines.push(`• Rotas mais quentes: ${s.topRoutes.slice(0, 3).map((rt: any) => `${rt.name} (${rt.count})`).join('; ')}`);
         if (s.topOperators?.length) lines.push(`• Destaque do time: ${s.topOperators[0].name} (${s.topOperators[0].count} cotações)`);
+        if (s.hoje) lines.push(`• Hoje: ${s.hoje.cotadas} cotadas, ${s.hoje.fechadas} fechadas (${s.hoje.conversao}% conversão)`);
+        if (s.melhorAderencia) lines.push(`• Melhor aderência: ${s.melhorAderencia.nome} (${s.melhorAderencia.conv}% · ${s.melhorAderencia.fechadas}/${s.melhorAderencia.cotadas})`);
+        if (s.cotaMuitoFechaPouco) lines.push(`• Cota muito e fecha pouco: ${s.cotaMuitoFechaPouco.nome} (${s.cotaMuitoFechaPouco.conv}% · ${s.cotaMuitoFechaPouco.cotadas} cotadas)`);
+        if (s.naoCotaramHoje?.length) lines.push(`• Clientes a chamar (não cotaram hoje): ${s.naoCotaramHoje.slice(0, 5).join(', ')}`);
         if (s.insights?.length) { lines.push(''); lines.push('⚠️ Atenção:'); s.insights.slice(0, 4).forEach((i: string) => lines.push(`• ${i}`)); }
         return lines.join('\n');
     };
@@ -1761,6 +1827,104 @@ Disponibilidade: ${disponibilidade}`;
                                     </div>
                                     <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl px-4 py-2 font-medium text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors uppercase text-xs" />
                                 </div>
+                            </div>
+
+                            {/* ===== Painel do Dia & Insights (determinístico; mesma fonte do relatório) ===== */}
+                            <div className="space-y-5">
+                                {/* Números do dia em destaque */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="bg-gradient-to-br from-[#1d6fb8] to-[#155a99] text-white p-5 rounded-2xl shadow-sm">
+                                        <p className="text-[11px] font-medium uppercase tracking-wider text-white/70">Cotações hoje</p>
+                                        <p className="text-4xl font-semibold mt-1 leading-none">{insights.hoje.cotadas}</p>
+                                    </div>
+                                    <div className="bg-white border border-[#e5e7eb] p-5 rounded-2xl shadow-sm">
+                                        <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280] flex items-center gap-1.5"><Send className="w-3.5 h-3.5 text-emerald-500" /> Fechadas hoje</p>
+                                        <p className="text-4xl font-semibold mt-1 leading-none text-[#111827]">{insights.hoje.fechadas}</p>
+                                        <p className="text-[10px] font-medium text-[#9ca3af] mt-1">enviadas pro Pipefy</p>
+                                    </div>
+                                    <div className="bg-white border border-[#e5e7eb] p-5 rounded-2xl shadow-sm">
+                                        <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">Conversão hoje</p>
+                                        <p className="text-4xl font-semibold mt-1 leading-none text-emerald-600">{insights.hoje.conversao}%</p>
+                                        <p className="text-[10px] font-medium text-[#9ca3af] mt-1">fechadas ÷ cotadas</p>
+                                    </div>
+                                </div>
+
+                                {/* Alertas / rankings de aderência */}
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                    {/* Melhor aderência */}
+                                    <div className="bg-white border border-[#e5e7eb] rounded-2xl p-5 shadow-sm flex flex-col">
+                                        <p className="text-[11px] font-medium uppercase tracking-wider text-emerald-600 flex items-center gap-1.5 mb-3"><Award className="w-4 h-4" /> Melhor aderência</p>
+                                        {insights.melhorAderencia ? (
+                                            <div className="mt-auto">
+                                                <p className="text-sm font-semibold text-[#111827] truncate" title={insights.melhorAderencia.nome}>{insights.melhorAderencia.nome}</p>
+                                                <div className="flex items-baseline gap-2 mt-1">
+                                                    <span className="text-3xl font-semibold text-emerald-600 leading-none">{insights.melhorAderencia.conv}%</span>
+                                                    <span className="text-[11px] font-medium text-[#6b7280]">{insights.melhorAderencia.fechadas}/{insights.melhorAderencia.cotadas} fechadas</span>
+                                                </div>
+                                            </div>
+                                        ) : <p className="text-xs text-[#9ca3af] mt-auto">Sem solicitante com volume relevante (≥{insights.minVolume} cotações) nos últimos 30 dias.</p>}
+                                    </div>
+                                    {/* Cota muito e fecha pouco */}
+                                    <div className="bg-white border border-amber-100 rounded-2xl p-5 shadow-sm flex flex-col">
+                                        <p className="text-[11px] font-medium uppercase tracking-wider text-amber-600 flex items-center gap-1.5 mb-3"><AlertTriangle className="w-4 h-4" /> Cota muito e fecha pouco</p>
+                                        {insights.cotaMuitoFechaPouco ? (
+                                            <div className="mt-auto">
+                                                <p className="text-sm font-semibold text-[#111827] truncate" title={insights.cotaMuitoFechaPouco.nome}>{insights.cotaMuitoFechaPouco.nome}</p>
+                                                <div className="flex items-baseline gap-2 mt-1">
+                                                    <span className="text-3xl font-semibold text-amber-600 leading-none">{insights.cotaMuitoFechaPouco.conv}%</span>
+                                                    <span className="text-[11px] font-medium text-[#6b7280]">{insights.cotaMuitoFechaPouco.cotadas} cotadas · {insights.cotaMuitoFechaPouco.fechadas} fechadas</span>
+                                                </div>
+                                            </div>
+                                        ) : <p className="text-xs text-[#9ca3af] mt-auto">Sem volume relevante pra avaliar nos últimos 30 dias.</p>}
+                                    </div>
+                                    {/* Clientes que não cotaram hoje */}
+                                    <div className="bg-white border border-[#e5e7eb] rounded-2xl p-5 shadow-sm">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280] flex items-center gap-1.5"><Users className="w-4 h-4 text-[#1d6fb8]" /> Não cotaram hoje</p>
+                                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#eff6ff] text-[#1d6fb8]">{insights.naoCotaramHoje.length}</span>
+                                        </div>
+                                        {insights.naoCotaramHoje.length === 0 ? (
+                                            <p className="text-xs text-[#9ca3af]">Todos os clientes ativos já cotaram hoje. 🎉</p>
+                                        ) : (
+                                            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                                                {insights.naoCotaramHoje.slice(0, 8).map((c, i) => (
+                                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#f9fafb] border border-[#e5e7eb] text-[11px] font-medium text-[#111827] max-w-full">
+                                                        <span className="truncate max-w-[120px]">{c.name}</span>
+                                                        <span className="text-[#9ca3af]">{c.dias}d</span>
+                                                    </span>
+                                                ))}
+                                                {insights.naoCotaramHoje.length > 8 && <span className="text-[11px] font-medium text-[#9ca3af] px-1 py-1">+{insights.naoCotaramHoje.length - 8}</span>}
+                                            </div>
+                                        )}
+                                        <p className="text-[10px] font-medium text-[#9ca3af] mt-2">Ativos nos últimos 30 dias · pra saber quem chamar</p>
+                                    </div>
+                                </div>
+
+                                {/* Ranking de solicitantes (gráfico comparativo: cotadas x fechadas, 30d) */}
+                                {insights.rankingSolicitantes.length > 0 && (
+                                    <div className="bg-white border border-[#e5e7eb] rounded-2xl p-5 shadow-sm">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <p className="text-sm font-medium text-[#111827] flex items-center gap-2"><BarChart3 className="w-4 h-4 text-[#1d6fb8]" /> Solicitantes — cotadas x fechadas (30 dias)</p>
+                                            <span className="text-[10px] font-medium text-[#9ca3af] uppercase">fechada = enviada pro Pipefy</span>
+                                        </div>
+                                        <div className="space-y-2.5">
+                                            {insights.rankingSolicitantes.slice(0, 8).map((s, i) => {
+                                                const max = insights.rankingSolicitantes[0].cotadas || 1;
+                                                return (
+                                                    <div key={i} className="flex items-center gap-3">
+                                                        <span className="w-40 shrink-0 truncate text-xs font-medium text-[#111827]" title={s.nome}>{s.nome}</span>
+                                                        <div className="flex-1 h-5 bg-[#f3f4f6] rounded-full overflow-hidden relative">
+                                                            <div className="h-full bg-[#dbeafe] rounded-full" style={{ width: `${Math.max(6, (s.cotadas / max) * 100)}%` }} title={`${s.cotadas} cotadas`}>
+                                                                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${s.cotadas ? (s.fechadas / s.cotadas) * 100 : 0}%` }} title={`${s.fechadas} fechadas`}></div>
+                                                            </div>
+                                                        </div>
+                                                        <span className="w-24 shrink-0 text-right text-[11px] font-medium text-[#6b7280]">{s.fechadas}/{s.cotadas} · {s.conv}%</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* ===== Relatório Diário (só master) ===== */}
