@@ -33,6 +33,10 @@ import {
     createFreightCalculation,
     updateFreightCalculation,
     deleteFreightCalculation,
+    getDeletedFreightCalculations,
+    restoreFreightCalculation,
+    permanentlyDeleteFreightCalculation,
+    purgeOldTrash,
     getSystemConfig,
     updateSystemConfig,
     getVehicleConfigs,
@@ -146,12 +150,13 @@ const App: React.FC = () => {
     // Estados Globais
     const [appLogo, setAppLogo] = useState<string | null>(() => localStorage.getItem('flow_app_logo'));
     const [history, setHistory] = useState<FreightCalculation[]>([]);
+    const [trash, setTrash] = useState<FreightCalculation[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [fedTaxes, setFedTaxes] = useState<FederalTaxes>({ pis: 0.65, cofins: 3.0, csll: 1.08, irpj: 1.2, insurancePolicyRate: 0.035 });
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash'>('dashboard');
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -343,8 +348,14 @@ const App: React.FC = () => {
             // profiles é carregado após a autenticação (RLS exige sessão) — ver applySession.
             const customersData = await getCustomers();
             setCustomers(customersData.length > 0 ? customersData : INITIAL_CUSTOMERS);
+            // Limpeza automática da lixeira: ao abrir o sistema, apaga
+            // definitivamente o que foi excluído em dias anteriores.
+            const purged = await purgeOldTrash();
+            if (purged > 0) console.log(`Lixeira: ${purged} cotação(ões) de dias anteriores removida(s) definitivamente.`);
             const historyData = await getFreightCalculations();
             setHistory(historyData);
+            const trashData = await getDeletedFreightCalculations();
+            setTrash(trashData);
             const configData = await getSystemConfig();
             if (configData) {
                 setFedTaxes(configData);
@@ -375,6 +386,8 @@ const App: React.FC = () => {
                         showFeedback("Este registro foi alterado por outro usuário.");
                     }
                 });
+                // Mantém a lixeira em sincronia (soft delete/restore chegam como UPDATE).
+                getDeletedFreightCalculations().then(setTrash);
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
                 console.log('Real-Time Update: customers');
@@ -1750,6 +1763,7 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
                         { id: 'history', icon: History, label: 'Histórico' },
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
+                        { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
                         // { id: 'crm', icon: List, label: 'CRM' },
@@ -1786,7 +1800,8 @@ Disponibilidade: ${disponibilidade}`;
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
                                 activeTab === 'crm' ? 'CRM' :
                                     activeTab === 'tracking' ? 'Acompanhamento de Cargas' :
-                                        activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
+                                        activeTab === 'trash' ? 'Lixeira' :
+                                            activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
                         <div className="relative w-72">
@@ -2785,7 +2800,13 @@ Disponibilidade: ${disponibilidade}`;
                                                     <CopyPlus className="w-4 h-4" />
                                                 </button>
                                                 {currentUser.role === 'master' && (
-                                                    <button onClick={async () => { if (await deleteFreightCalculation(h.id)) setHistory(prev => prev.filter(i => i.id !== h.id)); }} className="p-2 text-red-400 hover:bg-red-50 rounded-lg">
+                                                    <button onClick={async () => {
+                                                        if (await deleteFreightCalculation(h.id)) {
+                                                            setHistory(prev => prev.filter(i => i.id !== h.id));
+                                                            setTrash(prev => [{ ...h, deletedAt: new Date().toISOString() }, ...prev]);
+                                                            showFeedback('Cotação movida para a lixeira.');
+                                                        }
+                                                    }} title="Mover para a lixeira" className="p-2 text-red-400 hover:bg-red-50 rounded-lg">
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
                                                 )}
@@ -2794,6 +2815,83 @@ Disponibilidade: ${disponibilidade}`;
                                     );
                                 })}
                             </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'trash' && (
+                        <div className="space-y-4 animate-fade-in-up">
+                            <div className="flex items-center gap-4 px-4 mb-2">
+                                <Trash2 className="w-8 h-8 text-[#111827]" />
+                                <div>
+                                    <h1 className="text-3xl font-medium text-[#111827] tracking-tight">Lixeira</h1>
+                                    <p className="text-[11px] font-medium text-[#6b7280] mt-1">Cotações movidas para a lixeira são apagadas definitivamente na abertura do dia seguinte.</p>
+                                </div>
+                            </div>
+
+                            {trash.length === 0 ? (
+                                <div className="bg-white p-12 rounded-xl border shadow-sm flex flex-col items-center justify-center text-center">
+                                    <Trash2 className="w-10 h-10 text-[#d1d5db] mb-3" strokeWidth={1.5} />
+                                    <p className="text-sm font-medium text-[#6b7280]">A lixeira está vazia.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center gap-6 px-10 text-[9px] font-medium text-[#6b7280] uppercase tracking-widest mb-4">
+                                        <span className="w-24">Status</span>
+                                        <span className="w-32">Excluída em</span>
+                                        <span className="flex-1">Ref / Rota</span>
+                                        <span className="w-32 text-right">Valor Final</span>
+                                        <span className="w-28"></span>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {trash.map(h => {
+                                            const customer = customers.find(c => c.id === h.customerId);
+                                            return (
+                                                <div key={h.id} className="bg-white h-20 px-10 rounded-xl border shadow-sm flex items-center gap-6 group hover:border-blue-500 transition-all">
+                                                    <div className="w-24"><span className={`px-3 py-1.5 rounded-lg text-[8px] font-medium text-white uppercase ${h.status === 'won' ? 'bg-emerald-500' : h.status === 'lost' ? 'bg-red-500' : 'bg-amber-400'}`}>{h.status === 'won' ? 'GANHO' : h.status === 'lost' ? 'PERDIDO' : 'PAUTA'}</span></div>
+                                                    <span className="w-32 text-[10px] font-medium text-[#6b7280]">
+                                                        {(() => {
+                                                            if (!h.deletedAt) return '—';
+                                                            const d = new Date(h.deletedAt);
+                                                            return isNaN(d.getTime()) ? '—' : d.toLocaleString();
+                                                        })()}
+                                                    </span>
+                                                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium text-[#111827] text-xs">{h.proposalNumber}</span>
+                                                            {h.clientReference && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[8px] font-medium uppercase tracking-wide">{h.clientReference}</span>}
+                                                        </div>
+                                                        {customer && (
+                                                            <p className="text-[9px] font-medium text-blue-600 uppercase tracking-widest mt-0.5 truncate">{customer.name}</p>
+                                                        )}
+                                                        <p className="text-[8px] font-medium text-[#6b7280] truncate uppercase mt-0.5">{(h.origin || '').split(',')[0]} ➝ {(h.destination || '').split(',')[0]} <span className="opacity-40">| {h.vehicleType}</span></p>
+                                                    </div>
+                                                    <div className="w-32 text-right"><p className="text-base font-medium text-[#111827]">R$ {formatCur(h.totalFreight)}</p></div>
+                                                    <div className="w-28 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                        <button onClick={async () => {
+                                                            if (await restoreFreightCalculation(h.id)) {
+                                                                setTrash(prev => prev.filter(i => i.id !== h.id));
+                                                                setHistory(prev => [{ ...h, deletedAt: undefined }, ...prev]);
+                                                                showFeedback('Cotação restaurada.');
+                                                            }
+                                                        }} title="Restaurar para o Histórico" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                                                            <RotateCcw className="w-4 h-4" />
+                                                        </button>
+                                                        <button onClick={async () => {
+                                                            if (!confirm(`Excluir DEFINITIVAMENTE a cotação ${h.proposalNumber}? Esta ação não pode ser desfeita.`)) return;
+                                                            if (await permanentlyDeleteFreightCalculation(h.id)) {
+                                                                setTrash(prev => prev.filter(i => i.id !== h.id));
+                                                                showFeedback('Cotação excluída definitivamente.');
+                                                            }
+                                                        }} title="Excluir definitivamente" className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
