@@ -119,6 +119,7 @@ export interface FreightCalculation {
     mercadoriaNovaUsada?: string;     // select Pipefy "Mercadoria Nova/Usada?" (Usada/Nova)
     outrasNecessidadesPipefy?: string; // select Pipefy "Outras Necessidades" (Compulog/Comprovei) — separado da obs livre
     necessidadeGR?: string[];         // checklist Pipefy "Necessidade GR" (lista de marcados)
+    deletedAt?: string;               // lixeira (soft delete): ISO timestamp de quando foi movida; ausente = ativa
     // Operation Pipeline Fields
     coletaDate?: string;
     entregaDate?: string;

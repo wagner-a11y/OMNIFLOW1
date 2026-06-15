@@ -293,19 +293,9 @@ export const updateSystemConfig = async (config: FederalTaxes): Promise<boolean>
 };
 
 // =================== FREIGHT CALCULATIONS ===================
-export const getFreightCalculations = async (): Promise<FreightCalculation[]> => {
-    const { data, error } = await supabase
-        .from('freight_calculations')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500);
-
-    if (error) {
-        console.error('Error fetching freight calculations:', error);
-        return [];
-    }
-
-    return (data || []).map((item: any) => ({
+// Mapeia uma linha do banco (snake_case) para o modelo da aplicação (camelCase).
+// Extraído para ser reutilizado tanto pelo Histórico (ativas) quanto pela Lixeira.
+const mapFreightRow = (item: any): FreightCalculation => ({
         id: item.id,
         proposalNumber: item.proposal_number,
         clientReference: item.client_reference,
@@ -382,8 +372,42 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
         solicitantePipefyId: item.solicitante_pipefy_id || undefined,
         mercadoriaNovaUsada: item.mercadoria_nova_usada || undefined,
         outrasNecessidadesPipefy: item.outras_necessidades_pipefy || undefined,
-        necessidadeGR: Array.isArray(item.necessidade_gr) ? item.necessidade_gr : undefined
-    }));
+        necessidadeGR: Array.isArray(item.necessidade_gr) ? item.necessidade_gr : undefined,
+        deletedAt: item.deleted_at || undefined
+});
+
+// Histórico: somente cotações ativas (não estão na lixeira).
+export const getFreightCalculations = async (): Promise<FreightCalculation[]> => {
+    const { data, error } = await supabase
+        .from('freight_calculations')
+        .select('*')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(500);
+
+    if (error) {
+        console.error('Error fetching freight calculations:', error);
+        return [];
+    }
+
+    return (data || []).map(mapFreightRow);
+};
+
+// Lixeira: somente cotações que foram movidas para a lixeira (soft delete).
+export const getDeletedFreightCalculations = async (): Promise<FreightCalculation[]> => {
+    const { data, error } = await supabase
+        .from('freight_calculations')
+        .select('*')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(500);
+
+    if (error) {
+        console.error('Error fetching deleted freight calculations:', error);
+        return [];
+    }
+
+    return (data || []).map(mapFreightRow);
 };
 
 export const createFreightCalculation = async (calc: FreightCalculation): Promise<{ success: boolean; data?: FreightCalculation; error?: string }> => {
@@ -616,15 +640,66 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
     return { success: true };
 };
 
+// Mover para a lixeira (soft delete): marca deleted_at, NÃO apaga o registro.
 export const deleteFreightCalculation = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('freight_calculations')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error moving freight calculation to trash:', error);
+        return false;
+    }
+    return true;
+};
+
+// Restaurar da lixeira: limpa deleted_at, voltando a cotação para o Histórico.
+export const restoreFreightCalculation = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('freight_calculations')
+        .update({ deleted_at: null })
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error restoring freight calculation:', error);
+        return false;
+    }
+    return true;
+};
+
+// Excluir definitivamente: remove o registro do banco (irreversível).
+export const permanentlyDeleteFreightCalculation = async (id: string): Promise<boolean> => {
     const { error } = await supabase
         .from('freight_calculations')
         .delete()
         .eq('id', id);
 
     if (error) {
-        console.error('Error deleting freight calculation:', error);
+        console.error('Error permanently deleting freight calculation:', error);
         return false;
     }
     return true;
+};
+
+// Limpeza automática: apaga DEFINITIVAMENTE itens que foram para a lixeira
+// antes do início do dia de hoje. A lixeira guarda apenas o que foi excluído
+// hoje; o que sobrou de dias anteriores é purgado ao abrir o sistema.
+// Retorna a quantidade de registros removidos.
+export const purgeOldTrash = async (): Promise<number> => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+        .from('freight_calculations')
+        .delete()
+        .not('deleted_at', 'is', null)
+        .lt('deleted_at', startOfToday.toISOString())
+        .select('id');
+
+    if (error) {
+        console.error('Error purging old trash:', error);
+        return 0;
+    }
+    return (data || []).length;
 };
