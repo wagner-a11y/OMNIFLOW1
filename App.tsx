@@ -849,22 +849,37 @@ const App: React.FC = () => {
     });
 
     // Fallback de última instância (se a própria chamada à função falhar) — texto-modelo no cliente.
+    // Mesma redação em frases corridas do fallback do servidor; números entram exatamente como vêm.
     const buildReportTemplateClient = (s: any): string => {
-        const lines: string[] = [];
-        lines.push(`📊 Relatório de cotações — ${s.label || 'período'}`);
-        lines.push(`• Cotações: ${s.total ?? 0}${typeof s.variation === 'number' ? ` (${s.variation > 0 ? '+' : ''}${s.variation}% vs período anterior)` : ''}`);
-        if (s.totalValue) lines.push(`• Valor cotado: ${s.totalValue}`);
-        if (s.avgTime && s.avgTime !== '—') lines.push(`• Tempo médio de montagem: ${s.avgTime}`);
-        if (s.topClients?.length) lines.push(`• Clientes que mais cotaram: ${s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count}${c.value ? ` · ${c.value}` : ''})`).join(', ')}`);
-        if (s.topVehicles?.length) lines.push(`• Veículos cotados: ${s.topVehicles.slice(0, 4).map((v: any) => `${v.name} (${v.count})`).join(', ')}`);
-        if (s.topRoutes?.length) lines.push(`• Rotas mais quentes: ${s.topRoutes.slice(0, 3).map((rt: any) => `${rt.name} (${rt.count})`).join('; ')}`);
-        if (s.topOperators?.length) lines.push(`• Destaque do time: ${s.topOperators[0].name} (${s.topOperators[0].count} cotações)`);
-        if (s.hoje) lines.push(`• Hoje: ${s.hoje.cotadas} cotadas, ${s.hoje.fechadas} fechadas (${s.hoje.conversao}% conversão)`);
-        if (s.melhorAderencia) lines.push(`• Melhor aderência: ${s.melhorAderencia.nome} (${s.melhorAderencia.conv}% · ${s.melhorAderencia.fechadas}/${s.melhorAderencia.cotadas})`);
-        if (s.cotaMuitoFechaPouco) lines.push(`• Cota muito e fecha pouco: ${s.cotaMuitoFechaPouco.nome} (${s.cotaMuitoFechaPouco.conv}% · ${s.cotaMuitoFechaPouco.cotadas} cotadas)`);
-        if (s.naoCotaramHoje?.length) lines.push(`• Clientes a chamar (não cotaram hoje): ${s.naoCotaramHoje.slice(0, 5).join(', ')}`);
-        if (s.insights?.length) { lines.push(''); lines.push('⚠️ Atenção:'); s.insights.slice(0, 4).forEach((i: string) => lines.push(`• ${i}`)); }
-        return lines.join('\n');
+        const joinNat = (arr: string[]) => arr.length <= 1 ? (arr[0] || '') : arr.slice(0, -1).join(', ') + ' e ' + arr[arr.length - 1];
+        const paras: string[] = [];
+        paras.push(`📊 Relatório de cotações — ${s.label || 'período'}`);
+
+        const abertura: string[] = [];
+        let l1 = `Fechamos o período com ${s.total ?? 0} cotação(ões)`;
+        if (typeof s.variation === 'number' && s.variation !== 0) l1 += `, ${Math.abs(s.variation)}% ${s.variation > 0 ? 'acima' : 'abaixo'} do período anterior`;
+        else if (s.variation === 0) l1 += `, no mesmo ritmo do período anterior`;
+        abertura.push(l1 + '.');
+        if (s.totalValue) abertura.push(`No total, ${s.totalValue} em frete cotado.`);
+        if (s.avgTime && s.avgTime !== '—') abertura.push(`O tempo médio pra montar uma cotação ficou em ${s.avgTime}.`);
+        paras.push(abertura.join(' '));
+
+        const mov: string[] = [];
+        if (s.topClients?.length) mov.push(`Quem mais movimentou foi ${joinNat(s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count}${c.value ? `, ${c.value}` : ''})`))}.`);
+        if (s.topVehicles?.length) mov.push(`Nos veículos, a procura veio principalmente de ${joinNat(s.topVehicles.slice(0, 4).map((v: any) => `${v.name} (${v.count})`))}.`);
+        if (s.topRoutes?.length) mov.push(`As rotas mais quentes foram ${joinNat(s.topRoutes.slice(0, 3).map((rt: any) => `${rt.name} (${rt.count})`))}.`);
+        if (mov.length) paras.push(mov.join(' '));
+
+        const dia: string[] = [];
+        if (s.hoje) dia.push(`Hoje saíram ${s.hoje.cotadas} cotações e ${s.hoje.fechadas} fecharam, ${s.hoje.conversao}% de conversão.`);
+        if (s.topOperators?.length) { const o = s.topOperators[0]; dia.push(`No volume, ${o.name} foi quem mais cotou (${o.count})${o.avgTime && o.avgTime !== '—' ? `, com média de ${o.avgTime} por cotação` : ''}.`); }
+        if (s.melhorAderencia) dia.push(`Na conversão, ${s.melhorAderencia.nome} se destacou com ${s.melhorAderencia.conv}% (${s.melhorAderencia.fechadas}/${s.melhorAderencia.cotadas}).`);
+        if (s.cotaMuitoFechaPouco) dia.push(`Vale acompanhar de perto ${s.cotaMuitoFechaPouco.nome}, que cotou bastante (${s.cotaMuitoFechaPouco.cotadas}) e fechou ${s.cotaMuitoFechaPouco.conv}% — pode ter algo travando o fechamento.`);
+        if (s.naoCotaramHoje?.length) dia.push(`Ainda não cotaram hoje: ${s.naoCotaramHoje.slice(0, 5).join(', ')} — vale uma chamada.`);
+        if (dia.length) paras.push(dia.join(' '));
+
+        if (s.insights?.length) paras.push(`⚠️ De olho: ${s.insights.slice(0, 4).join(' ')}`);
+        return paras.join('\n\n');
     };
 
     const handleCompileText = async () => {

@@ -13,37 +13,65 @@ const corsHeaders = {
 
 const json = (b: unknown) => new Response(JSON.stringify(b), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-// Texto-modelo determinístico (fallback) — preenche os números, escaneável p/ WhatsApp.
+// Junta itens em linguagem natural: "A", "A e B", "A, B e C".
+function joinNat(arr: string[]): string {
+  if (arr.length <= 1) return arr[0] || '';
+  return arr.slice(0, -1).join(', ') + ' e ' + arr[arr.length - 1];
+}
+
+// Texto-modelo determinístico (fallback) — mesmos números, mas em frases que fluem
+// em vez de bullets crus. Usado quando a IA não responde (ex.: cota estourada).
+// Os números entram exatamente como vieram; aqui só muda a redação.
 function buildTemplate(s: any): string {
-  const lines: string[] = [];
-  lines.push(`📊 Relatório de cotações — ${s.label || 'período'}`);
-  const varStr = typeof s.variation === 'number' ? ` (${s.variation > 0 ? '+' : ''}${s.variation}% vs período anterior)` : '';
-  lines.push(`• Cotações: ${s.total ?? 0}${varStr}`);
-  if (s.totalValue) lines.push(`• Valor cotado: ${s.totalValue}`);
-  if (s.avgTime && s.avgTime !== '—') lines.push(`• Tempo médio de montagem: ${s.avgTime}`);
+  const paras: string[] = [];
+  paras.push(`📊 Relatório de cotações — ${s.label || 'período'}`);
+
+  // Volume, valor e tempo de montagem.
+  const abertura: string[] = [];
+  let l1 = `Fechamos o período com ${s.total ?? 0} cotação(ões)`;
+  if (typeof s.variation === 'number' && s.variation !== 0) {
+    l1 += `, ${Math.abs(s.variation)}% ${s.variation > 0 ? 'acima' : 'abaixo'} do período anterior`;
+  } else if (s.variation === 0) {
+    l1 += `, no mesmo ritmo do período anterior`;
+  }
+  abertura.push(l1 + '.');
+  if (s.totalValue) abertura.push(`No total, ${s.totalValue} em frete cotado.`);
+  if (s.avgTime && s.avgTime !== '—') abertura.push(`O tempo médio pra montar uma cotação ficou em ${s.avgTime}.`);
+  paras.push(abertura.join(' '));
+
+  // Clientes, veículos e rotas que puxaram o movimento.
+  const mov: string[] = [];
   if (Array.isArray(s.topClients) && s.topClients.length) {
-    lines.push(`• Clientes que mais cotaram: ${s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count}${c.value ? ` · ${c.value}` : ''})`).join(', ')}`);
+    const c = s.topClients.slice(0, 3).map((c: any) => `${c.name} (${c.count}${c.value ? `, ${c.value}` : ''})`);
+    mov.push(`Quem mais movimentou foi ${joinNat(c)}.`);
   }
   if (Array.isArray(s.topVehicles) && s.topVehicles.length) {
-    lines.push(`• Veículos cotados: ${s.topVehicles.slice(0, 4).map((v: any) => `${v.name} (${v.count})`).join(', ')}`);
+    const v = s.topVehicles.slice(0, 4).map((v: any) => `${v.name} (${v.count})`);
+    mov.push(`Nos veículos, a procura veio principalmente de ${joinNat(v)}.`);
   }
   if (Array.isArray(s.topRoutes) && s.topRoutes.length) {
-    lines.push(`• Rotas mais quentes: ${s.topRoutes.slice(0, 3).map((rt: any) => `${rt.name} (${rt.count})`).join('; ')}`);
+    const r = s.topRoutes.slice(0, 3).map((rt: any) => `${rt.name} (${rt.count})`);
+    mov.push(`As rotas mais quentes foram ${joinNat(r)}.`);
   }
+  if (mov.length) paras.push(mov.join(' '));
+
+  // O dia e o time — com tato para quem está abaixo da média.
+  const dia: string[] = [];
+  if (s.hoje) dia.push(`Hoje saíram ${s.hoje.cotadas} cotações e ${s.hoje.fechadas} fecharam, ${s.hoje.conversao}% de conversão.`);
   if (Array.isArray(s.topOperators) && s.topOperators.length) {
     const o = s.topOperators[0];
-    lines.push(`• Destaque do time: ${o.name} (${o.count} cotações)`);
+    dia.push(`No volume, ${o.name} foi quem mais cotou (${o.count})${o.avgTime && o.avgTime !== '—' ? `, com média de ${o.avgTime} por cotação` : ''}.`);
   }
-  if (s.hoje) lines.push(`• Hoje: ${s.hoje.cotadas} cotadas, ${s.hoje.fechadas} fechadas (${s.hoje.conversao}% conversão)`);
-  if (s.melhorAderencia) lines.push(`• Melhor aderência: ${s.melhorAderencia.nome} (${s.melhorAderencia.conv}% · ${s.melhorAderencia.fechadas}/${s.melhorAderencia.cotadas})`);
-  if (s.cotaMuitoFechaPouco) lines.push(`• Cota muito e fecha pouco: ${s.cotaMuitoFechaPouco.nome} (${s.cotaMuitoFechaPouco.conv}% · ${s.cotaMuitoFechaPouco.cotadas} cotadas)`);
-  if (Array.isArray(s.naoCotaramHoje) && s.naoCotaramHoje.length) lines.push(`• Clientes a chamar (não cotaram hoje): ${s.naoCotaramHoje.slice(0, 5).join(', ')}`);
+  if (s.melhorAderencia) dia.push(`Na conversão, ${s.melhorAderencia.nome} se destacou com ${s.melhorAderencia.conv}% (${s.melhorAderencia.fechadas}/${s.melhorAderencia.cotadas}).`);
+  if (s.cotaMuitoFechaPouco) dia.push(`Vale acompanhar de perto ${s.cotaMuitoFechaPouco.nome}, que cotou bastante (${s.cotaMuitoFechaPouco.cotadas}) e fechou ${s.cotaMuitoFechaPouco.conv}% — pode ter algo travando o fechamento.`);
+  if (Array.isArray(s.naoCotaramHoje) && s.naoCotaramHoje.length) dia.push(`Ainda não cotaram hoje: ${s.naoCotaramHoje.slice(0, 5).join(', ')} — vale uma chamada.`);
+  if (dia.length) paras.push(dia.join(' '));
+
+  // Pontos de atenção.
   if (Array.isArray(s.insights) && s.insights.length) {
-    lines.push('');
-    lines.push('⚠️ Atenção:');
-    s.insights.slice(0, 4).forEach((i: string) => lines.push(`• ${i}`));
+    paras.push(`⚠️ De olho: ${s.insights.slice(0, 4).join(' ')}`);
   }
-  return lines.join('\n');
+  return paras.join('\n\n');
 }
 
 Deno.serve(async (req) => {
@@ -60,9 +88,15 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get('GEMINI_API_KEY');
     if (!apiKey) return json({ text: fallback, source: 'fallback' });
 
-    const prompt = `Você escreve um resumo curto e escaneável para o grupo de WhatsApp do comercial de uma transportadora.
-REGRAS: use EXATAMENTE os números fornecidos abaixo, não invente nem altere nenhum número. Não calcule nada.
-Poucas linhas, tom direto e profissional, pode usar 1-2 emojis discretos. Não use markdown de título (#). Responda só o texto final.
+    const prompt = `Você é o gestor comercial de uma transportadora resumindo o dia para a equipe no grupo de WhatsApp. Escreva como uma pessoa de verdade falando com colegas: frases curtas que fluem e se conectam, tom próximo e direto, sem floreio. Não é uma lista de indicadores — é alguém comunicando o time.
+
+NÚMEROS SÃO SAGRADOS: use exatamente os valores do JSON, sem arredondar, alterar, somar ou criar nenhum número. Não calcule nada. Se um dado não está no JSON, não fale dele. Pode interpretar de leve o que um número indica (ex.: que o movimento foi forte ou fraco, que alguém puxou o time), mas nunca afirme nada além do que o dado mostra.
+
+TATO COM A EQUIPE: ao mencionar quem está abaixo da média (conversão baixa, parado), enquadre de forma construtiva e sem expor ninguém — algo como "vale ver se tem algo travando", nunca como acusação ou cobrança pública. Reconheça quem se destacou de forma natural, sem bajulação.
+
+NÃO USE: clichês e frases prontas de IA ("segue o resumo", "espero que ajude", "em resumo", "vamos com tudo", "bora time"), bullets ou listas, títulos, markdown (#, *), nem hashtags. Escreva em parágrafos corridos.
+
+No máximo 1 ou 2 emojis discretos. Português brasileiro. Responda só o texto final, pronto pra colar no WhatsApp.
 
 Dados (JSON):
 ${JSON.stringify(summary)}`;
