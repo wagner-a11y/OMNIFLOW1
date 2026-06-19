@@ -103,6 +103,12 @@ Comece pelo conteúdo (o volume do período) e termine no último fato relevante
 
 Use no máximo 1 emoji, e só se couber natural — pode não usar nenhum. Mantenha enxuto, alguns parágrafos curtos. Português brasileiro. Responda só o texto final, pronto pra colar no WhatsApp.
 
+O que cada campo significa (NÃO altere os valores, só apresente com o sentido certo):
+- total: nº de cotações no período. variation: variação percentual desse total vs o período anterior (positivo = acima, negativo = abaixo); sempre diga "%" e a direção.
+- totalValue: soma do valor cotado. avgTime: tempo médio pra montar uma cotação.
+- topClients/topVehicles/topRoutes: count = nº de cotações; value = valor cotado.
+- hoje: cotadas hoje, fechadas hoje, conversao em %. melhorAderencia: melhor conversão (conv em %, fechadas/cotadas). cotaMuitoFechaPouco: cotou muito e converteu pouco (conv em %). naoCotaramHoje: clientes sem cotação hoje. insights: pontos de atenção já apurados.
+
 Dados (JSON):
 ${JSON.stringify(summary)}`;
 
