@@ -88,15 +88,20 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get('GEMINI_API_KEY');
     if (!apiKey) return json({ text: fallback, source: 'fallback' });
 
-    const prompt = `Você é o gestor comercial de uma transportadora resumindo o dia para a equipe no grupo de WhatsApp. Escreva como uma pessoa de verdade falando com colegas: frases curtas que fluem e se conectam, tom próximo e direto, sem floreio. Não é uma lista de indicadores — é alguém comunicando o time.
+    const prompt = `Você é o gestor comercial de uma transportadora passando o resultado do período para a equipe no grupo de WhatsApp. Escreva como um gestor experiente comunicando fatos: frases que fluem e se conectam, tom direto, sóbrio e profissional. É uma comunicação de trabalho, não um discurso de motivação nem um papo de bar. Vá direto ao conteúdo.
 
-NÚMEROS SÃO SAGRADOS: use exatamente os valores do JSON, sem arredondar, alterar, somar ou criar nenhum número. Não calcule nada. Se um dado não está no JSON, não fale dele. Pode interpretar de leve o que um número indica (ex.: que o movimento foi forte ou fraco, que alguém puxou o time), mas nunca afirme nada além do que o dado mostra.
+NÚMEROS SÃO SAGRADOS: use exatamente os valores do JSON, sem arredondar, alterar, somar ou criar nenhum número. Não calcule nada. Se um dado não está no JSON, não fale dele. Trate as cotações como "cotações" (não "operações" nem "pedidos"). Pode interpretar de leve o que um número indica (ex.: que o movimento foi forte ou fraco, que alguém puxou o time), mas nunca afirme nada além do que o dado mostra.
 
-TATO COM A EQUIPE: ao mencionar quem está abaixo da média (conversão baixa, parado), enquadre de forma construtiva e sem expor ninguém — algo como "vale ver se tem algo travando", nunca como acusação ou cobrança pública. Reconheça quem se destacou de forma natural, sem bajulação.
+TATO COM A EQUIPE: ao mencionar quem está abaixo da média (conversão baixa, parado), enquadre de forma construtiva e sem expor ninguém — algo como "vale ver se tem algo travando", nunca como acusação ou cobrança pública. Não dirija a fala diretamente à pessoa ("Fulano, você..."); fale dela em terceira pessoa. Reconheça quem se destacou de forma sóbria, sem bajulação nem "mandou muito bem".
 
-NÃO USE: clichês e frases prontas de IA ("segue o resumo", "espero que ajude", "em resumo", "vamos com tudo", "bora time"), bullets ou listas, títulos, markdown (#, *), nem hashtags. Escreva em parágrafos corridos.
+PROIBIDO (isto faz o texto soar falso):
+- Saudação ou abertura: nada de "E aí", "Pessoal", "Galera", "Bom dia", "Passando pra", "Segue o resumo".
+- Despedida ou frase motivacional de fechamento: nada de "bora", "vamos pra cima", "vamos forte", "bom descanso", "amanhã a gente volta", "é isso, pessoal", "rumo à meta".
+- Clichês de IA: "em resumo", "vale ressaltar", "espero que ajude".
+- Bullets, listas, títulos, markdown (#, *), hashtags, e exclamações de empolgação.
+Comece pelo conteúdo (o volume do período) e termine no último fato relevante, sem arremate motivacional.
 
-No máximo 1 ou 2 emojis discretos. Português brasileiro. Responda só o texto final, pronto pra colar no WhatsApp.
+Use no máximo 1 emoji, e só se couber natural — pode não usar nenhum. Mantenha enxuto, alguns parágrafos curtos. Português brasileiro. Responda só o texto final, pronto pra colar no WhatsApp.
 
 Dados (JSON):
 ${JSON.stringify(summary)}`;
