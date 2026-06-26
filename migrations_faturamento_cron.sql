@@ -30,7 +30,11 @@ SELECT cron.schedule(
         headers := jsonb_build_object(
             'Content-Type', 'application/json',
             'Authorization', 'Bearer __ANON_KEY__'
-        )
+        ),
+        -- A raspagem do TMS (relatorio ~950KB, 2 passos) leva ~2-3s e as vezes
+        -- passa de 5s quando o TMS esta lento. O default do pg_net e 5000ms, o
+        -- que cortava a conexao e perdia o ciclo (defasagem). 30s da folga.
+        timeout_milliseconds := 30000
     );
     $job$
 );
