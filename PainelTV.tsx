@@ -12,7 +12,7 @@ interface Dados {
     atualizadoEm: string;
 }
 
-const POLL_MS = 60_000; // relê o cache a cada 1 min (cron grava a cada 2 min)
+const POLL_MS = 30_000; // relê o cache a cada 30s (cron grava a cada 2 min)
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-faturamento-publico`;
 
 const formatCur = (v: number) =>
@@ -23,15 +23,19 @@ const PainelTV: React.FC = () => {
     const [dados, setDados] = useState<Dados | null>(null);
     const [erro, setErro] = useState<string | null>(null);
     const [tick, setTick] = useState(0); // força recalcular o "há X min"
+    const [ultimaLeitura, setUltimaLeitura] = useState<Date | null>(null); // prova de vida: quando a TV releu
 
     const buscar = useCallback(async () => {
         if (!token) { setErro('Link sem token. Use o endereço completo do painel.'); return; }
         try {
-            const res = await fetch(`${FN_URL}?k=${encodeURIComponent(token)}`);
+            // cache-bust (_=timestamp) + no-store: garante que a TV nunca segure
+            // valor velho do cache do navegador — sempre relê o estado mais recente.
+            const res = await fetch(`${FN_URL}?k=${encodeURIComponent(token)}&_=${Date.now()}`, { cache: 'no-store' });
             if (res.status === 403) { setErro('Acesso negado (token inválido).'); return; }
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const j = await res.json();
             setDados(j);
+            setUltimaLeitura(new Date());
             setErro(null);
         } catch {
             // Falha de rede: mantém o último valor na tela (fail-soft), sem apagar.
@@ -86,6 +90,9 @@ const PainelTV: React.FC = () => {
                     <div className="mt-12 flex items-center gap-3 text-white/50 text-lg">
                         <span className={`w-3 h-3 rounded-full ${dados.status === 'erro' ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
                         <span>{dados.status === 'erro' ? 'última leitura falhou — exibindo o último valor' : relativo}</span>
+                        {ultimaLeitura && (
+                            <span className="text-white/40 text-sm ml-2">· tela sincronizada {ultimaLeitura.toLocaleTimeString('pt-BR')}</span>
+                        )}
                     </div>
                 </>
             )}

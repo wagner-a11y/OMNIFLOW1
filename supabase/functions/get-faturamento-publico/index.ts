@@ -12,6 +12,8 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  // Painel ao vivo: nunca cachear — a TV precisa do estado mais recente a cada poll.
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
 };
 
 const json = (b: unknown, status = 200) =>
