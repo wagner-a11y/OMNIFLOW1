@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 // datamex-relatorio
 // Busca o total de faturamento do mês corrente no TMS Bsoft/NSTech (e-login),
@@ -87,6 +88,29 @@ const FETCH_HEADERS = (cookie: string) => ({
   'Accept': 'text/html,application/xhtml+xml,*/*',
 });
 
+// Grava o resultado no cache lido pelo painel (linha única id=1).
+// Sucesso: atualiza total/ctes e zera o erro. Erro: marca status/erro SEM
+// sobrescrever o último total bom — o painel mantém o valor anterior e sinaliza.
+async function writeCache(fields: { total?: number; ctes?: number | null; status: 'ok' | 'erro'; erro?: string | null }) {
+  try {
+    const url = Deno.env.get('SUPABASE_URL');
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!url || !key) return;
+    const db = createClient(url, key);
+    const patch: Record<string, unknown> = { status: fields.status, atualizado_em: new Date().toISOString() };
+    if (fields.status === 'ok') {
+      patch.total = fields.total;
+      patch.ctes = fields.ctes ?? null;
+      patch.erro = null;
+    } else {
+      patch.erro = fields.erro ?? 'erro';
+    }
+    await db.from('faturamento_cache').update(patch).eq('id', 1);
+  } catch (e) {
+    console.warn('writeCache falhou:', (e as Error).message);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -104,7 +128,8 @@ Deno.serve(async (req) => {
 
     const relMatch = frameHtml.match(/monta_relatorio\.php\?[^"'\\ >]+/i);
     if (!relMatch) {
-      if (looksLikeLogin(frameHtml)) return json({ error: 'Sessão expirada' }, 401);
+      if (looksLikeLogin(frameHtml)) { await writeCache({ status: 'erro', erro: 'Sessão expirada' }); return json({ error: 'Sessão expirada' }, 401); }
+      await writeCache({ status: 'erro', erro: 'Frame do relatório não encontrado' });
       return json({ error: 'Não foi possível localizar o relatório (frame não encontrado).', amostra: toText(frameHtml).slice(0, 400) }, 502);
     }
 
@@ -112,7 +137,7 @@ Deno.serve(async (req) => {
     const reportRes = await fetch(BASE + relMatch[0], { method: 'GET', headers: FETCH_HEADERS(cookie) });
     const reportHtml = await readLatin1(reportRes);
 
-    if (looksLikeLogin(reportHtml)) return json({ error: 'Sessão expirada' }, 401);
+    if (looksLikeLogin(reportHtml)) { await writeCache({ status: 'erro', erro: 'Sessão expirada' }); return json({ error: 'Sessão expirada' }, 401); }
 
     const text = toText(reportHtml);
 
@@ -130,11 +155,14 @@ Deno.serve(async (req) => {
     const total = nums && nums.length ? brToNumber(nums[nums.length - 1]) : null;
 
     if (total === null) {
+      await writeCache({ status: 'erro', erro: 'Total não encontrado no relatório' });
       return json({ error: 'Total não encontrado no relatório.', amostra: text.slice(-400) }, 502);
     }
 
+    await writeCache({ status: 'ok', total, ctes });
     return json({ total, ctes, fonte: 'relatorio_html', periodo: 'mes_corrente', geradoEm: new Date().toISOString() });
   } catch (e) {
+    await writeCache({ status: 'erro', erro: (e as Error).message });
     return json({ error: 'Falha ao acessar o relatório do TMS.', detalhe: (e as Error).message }, 502);
   }
 });

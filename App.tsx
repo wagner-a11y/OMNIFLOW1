@@ -37,6 +37,8 @@ import {
     restoreFreightCalculation,
     permanentlyDeleteFreightCalculation,
     purgeOldTrash,
+    getFaturamentoCache,
+    FaturamentoCache,
     getSystemConfig,
     updateSystemConfig,
     getVehicleConfigs,
@@ -151,6 +153,7 @@ const App: React.FC = () => {
     const [appLogo, setAppLogo] = useState<string | null>(() => localStorage.getItem('flow_app_logo'));
     const [history, setHistory] = useState<FreightCalculation[]>([]);
     const [trash, setTrash] = useState<FreightCalculation[]>([]);
+    const [faturamento, setFaturamento] = useState<FaturamentoCache | null>(null);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [fedTaxes, setFedTaxes] = useState<FederalTaxes>({ pis: 0.65, cofins: 3.0, csll: 1.08, irpj: 1.2, insurancePolicyRate: 0.035 });
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
@@ -356,6 +359,7 @@ const App: React.FC = () => {
             setHistory(historyData);
             const trashData = await getDeletedFreightCalculations();
             setTrash(trashData);
+            setFaturamento(await getFaturamentoCache());
             const configData = await getSystemConfig();
             if (configData) {
                 setFedTaxes(configData);
@@ -409,6 +413,10 @@ const App: React.FC = () => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_configs' }, () => {
                 console.log('Real-Time Update: vehicle_configs');
                 getVehicleConfigs().then(data => setVehicleConfigs({ ...VEHICLE_CONFIGS, ...data }));
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'faturamento_cache' }, () => {
+                console.log('Real-Time Update: faturamento_cache');
+                getFaturamentoCache().then(setFaturamento);
             })
             .subscribe((status) => {
                 console.log('Supabase Realtime Status:', status);
@@ -1856,6 +1864,30 @@ Disponibilidade: ${disponibilidade}`;
                                         <p className="text-lg font-medium text-[#111827]">{dashboardData.filteredCount}</p>
                                     </div>
                                     <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl px-4 py-2 font-medium text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors uppercase text-xs" />
+                                </div>
+                            </div>
+
+                            {/* ===== Faturamento do mês (TMS) — atualizado a cada 2 min pelo cron, lido via realtime ===== */}
+                            <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white p-6 rounded-2xl shadow-sm flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/70 flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5" /> Faturamento do mês · TMS</p>
+                                    <p className="text-4xl font-semibold mt-1 leading-none">{faturamento?.total != null ? `R$ ${formatCur(faturamento.total)}` : '—'}</p>
+                                    <p className="text-[11px] font-medium text-white/70 mt-1.5">{faturamento?.ctes != null ? `${faturamento.ctes} CTes emitidos no mês` : 'aguardando primeira leitura'}</p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                    {faturamento?.status === 'erro' && (
+                                        <p className="text-[10px] font-medium text-amber-200 mb-1 flex items-center justify-end gap-1"><AlertTriangle className="w-3 h-3" /> falha na última leitura</p>
+                                    )}
+                                    <p className="text-[10px] font-medium text-white/60 uppercase tracking-wider">Atualizado</p>
+                                    <p className="text-sm font-medium mt-0.5">
+                                        {faturamento?.atualizadoEm ? (() => {
+                                            const ms = Date.now() - new Date(faturamento.atualizadoEm).getTime();
+                                            const min = Math.floor(ms / 60000);
+                                            const rel = min <= 0 ? 'agora há pouco' : min === 1 ? 'há 1 min' : `há ${min} min`;
+                                            return rel;
+                                        })() : '—'}
+                                    </p>
+                                    <p className="text-[10px] font-medium text-white/50 mt-0.5">{faturamento?.atualizadoEm ? new Date(faturamento.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
                                 </div>
                             </div>
 

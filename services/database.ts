@@ -703,3 +703,32 @@ export const purgeOldTrash = async (): Promise<number> => {
     }
     return (data || []).length;
 };
+
+// =================== FATURAMENTO (TMS) — cache lido pelo painel ===================
+export interface FaturamentoCache {
+    total: number | null;
+    ctes: number | null;
+    status: string;       // 'ok' | 'erro'
+    erro: string | null;
+    atualizadoEm: string; // ISO timestamp
+}
+
+export const getFaturamentoCache = async (): Promise<FaturamentoCache | null> => {
+    const { data, error } = await supabase
+        .from('faturamento_cache')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+    if (error || !data) {
+        if (error) console.error('Error fetching faturamento_cache:', error);
+        return null;
+    }
+    return {
+        total: data.total !== null && data.total !== undefined ? Number(data.total) : null,
+        ctes: data.ctes ?? null,
+        status: data.status,
+        erro: data.erro ?? null,
+        atualizadoEm: data.atualizado_em,
+    };
+};
