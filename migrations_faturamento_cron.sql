@@ -1,12 +1,11 @@
 -- =====================================================================
 -- Cron: atualiza o faturamento do mês de 2 em 2 minutos
 -- =====================================================================
--- A cada 2 min (horário comercial), chama a Edge Function datamex-relatorio,
--- que raspa o total no TMS e grava em public.faturamento_cache. O painel lê
--- desse cache via realtime.
+-- A cada 2 min, chama a Edge Function datamex-relatorio, que raspa o total no
+-- TMS e grava em public.faturamento_cache. O painel lê desse cache via realtime.
 --
--- Janela: seg–sex, 07h–20h BRT  ->  10h–23h UTC (o pg_cron roda em UTC).
--- Para ALARGAR (ex.: 24/7), troque a expressão por '*/2 * * * *'.
+-- Janela: 24/7 (a empresa emite CTe todos os dias, a qualquer hora).
+-- Para limitar a horário comercial: '*/2 10-23 * * 1-5' (07-20h BRT, seg-sex).
 -- Para PAUSAR:   select cron.unschedule('datamex-faturamento-2min');
 --
 -- Observação: __ANON_KEY__ é substituída pela anon key no momento de aplicar
@@ -23,7 +22,7 @@ WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'datamex-faturamento-2min')
 
 SELECT cron.schedule(
     'datamex-faturamento-2min',
-    '*/2 10-23 * * 1-5',
+    '*/2 * * * *',
     $job$
     SELECT net.http_post(
         url     := 'https://trdkggiobsydruihvesj.supabase.co/functions/v1/datamex-relatorio',
