@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 // PainelTV — tela pública (sem login) pra exibir o faturamento do mês numa TV.
 // Lê de um endpoint PÚBLICO (get-faturamento-publico) que exige um token secreto
@@ -25,6 +25,66 @@ const PainelTV: React.FC = () => {
     const [erro, setErro] = useState<string | null>(null);
     const [tick, setTick] = useState(0); // força recalcular o "há X min"
     const [ultimaLeitura, setUltimaLeitura] = useState<Date | null>(null); // prova de vida: quando a TV releu
+
+    // --- Som de "novo CTe" (Web Audio API, sem arquivo externo) ---
+    const audioCtxRef = useRef<AudioContext | null>(null);
+    const somLigadoRef = useRef(true);
+    const prevCtesRef = useRef<number | null>(null); // ctes da leitura anterior (detecção)
+    const [somAtivado, setSomAtivado] = useState(false); // usuário liberou o AudioContext?
+    const [somLigado, setSomLigado] = useState(true);    // toggle on/off
+    useEffect(() => { somLigadoRef.current = somLigado; }, [somLigado]);
+
+    // "ding-ding-ding-DING" ascendente (C5→E5→G5→C6), sine + envelope de ganho
+    // (ataque/decay suaves p/ não estalar). Não toca se o áudio não foi liberado
+    // ou se o toggle está off.
+    const tocarSom = useCallback(() => {
+        const ctx = audioCtxRef.current;
+        if (!ctx || !somLigadoRef.current) return;
+        const now = ctx.currentTime;
+        const notas = [
+            { freq: 523.25, start: 0.00, dur: 0.08, vol: 0.25 }, // C5
+            { freq: 659.25, start: 0.06, dur: 0.08, vol: 0.25 }, // E5
+            { freq: 783.99, start: 0.12, dur: 0.12, vol: 0.28 }, // G5
+            { freq: 1046.50, start: 0.18, dur: 0.20, vol: 0.32 }, // C6 (fade out suave)
+        ];
+        for (const n of notas) {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = n.freq;
+            const t0 = now + n.start;
+            const t1 = t0 + n.dur;
+            g.gain.setValueAtTime(0.0001, t0);
+            g.gain.exponentialRampToValueAtTime(n.vol, t0 + 0.012); // ataque sem clique
+            g.gain.exponentialRampToValueAtTime(0.0001, t1);        // release/fade
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(t0); osc.stop(t1 + 0.03);
+        }
+    }, []);
+
+    // Libera o AudioContext (precisa de gesto do usuário) e dá um preview do som.
+    const ativarSom = () => {
+        try {
+            if (!audioCtxRef.current) {
+                const AC = window.AudioContext || (window as any).webkitAudioContext;
+                audioCtxRef.current = new AC();
+            }
+            audioCtxRef.current.resume();
+            setSomAtivado(true);
+            setSomLigado(true);
+            somLigadoRef.current = true;
+            tocarSom(); // confirma que o som funciona
+        } catch { /* navegador sem Web Audio: ignora */ }
+    };
+
+    // Detecção de CTe novo: ctes subiu vs a leitura anterior -> toca o som.
+    // Ignora a 1ª leitura (prev null) e quedas (ex.: restauração de teste).
+    useEffect(() => {
+        if (!dados || dados.ctes == null) return;
+        const prev = prevCtesRef.current;
+        prevCtesRef.current = dados.ctes;
+        if (prev != null && dados.ctes > prev) tocarSom();
+    }, [dados, tocarSom]);
 
     const buscar = useCallback(async () => {
         if (!token) { setErro('Link sem token. Use o endereço completo do painel.'); return; }
@@ -103,6 +163,20 @@ const PainelTV: React.FC = () => {
                     )}
                 </>
             )}
+
+            {/* Canto inferior esquerdo: controle de som (sempre visível) */}
+            <div className="absolute bottom-6 left-8">
+                {!somAtivado ? (
+                    <button onClick={ativarSom} className="flex items-center gap-2 text-white/60 hover:text-white text-base md:text-lg font-medium border border-white/25 rounded-lg px-3 py-1.5 transition-colors">
+                        🔔 Ativar som
+                    </button>
+                ) : (
+                    <button onClick={() => setSomLigado(s => !s)} className="flex items-center gap-2 text-white/40 hover:text-white/80 text-base md:text-lg font-medium transition-colors">
+                        <span className={`w-2.5 h-2.5 rounded-full ${somLigado ? 'bg-emerald-400' : 'bg-white/30'}`} />
+                        Som: {somLigado ? 'on' : 'off'}
+                    </button>
+                )}
+            </div>
         </div>
     );
 };
