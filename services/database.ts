@@ -732,3 +732,16 @@ export const getFaturamentoCache = async (): Promise<FaturamentoCache | null> =>
         atualizadoEm: data.atualizado_em,
     };
 };
+
+// Token do Painel TV — lido só por usuário logado (RLS authenticated). Usado
+// pra montar o link do menu sem expor o token no bundle público.
+export const getPainelTvToken = async (): Promise<string | null> => {
+    const { data, error } = await supabase
+        .from('painel_tv_config')
+        .select('token')
+        .eq('id', 1)
+        .maybeSingle();
+
+    if (error || !data) return null;
+    return data.token;
+};

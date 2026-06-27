@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, CopyPlus, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send
+    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, CopyPlus, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send, Tv
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { WonInfoModal } from './components/WonInfoModal';
@@ -39,6 +39,7 @@ import {
     purgeOldTrash,
     getFaturamentoCache,
     FaturamentoCache,
+    getPainelTvToken,
     getSystemConfig,
     updateSystemConfig,
     getVehicleConfigs,
@@ -154,6 +155,7 @@ const App: React.FC = () => {
     const [history, setHistory] = useState<FreightCalculation[]>([]);
     const [trash, setTrash] = useState<FreightCalculation[]>([]);
     const [faturamento, setFaturamento] = useState<FaturamentoCache | null>(null);
+    const [painelTvToken, setPainelTvToken] = useState<string | null>(null);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [fedTaxes, setFedTaxes] = useState<FederalTaxes>({ pis: 0.65, cofins: 3.0, csll: 1.08, irpj: 1.2, insurancePolicyRate: 0.035 });
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
@@ -360,6 +362,7 @@ const App: React.FC = () => {
             const trashData = await getDeletedFreightCalculations();
             setTrash(trashData);
             setFaturamento(await getFaturamentoCache());
+            setPainelTvToken(await getPainelTvToken());
             const configData = await getSystemConfig();
             if (configData) {
                 setFedTaxes(configData);
@@ -1796,6 +1799,19 @@ Disponibilidade: ${disponibilidade}`;
                             <span className="font-medium text-sm">{item.label}</span>
                         </button>
                     ))}
+                    {/* Painel TV: abre o painel público em nova aba. Token vem do banco
+                        (RLS só p/ logado), nunca do bundle. Visível só p/ master, como o Dashboard. */}
+                    {currentUser.role === 'master' && painelTvToken && (
+                        <a
+                            href={`https://omniflow-1-gamma.vercel.app/painel-tv?k=${painelTvToken}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors"
+                        >
+                            <Tv className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                            <span className="font-medium text-sm">Painel TV</span>
+                        </a>
+                    )}
                 </nav>
                 <div className="p-3 mt-auto space-y-1 border-t border-[#e5e7eb]">
                     {currentUser.role === 'master' && (
