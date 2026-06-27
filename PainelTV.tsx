@@ -19,24 +19,48 @@ const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-faturament
 const formatCur = (v: number) =>
     v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Uma nota "brilhante" estilo notificação de pagamento (PicPay): corpo em
-// triangle (mais harmônicos que o sine puro) + brilho de sine uma oitava acima,
-// com ataque percussivo e decay tipo marimba/glockenspiel. Sem clique.
-function playNote(ctx: AudioContext, when: number, freq: number, dur: number, vol: number) {
-    const layers: Array<{ type: OscillatorType; mult: number; g: number }> = [
-        { type: 'triangle', mult: 1, g: 1.0 },   // corpo
-        { type: 'sine', mult: 2, g: 0.35 },       // brilho (1 oitava acima)
-        { type: 'sine', mult: 3, g: 0.12 },       // faísca
-    ];
-    for (const L of layers) {
+// "Clink" de moeda: transiente de ruído branco filtrado (bandpass agudo = o
+// "chink" metálico do impacto) + parciais agudos inarmônicos (o "ring" do metal),
+// decay bem curto. Nada de triangle (que dava o tom de joguinho 8-bit).
+function playCoin(ctx: AudioContext, when: number, vol: number) {
+    const dur = 0.12;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 3500; bp.Q.value = 6;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, when);
+    ng.gain.exponentialRampToValueAtTime(vol * 0.6, when + 0.002);
+    ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.09);
+    noise.connect(bp); bp.connect(ng); ng.connect(ctx.destination);
+    noise.start(when); noise.stop(when + dur);
+    [3100, 4180, 5550].forEach((f, i) => {
         const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = L.type;
-        osc.frequency.value = freq * L.mult;
-        gain.gain.setValueAtTime(0.0001, when);
-        gain.gain.exponentialRampToValueAtTime(vol * L.g, when + 0.004); // ataque percussivo
-        gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);      // decay (pluck)
-        osc.connect(gain); gain.connect(ctx.destination);
+        const g = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(vol * (0.5 - i * 0.12), when + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.11);
+        osc.connect(g); g.connect(ctx.destination);
+        osc.start(when); osc.stop(when + 0.14);
+    });
+}
+
+// Sino quente e curto (corpo harmônico em sine, decay suave) — o "diiing" que
+// fecha o "dinheiro recebido".
+function playBell(ctx: AudioContext, when: number, base: number, dur: number, vol: number) {
+    const partials = [{ m: 1, g: 1 }, { m: 2, g: 0.5 }, { m: 3, g: 0.25 }, { m: 4.2, g: 0.12 }];
+    for (const p of partials) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.value = base * p.m;
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(vol * p.g, when + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+        osc.connect(g); g.connect(ctx.destination);
         osc.start(when); osc.stop(when + dur + 0.05);
     }
 }
@@ -59,17 +83,14 @@ const PainelTV: React.FC = () => {
     const [delta, setDelta] = useState<number | null>(null); // quanto subiu (R$)
     useEffect(() => { somLigadoRef.current = somLigado; }, [somLigado]);
 
-    // Notificação de "dinheiro entrando" estilo PicPay: arpejo ascendente alegre
-    // (C6→E6→G6) + faísca em C7, brilhante e snappy. Não toca se o áudio não foi
-    // liberado ou o toggle está off.
+    // "Dinheiro recebido" (estilo caixa/moeda): clink de moeda + sino curto quente.
+    // Não toca se o áudio não foi liberado ou o toggle está off.
     const tocarSom = useCallback(() => {
         const ctx = audioCtxRef.current;
         if (!ctx || !somLigadoRef.current) return;
         const now = ctx.currentTime;
-        playNote(ctx, now + 0.00, 1046.50, 0.16, 0.32); // C6
-        playNote(ctx, now + 0.10, 1318.51, 0.16, 0.32); // E6
-        playNote(ctx, now + 0.20, 1567.98, 0.34, 0.36); // G6 (sustenta)
-        playNote(ctx, now + 0.22, 2093.00, 0.30, 0.14); // C7 (faísca por cima)
+        playCoin(ctx, now, 0.38);                       // "clink" da moeda
+        playBell(ctx, now + 0.07, 1318.51, 0.45, 0.24); // "diiing" curto e quente (E6)
     }, []);
 
     // Libera o AudioContext (precisa de gesto do usuário) e dá um preview do som.
