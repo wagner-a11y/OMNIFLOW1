@@ -19,50 +19,34 @@ const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-faturament
 const formatCur = (v: number) =>
     v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// "Clink" de moeda: transiente de ruído branco filtrado (bandpass agudo = o
-// "chink" metálico do impacto) + parciais agudos inarmônicos (o "ring" do metal),
-// decay bem curto. Nada de triangle (que dava o tom de joguinho 8-bit).
-function playCoin(ctx: AudioContext, when: number, vol: number) {
-    const dur = 0.12;
+// "Tinido" de moeda: transiente de ruído filtrado (o "chink" do impacto) +
+// parciais inarmônicos. Centrado em ~2–3 kHz (faixa que alto-falante de TV
+// reproduz bem; em 3–5 kHz o som some na TV) e mais alto.
+function playCoin(ctx: AudioContext, when: number, vol: number, center: number) {
+    const dur = 0.13;
     const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     const noise = ctx.createBufferSource();
     noise.buffer = buffer;
     const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass'; bp.frequency.value = 3500; bp.Q.value = 6;
+    bp.type = 'bandpass'; bp.frequency.value = center; bp.Q.value = 4;
     const ng = ctx.createGain();
     ng.gain.setValueAtTime(0.0001, when);
-    ng.gain.exponentialRampToValueAtTime(vol * 0.6, when + 0.002);
-    ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.09);
+    ng.gain.exponentialRampToValueAtTime(vol * 0.9, when + 0.002);
+    ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.1);
     noise.connect(bp); bp.connect(ng); ng.connect(ctx.destination);
     noise.start(when); noise.stop(when + dur);
-    [3100, 4180, 5550].forEach((f, i) => {
+    [1, 1.34, 1.78].forEach((mult, i) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
-        osc.type = 'sine'; osc.frequency.value = f;
+        osc.type = 'sine'; osc.frequency.value = center * mult;
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(vol * (0.5 - i * 0.12), when + 0.003);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.11);
+        g.gain.exponentialRampToValueAtTime(vol * (0.7 - i * 0.18), when + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.12);
         osc.connect(g); g.connect(ctx.destination);
-        osc.start(when); osc.stop(when + 0.14);
+        osc.start(when); osc.stop(when + 0.15);
     });
-}
-
-// Sino quente e curto (corpo harmônico em sine, decay suave) — o "diiing" que
-// fecha o "dinheiro recebido".
-function playBell(ctx: AudioContext, when: number, base: number, dur: number, vol: number) {
-    const partials = [{ m: 1, g: 1 }, { m: 2, g: 0.5 }, { m: 3, g: 0.25 }, { m: 4.2, g: 0.12 }];
-    for (const p of partials) {
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = 'sine'; osc.frequency.value = base * p.m;
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(vol * p.g, when + 0.006);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
-        osc.connect(g); g.connect(ctx.destination);
-        osc.start(when); osc.stop(when + dur + 0.05);
-    }
 }
 
 const PainelTV: React.FC = () => {
@@ -83,14 +67,15 @@ const PainelTV: React.FC = () => {
     const [delta, setDelta] = useState<number | null>(null); // quanto subiu (R$)
     useEffect(() => { somLigadoRef.current = somLigado; }, [somLigado]);
 
-    // "Dinheiro recebido" (estilo caixa/moeda): clink de moeda + sino curto quente.
-    // Não toca se o áudio não foi liberado ou o toggle está off.
+    // "Dinheiro recebido": moedas tilintando — 3 tinidos rápidos em ~2–3 kHz
+    // (audível na TV), mais alto, sem o sininho fraco de antes.
     const tocarSom = useCallback(() => {
         const ctx = audioCtxRef.current;
         if (!ctx || !somLigadoRef.current) return;
         const now = ctx.currentTime;
-        playCoin(ctx, now, 0.38);                       // "clink" da moeda
-        playBell(ctx, now + 0.07, 1318.51, 0.45, 0.24); // "diiing" curto e quente (E6)
+        playCoin(ctx, now + 0.00, 0.55, 2400); // tinido 1
+        playCoin(ctx, now + 0.08, 0.50, 2750); // tinido 2 (um pouco mais agudo)
+        playCoin(ctx, now + 0.16, 0.45, 2550); // tinido 3 (fecha)
     }, []);
 
     // Libera o AudioContext (precisa de gesto do usuário) e dá um preview do som.
