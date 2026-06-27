@@ -74,6 +74,28 @@ async function readLatin1(res: Response): Promise<string> {
 // "1.502.836,27" -> 1502836.27  (formato BR: ponto = milhar, vírgula = decimal)
 const brToNumber = (s: string): number => Number(s.replace(/\./g, '').replace(',', '.'));
 
+const MONEY_CELL = /^\d{1,3}(?:\.\d{3})*,\d{2}$/;   // valor 2 casas (descarta peso 4 casas)
+const DATE_CELL = /^\d{2}\/\d{2}\/\d{4}$/;           // DD/MM/YYYY
+
+// Data de hoje em BRT (America/Sao_Paulo) no formato DD/MM/YYYY, p/ casar com a
+// coluna "Emissão" do relatório (a função roda em UTC).
+const hojeBR = (): string => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+// Soma o "Total" por CTe (última coluna 2-casas da linha) das linhas cuja
+// Emissão (1ª célula) é HOJE. Mesmo HTML do mês — sem request extra ao TMS.
+function somaFaturadoHoje(html: string, hoje: string): number {
+  let soma = 0;
+  for (const tr of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const cells = [...tr[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)]
+      .map(c => c[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim());
+    if (cells.length >= 20 && DATE_CELL.test(cells[0]) && cells[0] === hoje) {
+      const monies = cells.filter(x => MONEY_CELL.test(x));
+      if (monies.length) soma += brToNumber(monies[monies.length - 1]);
+    }
+  }
+  return soma;
+}
+
 // Detecta a tela de login (sessão expirada) — mesmo quando vem com HTTP 200.
 const looksLikeLogin = (html: string): boolean =>
   /type=["']?password|name=["']?senha|esqueci.*senha|realizar.*login|usu[aá]rio e senha/i.test(html);
@@ -91,7 +113,7 @@ const FETCH_HEADERS = (cookie: string) => ({
 // Grava o resultado no cache lido pelo painel (linha única id=1).
 // Sucesso: atualiza total/ctes e zera o erro. Erro: marca status/erro SEM
 // sobrescrever o último total bom — o painel mantém o valor anterior e sinaliza.
-async function writeCache(fields: { total?: number; ctes?: number | null; status: 'ok' | 'erro'; erro?: string | null }) {
+async function writeCache(fields: { total?: number; ctes?: number | null; totalHoje?: number; status: 'ok' | 'erro'; erro?: string | null }) {
   try {
     const url = Deno.env.get('SUPABASE_URL');
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -101,6 +123,7 @@ async function writeCache(fields: { total?: number; ctes?: number | null; status
     if (fields.status === 'ok') {
       patch.total = fields.total;
       patch.ctes = fields.ctes ?? null;
+      patch.total_hoje = fields.totalHoje ?? 0;
       patch.erro = null;
     } else {
       patch.erro = fields.erro ?? 'erro';
@@ -159,8 +182,11 @@ Deno.serve(async (req) => {
       return json({ error: 'Total não encontrado no relatório.', amostra: text.slice(-400) }, 502);
     }
 
-    await writeCache({ status: 'ok', total, ctes });
-    return json({ total, ctes, fonte: 'relatorio_html', periodo: 'mes_corrente', geradoEm: new Date().toISOString() });
+    // Faturado hoje: soma dos CTes emitidos na data de hoje (BRT).
+    const totalHoje = somaFaturadoHoje(reportHtml, hojeBR());
+
+    await writeCache({ status: 'ok', total, ctes, totalHoje });
+    return json({ total, ctes, totalHoje, fonte: 'relatorio_html', periodo: 'mes_corrente', geradoEm: new Date().toISOString() });
   } catch (e) {
     await writeCache({ status: 'erro', erro: (e as Error).message });
     return json({ error: 'Falha ao acessar o relatório do TMS.', detalhe: (e as Error).message }, 502);

@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const db = createClient(supaUrl, key);
     const { data, error } = await db
       .from('faturamento_cache')
-      .select('total, ctes, status, atualizado_em')
+      .select('total, ctes, total_hoje, status, atualizado_em')
       .eq('id', 1)
       .maybeSingle();
 
@@ -57,6 +57,7 @@ Deno.serve(async (req) => {
     return json({
       total: data.total !== null ? Number(data.total) : null,
       ctes: data.ctes ?? null,
+      totalHoje: data.total_hoje !== null && data.total_hoje !== undefined ? Number(data.total_hoje) : null,
       status: data.status,
       atualizadoEm: data.atualizado_em,
     });

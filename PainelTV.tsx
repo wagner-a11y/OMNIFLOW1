@@ -8,6 +8,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 interface Dados {
     total: number | null;
     ctes: number | null;
+    totalHoje: number | null;
     status: string;
     atualizadoEm: string;
 }
@@ -65,7 +66,7 @@ const PainelTV: React.FC = () => {
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
 
     return (
-        <div className="min-h-screen w-full bg-gradient-to-br from-[#0b3a5e] via-[#0d4f7a] to-[#10643f] text-white flex flex-col items-center justify-center p-10 select-none">
+        <div className="relative min-h-screen w-full bg-gradient-to-br from-[#0b3a5e] via-[#0d4f7a] to-[#10643f] text-white flex flex-col items-center justify-center p-10 select-none">
             <div className="flex items-center gap-3 mb-10 opacity-80">
                 <span className="text-2xl font-semibold tracking-tight">Omni<span className="text-emerald-300">Flow</span></span>
                 <span className="text-lg font-medium text-white/60">· Faturamento {hoje}</span>
@@ -85,7 +86,7 @@ const PainelTV: React.FC = () => {
                         {dados.total != null ? formatCur(dados.total) : '—'}
                     </p>
                     <p className="mt-8 text-3xl md:text-5xl font-medium text-emerald-200">
-                        {dados.ctes != null ? `${dados.ctes.toLocaleString('pt-BR')} CTes emitidos` : ''}
+                        R$ {dados.totalHoje != null ? formatCur(dados.totalHoje) : '0,00'} <span className="text-white/50">emitidos hoje</span>
                     </p>
                     <div className="mt-12 flex items-center gap-3 text-white/50 text-lg">
                         <span className={`w-3 h-3 rounded-full ${dados.status === 'erro' ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
@@ -94,6 +95,12 @@ const PainelTV: React.FC = () => {
                             <span className="text-white/40 text-sm ml-2">· tela sincronizada {ultimaLeitura.toLocaleTimeString('pt-BR')}</span>
                         )}
                     </div>
+                    {/* Canto inferior direito: total de CTes do mês (discreto) */}
+                    {dados.ctes != null && (
+                        <div className="absolute bottom-6 right-8 text-white/40 text-base md:text-lg font-medium">
+                            {dados.ctes.toLocaleString('pt-BR')} CTes no mês
+                        </div>
+                    )}
                 </>
             )}
         </div>
