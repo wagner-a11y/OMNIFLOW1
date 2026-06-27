@@ -19,35 +19,9 @@ const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-faturament
 const formatCur = (v: number) =>
     v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// "Tinido" de moeda: transiente de ruído filtrado (o "chink" do impacto) +
-// parciais inarmônicos. Centrado em ~2–3 kHz (faixa que alto-falante de TV
-// reproduz bem; em 3–5 kHz o som some na TV) e mais alto.
-function playCoin(ctx: AudioContext, when: number, vol: number, center: number) {
-    const dur = 0.13;
-    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass'; bp.frequency.value = center; bp.Q.value = 4;
-    const ng = ctx.createGain();
-    ng.gain.setValueAtTime(0.0001, when);
-    ng.gain.exponentialRampToValueAtTime(vol * 0.9, when + 0.002);
-    ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.1);
-    noise.connect(bp); bp.connect(ng); ng.connect(ctx.destination);
-    noise.start(when); noise.stop(when + dur);
-    [1, 1.34, 1.78].forEach((mult, i) => {
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = 'sine'; osc.frequency.value = center * mult;
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(vol * (0.7 - i * 0.18), when + 0.003);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.12);
-        osc.connect(g); g.connect(ctx.destination);
-        osc.start(when); osc.stop(when + 0.15);
-    });
-}
+// Som de caixa registradora (arquivo real do Pixabay, royalty-free) servido em
+// /coin.mp3 (pasta public). Carregado e tocado pelo AudioContext.
+const SOM_URL = '/coin.mp3';
 
 const PainelTV: React.FC = () => {
     const token = new URLSearchParams(window.location.search).get('k') || '';
@@ -56,8 +30,9 @@ const PainelTV: React.FC = () => {
     const [tick, setTick] = useState(0); // força recalcular o "há X min"
     const [ultimaLeitura, setUltimaLeitura] = useState<Date | null>(null); // prova de vida: quando a TV releu
 
-    // --- Som de "novo CTe" (Web Audio API, sem arquivo externo) ---
+    // --- Som de "novo CTe" (arquivo real tocado via AudioContext) ---
     const audioCtxRef = useRef<AudioContext | null>(null);
+    const audioBufferRef = useRef<AudioBuffer | null>(null); // /coin.mp3 decodificado
     const somLigadoRef = useRef(true);
     const prevCtesRef = useRef<number | null>(null);  // ctes da leitura anterior (detecção)
     const prevTotalRef = useRef<number | null>(null); // total anterior (p/ calcular o +R$)
@@ -67,30 +42,37 @@ const PainelTV: React.FC = () => {
     const [delta, setDelta] = useState<number | null>(null); // quanto subiu (R$)
     useEffect(() => { somLigadoRef.current = somLigado; }, [somLigado]);
 
-    // "Dinheiro recebido": moedas tilintando — 3 tinidos rápidos em ~2–3 kHz
-    // (audível na TV), mais alto, sem o sininho fraco de antes.
+    // Toca o arquivo de caixa registradora (se já decodificado e o som ligado).
     const tocarSom = useCallback(() => {
         const ctx = audioCtxRef.current;
-        if (!ctx || !somLigadoRef.current) return;
-        const now = ctx.currentTime;
-        playCoin(ctx, now + 0.00, 0.55, 2400); // tinido 1
-        playCoin(ctx, now + 0.08, 0.50, 2750); // tinido 2 (um pouco mais agudo)
-        playCoin(ctx, now + 0.16, 0.45, 2550); // tinido 3 (fecha)
+        const buf = audioBufferRef.current;
+        if (!ctx || !buf || !somLigadoRef.current) return;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start();
     }, []);
 
-    // Libera o AudioContext (precisa de gesto do usuário) e dá um preview do som.
-    const ativarSom = () => {
+    // Libera o AudioContext (precisa de gesto do usuário), baixa+decodifica o
+    // /coin.mp3 e dá um preview do som.
+    const ativarSom = async () => {
         try {
             if (!audioCtxRef.current) {
                 const AC = window.AudioContext || (window as any).webkitAudioContext;
                 audioCtxRef.current = new AC();
             }
-            audioCtxRef.current.resume();
+            const ctx = audioCtxRef.current;
+            await ctx.resume();
             setSomAtivado(true);
             setSomLigado(true);
             somLigadoRef.current = true;
+            if (!audioBufferRef.current) {
+                const res = await fetch(SOM_URL);
+                const arr = await res.arrayBuffer();
+                audioBufferRef.current = await ctx.decodeAudioData(arr);
+            }
             tocarSom(); // confirma que o som funciona
-        } catch { /* navegador sem Web Audio: ignora */ }
+        } catch { /* sem Web Audio / falha ao carregar: ignora */ }
     };
 
     // Detecção de CTe novo: ctes subiu vs a leitura anterior -> som + animação.
