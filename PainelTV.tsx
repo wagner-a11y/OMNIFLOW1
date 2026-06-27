@@ -19,24 +19,23 @@ const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-faturament
 const formatCur = (v: number) =>
     v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Um "sino" metálico (timbre de caixa registradora): fundamental + parciais
-// levemente inarmônicos, com decay exponencial (envelope de sino). Usado duas
-// vezes p/ formar o "cha-ching".
-function playBell(ctx: AudioContext, when: number, base: number, dur: number, vol: number) {
-    const partials = [
-        { mult: 1.0, g: 1.0 },
-        { mult: 2.01, g: 0.5 },
-        { mult: 3.01, g: 0.28 },
-        { mult: 4.7, g: 0.16 },
+// Uma nota "brilhante" estilo notificação de pagamento (PicPay): corpo em
+// triangle (mais harmônicos que o sine puro) + brilho de sine uma oitava acima,
+// com ataque percussivo e decay tipo marimba/glockenspiel. Sem clique.
+function playNote(ctx: AudioContext, when: number, freq: number, dur: number, vol: number) {
+    const layers: Array<{ type: OscillatorType; mult: number; g: number }> = [
+        { type: 'triangle', mult: 1, g: 1.0 },   // corpo
+        { type: 'sine', mult: 2, g: 0.35 },       // brilho (1 oitava acima)
+        { type: 'sine', mult: 3, g: 0.12 },       // faísca
     ];
-    for (const p of partials) {
+    for (const L of layers) {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = base * p.mult;
+        osc.type = L.type;
+        osc.frequency.value = freq * L.mult;
         gain.gain.setValueAtTime(0.0001, when);
-        gain.gain.exponentialRampToValueAtTime(vol * p.g, when + 0.004); // ataque seco
-        gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);      // decay de sino
+        gain.gain.exponentialRampToValueAtTime(vol * L.g, when + 0.004); // ataque percussivo
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);      // decay (pluck)
         osc.connect(gain); gain.connect(ctx.destination);
         osc.start(when); osc.stop(when + dur + 0.05);
     }
@@ -60,14 +59,17 @@ const PainelTV: React.FC = () => {
     const [delta, setDelta] = useState<number | null>(null); // quanto subiu (R$)
     useEffect(() => { somLigadoRef.current = somLigado; }, [somLigado]);
 
-    // "cha-ching" de caixa registradora: dois sinos metálicos (um curto + um mais
-    // brilhante e longo). Não toca se o áudio não foi liberado ou o toggle está off.
+    // Notificação de "dinheiro entrando" estilo PicPay: arpejo ascendente alegre
+    // (C6→E6→G6) + faísca em C7, brilhante e snappy. Não toca se o áudio não foi
+    // liberado ou o toggle está off.
     const tocarSom = useCallback(() => {
         const ctx = audioCtxRef.current;
         if (!ctx || !somLigadoRef.current) return;
         const now = ctx.currentTime;
-        playBell(ctx, now, 988, 0.18, 0.22);          // "cha" (B5) — curto
-        playBell(ctx, now + 0.11, 1318.5, 0.55, 0.26); // "ching" (E6) — brilhante e longo
+        playNote(ctx, now + 0.00, 1046.50, 0.16, 0.32); // C6
+        playNote(ctx, now + 0.10, 1318.51, 0.16, 0.32); // E6
+        playNote(ctx, now + 0.20, 1567.98, 0.34, 0.36); // G6 (sustenta)
+        playNote(ctx, now + 0.22, 2093.00, 0.30, 0.14); // C7 (faísca por cima)
     }, []);
 
     // Libera o AudioContext (precisa de gesto do usuário) e dá um preview do som.
