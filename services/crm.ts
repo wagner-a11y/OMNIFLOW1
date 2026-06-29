@@ -228,3 +228,63 @@ export function diagnosticar(empresa: CrmEmpresa, limiteDias: number): Diagnosti
 
     return { risco, leitura, proximoPasso: base.acao, observacoes };
 }
+
+// ---------- 9. CSV: status canônico, parser, export, modelo ----------
+const STATUS_VALIDOS = new Set(Object.keys(STATUS_COR));
+export function canonizeStatus(raw: string): string {
+    const v = (raw || '').trim();
+    if (STATUS_VALIDOS.has(v)) return v;
+    const l = v.toLowerCase();
+    if (l.includes('respond')) return 'Respondeu';
+    if (l.includes('interess')) return 'Interesse';
+    if (l.includes('andament')) return 'Em andamento';
+    if (l.includes('aguard') || l.includes('abordagem') || l.includes('abordando')) return 'Aguardando';
+    if (l.includes('barreira') || l.includes('fracionad')) return 'Barreira';
+    if (l.includes('sem retorno') || l.includes('sem resposta') || l.includes('neutro') || l.includes('ja abordado')) return 'Sem retorno';
+    return 'Novo';
+}
+
+const isoToBR = (iso: string | null): string => {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00Z');
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+};
+
+export const CSV_HEADER = ['Empresa', 'Contato', 'Cargo', 'E-mail', 'Telefone', 'Origem', 'Etapa', 'Status', 'Data', 'Evidencia (link)', 'Proximo passo'];
+
+// Parser robusto: ignora BOM, detecta ; ou , como separador, suporta aspas com escape.
+export function parseCsv(text: string): string[][] {
+    const t = text.replace(/^﻿/, '');
+    const nl = t.indexOf('\n');
+    const head = nl < 0 ? t : t.slice(0, nl);
+    const delim = (head.split(';').length >= head.split(',').length) ? ';' : ',';
+    const rows: string[][] = [];
+    let row: string[] = [], field = '', inQ = false;
+    for (let i = 0; i < t.length; i++) {
+        const ch = t[i];
+        if (inQ) {
+            if (ch === '"') { if (t[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+            else field += ch;
+        } else if (ch === '"') inQ = true;
+        else if (ch === delim) { row.push(field); field = ''; }
+        else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else if (ch !== '\r') field += ch;
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    return rows.filter(r => r.some(c => c.trim() !== ''));
+}
+
+const escCsv = (v: any): string => { const s = (v ?? '').toString(); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+
+// Exporta a base inteira (uma linha por contato), ; como separador, BOM UTF-8.
+export function exportCrmCsv(empresas: CrmEmpresa[]): string {
+    const linhas = [CSV_HEADER.join(';')];
+    for (const e of empresas) {
+        if (e.contatos.length === 0) { linhas.push([e.nome, '', '', '', '', '', e.etapa, '', '', '', e.proximoPasso].map(escCsv).join(';')); continue; }
+        for (const c of e.contatos) linhas.push([e.nome, c.nome, c.cargo, c.email, c.telefone, c.origem, e.etapa, c.status, isoToBR(c.data), c.evidencia, e.proximoPasso].map(escCsv).join(';'));
+    }
+    return '﻿' + linhas.join('\r\n');
+}
+
+export const CSV_MODELO = '﻿' + CSV_HEADER.join(';') + '\r\n' +
+    ['Celulose Irani S/A', 'Carlos Amaro', 'Comprador', 'carlos@irani.com', '11999990000', 'Optus', 'Engajado', 'Respondeu', '28/06/2026', 'https://link-da-prova', 'Call de qualificacao'].map(escCsv).join(';') + '\r\n';

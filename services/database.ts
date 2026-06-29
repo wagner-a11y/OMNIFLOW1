@@ -747,7 +747,7 @@ export const getPainelTvToken = async (): Promise<string | null> => {
 };
 
 // =================== MINI CRM (Prospecção) ===================
-import { CrmEmpresa, CrmContato, CrmEvento, chaveGrupo, computeLastTouch } from './crm';
+import { CrmEmpresa, CrmContato, CrmEvento, chaveGrupo, computeLastTouch, canonizeEtapa, canonizeStatus, etapaMaisAvancada, parseDataBR } from './crm';
 
 const mapContato = (r: any): CrmContato => ({
     id: r.id, empresaId: r.empresa_id, nome: r.nome || '', cargo: r.cargo || '',
@@ -842,4 +842,60 @@ export const updateCrmContato = async (id: string, empresaId: string, c: Partial
     if (error) { console.error('Erro updateCrmContato:', error); return false; }
     await recomputeLastTouch(empresaId);
     return true;
+};
+
+// Importação CSV (seção 9): merge por chave de dedupe; empresa nova na etapa
+// mais avançada das suas linhas; bloqueia contato duplicado (mesmo e-mail OU
+// mesmo nome na mesma empresa); bulk insert por empresa. Nada é apagado.
+export interface ImportResumo { empresasNovas: number; contatosAdicionados: number; ignoradas: number; }
+
+export const importCrmCsv = async (rows: string[][], autor?: { id?: string; nome?: string }): Promise<ImportResumo> => {
+    const dados = rows.slice(1).map(r => ({
+        empresa: (r[0] || '').trim(), contato: (r[1] || '').trim(), cargo: (r[2] || '').trim(), email: (r[3] || '').trim(),
+        telefone: (r[4] || '').trim(), origem: (r[5] || '').trim(), etapa: (r[6] || '').trim(), status: (r[7] || '').trim(),
+        data: (r[8] || '').trim(), evidencia: (r[9] || '').trim(), proximoPasso: (r[10] || '').trim(),
+    })).filter(d => d.empresa);
+
+    const grupos = new Map<string, typeof dados>();
+    for (const d of dados) { const k = chaveGrupo(d.empresa); const a = grupos.get(k) || []; a.push(d); grupos.set(k, a); }
+
+    const existentes = await getCrmEmpresas();
+    const porChave = new Map(existentes.map(e => [e.chaveGrupo, e]));
+    let empresasNovas = 0, contatosAdicionados = 0, ignoradas = 0;
+
+    for (const [chave, linhas] of grupos) {
+        let empresaId: string;
+        const emails = new Set<string>(), nomes = new Set<string>();
+        const existente = porChave.get(chave);
+        if (existente) {
+            empresaId = existente.id;
+            existente.contatos.forEach(c => { if (c.email) emails.add(c.email.toLowerCase()); if (c.nome) nomes.add(c.nome.toLowerCase()); });
+        } else {
+            const etapa = etapaMaisAvancada(linhas.map(l => canonizeEtapa(l.etapa)));
+            const id = await createCrmEmpresa({ nome: linhas[0].empresa, etapa, proximoPasso: linhas.find(l => l.proximoPasso)?.proximoPasso || '' }, autor);
+            if (!id) { ignoradas += linhas.length; continue; }
+            await addCrmEvento(id, 'nota', 'Importada via planilha.', null, autor);
+            empresaId = id; empresasNovas++;
+        }
+
+        const novos: any[] = [];
+        for (const l of linhas) {
+            const em = l.email.toLowerCase(), nm = l.contato.toLowerCase();
+            if ((em && emails.has(em)) || (nm && nomes.has(nm))) { ignoradas++; continue; }
+            novos.push({
+                empresa_id: empresaId, ...contatoToDb({
+                    nome: l.contato, cargo: l.cargo, email: l.email, telefone: l.telefone,
+                    origem: l.origem.toLowerCase() === 'optus' ? 'Optus' : 'Omnicargo',
+                    status: canonizeStatus(l.status), data: parseDataBR(l.data) || undefined, evidencia: l.evidencia,
+                }),
+            });
+            if (em) emails.add(em); if (nm) nomes.add(nm);
+        }
+        if (novos.length) {
+            const { error } = await supabase.from('crm_contato').insert(novos);
+            if (error) { console.error('Erro import contatos:', error); ignoradas += novos.length; }
+            else { contatosAdicionados += novos.length; await recomputeLastTouch(empresaId); }
+        }
+    }
+    return { empresasNovas, contatosAdicionados, ignoradas };
 };

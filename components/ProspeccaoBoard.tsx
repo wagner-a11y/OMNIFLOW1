@@ -3,10 +3,10 @@ import { X, Plus, Target, AlertTriangle, ShieldCheck, Search, RefreshCw, Filter,
 import {
     CrmEmpresa, CrmContato, CrmEvento, ETAPAS, ETAPAS_FUNIL, corStatus, deriveOrigem,
     diasParado, isContaQuente, isEmpocada, empresaSemProva, contatoSemProva, contatoTemProva, contatoPrecisaProva, parseDataBR,
-    diagnosticar, Diagnostico,
+    diagnosticar, Diagnostico, exportCrmCsv, parseCsv, CSV_MODELO,
 } from '../services/crm';
 import {
-    getCrmEmpresas, getCrmEventos, createCrmEmpresa, updateCrmEmpresa, moveCrmEmpresaEtapa, createCrmContato,
+    getCrmEmpresas, getCrmEventos, createCrmEmpresa, updateCrmEmpresa, moveCrmEmpresaEtapa, createCrmContato, importCrmCsv, ImportResumo,
 } from '../services/database';
 
 interface Props {
@@ -35,6 +35,7 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
     const [arrastandoId, setArrastandoId] = useState<string | null>(null);
     const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
     const [showFunil, setShowFunil] = useState(false);
+    const [showImport, setShowImport] = useState(false);
 
     const autor = { id: currentUser.id, nome: currentUser.name };
     const carregar = async () => { setLoading(true); setEmpresas(await getCrmEmpresas()); setLoading(false); };
@@ -85,6 +86,7 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
                 <Target className="w-7 h-7 text-[#111827]" />
                 <h1 className="text-2xl font-medium text-[#111827] tracking-tight">Prospecção · Mini CRM</h1>
                 <button onClick={carregar} title="Recarregar" className="ml-auto p-2 text-[#6b7280] hover:bg-[#f9fafb] rounded-lg"><RefreshCw className="w-4 h-4" /></button>
+                <button onClick={() => setShowImport(true)} className="flex items-center gap-2 border border-[#e5e7eb] px-3 py-2 rounded-lg text-sm font-medium text-[#111827] hover:bg-[#f9fafb]"><Download className="w-4 h-4" /> CSV</button>
                 <button onClick={() => setShowFunil(true)} className="flex items-center gap-2 border border-[#e5e7eb] px-3 py-2 rounded-lg text-sm font-medium text-[#111827] hover:bg-[#f9fafb]"><Filter className="w-4 h-4" /> Funil</button>
                 <button onClick={() => setShowNova(true)} className="flex items-center gap-2 bg-[#1d6fb8] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#1a5f9e]"><Plus className="w-4 h-4" /> Nova empresa</button>
             </div>
@@ -150,6 +152,7 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
                 </div>
             )}
 
+            {showImport && <ImportExportModal empresas={empresas} autor={autor} onClose={() => setShowImport(false)} onImported={carregar} onFeedback={onFeedback} />}
             {showFunil && <FunilModal empresas={filtradas} onClose={() => setShowFunil(false)} />}
             {showNova && <NovaEmpresaModal onClose={() => setShowNova(false)} onSaved={async () => { setShowNova(false); await carregar(); }} autor={autor} onFeedback={onFeedback} />}
             {selecionada && <DetalheModal empresa={selecionada} limiteDias={limiteDias} autor={autor} onClose={() => setSelecionada(null)} onChanged={carregar} onFeedback={onFeedback} />}
@@ -414,6 +417,51 @@ const FunilModal: React.FC<{ empresas: CrmEmpresa[]; onClose: () => void }> = ({
                     );
                 })}
             </svg>
+        </Overlay>
+    );
+};
+
+const baixarArquivo = (nome: string, conteudo: string) => {
+    const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+const ImportExportModal: React.FC<{ empresas: CrmEmpresa[]; autor: any; onClose: () => void; onImported: () => void; onFeedback?: Props['onFeedback'] }> = ({ empresas, autor, onClose, onImported, onFeedback }) => {
+    const [importando, setImportando] = useState(false);
+    const [resumo, setResumo] = useState<ImportResumo | null>(null);
+    const onArquivo = async (file: File) => {
+        setImportando(true); setResumo(null);
+        try {
+            const texto = await file.text();
+            const rows = parseCsv(texto);
+            const r = await importCrmCsv(rows, autor);
+            setResumo(r);
+            onFeedback?.(`Import: ${r.empresasNovas} empresas novas, ${r.contatosAdicionados} contatos, ${r.ignoradas} ignoradas.`, 'success');
+            await onImported();
+        } catch (e) { onFeedback?.('Erro ao importar CSV.', 'error'); }
+        finally { setImportando(false); }
+    };
+    return (
+        <Overlay onClose={onClose} titulo="Importar / Exportar CSV">
+            <div className="space-y-4 text-sm">
+                <div>
+                    <p className="font-medium text-[#111827] mb-2">Exportar</p>
+                    <button onClick={() => baixarArquivo('prospeccao.csv', exportCrmCsv(empresas))} className="flex items-center gap-2 px-3 py-2 border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb]"><Download className="w-4 h-4" /> Baixar base ({empresas.length} empresas)</button>
+                </div>
+                <div className="border-t border-[#e5e7eb] pt-4">
+                    <p className="font-medium text-[#111827] mb-1">Importar</p>
+                    <p className="text-[11px] text-[#6b7280] mb-2">Uma linha por contato (repita a empresa). Colunas: {['Empresa', 'Contato', 'Cargo', 'E-mail', 'Telefone', 'Origem', 'Etapa', 'Status', 'Data', 'Evidencia', 'Proximo passo'].join(' · ')}. Só "Empresa" é obrigatório. Separador ; (ou ,). Agrupa por nome, soma nos cards existentes e barra duplicados.</p>
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => baixarArquivo('modelo-prospeccao.csv', CSV_MODELO)} className="text-[#1d6fb8] hover:underline text-xs">baixar modelo</button>
+                        <label className="flex items-center gap-2 px-3 py-2 bg-[#1d6fb8] text-white rounded-lg cursor-pointer hover:bg-[#1a5f9e] text-xs font-medium">
+                            {importando ? 'Importando…' : 'Escolher arquivo CSV'}
+                            <input type="file" accept=".csv,text/csv" className="hidden" disabled={importando} onChange={e => { const f = e.target.files?.[0]; if (f) onArquivo(f); }} />
+                        </label>
+                    </div>
+                    {resumo && <p className="mt-3 text-xs text-[#111827] bg-emerald-50 border border-emerald-200 rounded-lg p-2">✓ {resumo.empresasNovas} empresas novas · {resumo.contatosAdicionados} contatos adicionados · {resumo.ignoradas} linhas ignoradas (duplicadas/sem empresa).</p>}
+                </div>
+            </div>
         </Overlay>
     );
 };
