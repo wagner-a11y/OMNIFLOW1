@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Plus, Target, AlertTriangle, ShieldCheck, Search, RefreshCw } from 'lucide-react';
+import { X, Plus, Target, AlertTriangle, ShieldCheck, Search, RefreshCw, Filter, Download } from 'lucide-react';
 import {
     CrmEmpresa, CrmContato, CrmEvento, ETAPAS, ETAPAS_FUNIL, corStatus, deriveOrigem,
     diasParado, isContaQuente, isEmpocada, empresaSemProva, contatoSemProva, contatoTemProva, contatoPrecisaProva, parseDataBR,
+    diagnosticar, Diagnostico,
 } from '../services/crm';
 import {
     getCrmEmpresas, getCrmEventos, createCrmEmpresa, updateCrmEmpresa, moveCrmEmpresaEtapa, createCrmContato,
@@ -33,6 +34,7 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
     const [showNova, setShowNova] = useState(false);
     const [arrastandoId, setArrastandoId] = useState<string | null>(null);
     const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
+    const [showFunil, setShowFunil] = useState(false);
 
     const autor = { id: currentUser.id, nome: currentUser.name };
     const carregar = async () => { setLoading(true); setEmpresas(await getCrmEmpresas()); setLoading(false); };
@@ -83,6 +85,7 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
                 <Target className="w-7 h-7 text-[#111827]" />
                 <h1 className="text-2xl font-medium text-[#111827] tracking-tight">Prospecção · Mini CRM</h1>
                 <button onClick={carregar} title="Recarregar" className="ml-auto p-2 text-[#6b7280] hover:bg-[#f9fafb] rounded-lg"><RefreshCw className="w-4 h-4" /></button>
+                <button onClick={() => setShowFunil(true)} className="flex items-center gap-2 border border-[#e5e7eb] px-3 py-2 rounded-lg text-sm font-medium text-[#111827] hover:bg-[#f9fafb]"><Filter className="w-4 h-4" /> Funil</button>
                 <button onClick={() => setShowNova(true)} className="flex items-center gap-2 bg-[#1d6fb8] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#1a5f9e]"><Plus className="w-4 h-4" /> Nova empresa</button>
             </div>
 
@@ -147,6 +150,7 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
                 </div>
             )}
 
+            {showFunil && <FunilModal empresas={filtradas} onClose={() => setShowFunil(false)} />}
             {showNova && <NovaEmpresaModal onClose={() => setShowNova(false)} onSaved={async () => { setShowNova(false); await carregar(); }} autor={autor} onFeedback={onFeedback} />}
             {selecionada && <DetalheModal empresa={selecionada} limiteDias={limiteDias} autor={autor} onClose={() => setSelecionada(null)} onChanged={carregar} onFeedback={onFeedback} />}
         </div>
@@ -245,6 +249,8 @@ const DetalheModal: React.FC<{ empresa: CrmEmpresa; limiteDias: number; autor: a
                     <p className="text-xs text-[#6b7280]">Último contato: <strong className="text-[#111827]">{fmtBR(empresa.lastTouch)}</strong>{dias !== null && `, há ${dias} dia(s)`}{isEmpocada(empresa, limiteDias) && <span className="text-red-600 font-medium"> · empoçado</span>}</p>
                     <button onClick={salvarCampos} className="px-4 py-2 bg-[#1d6fb8] text-white rounded-lg text-sm font-medium hover:bg-[#1a5f9e]">Salvar</button>
 
+                    <DiagnosticoBox diag={diagnosticar(empresa, limiteDias)} />
+
                     <div className="pt-2">
                         <div className="flex items-center justify-between mb-2">
                             <h4 className="text-sm font-semibold text-[#111827]">Contatos ({empresa.contatos.length})</h4>
@@ -333,6 +339,82 @@ const AddContatoForm: React.FC<{ empresaId: string; autor: any; onSaved: () => v
             </div>
             <button onClick={salvar} disabled={salvando} className="w-full py-2 bg-[#1d6fb8] text-white rounded-lg text-xs font-medium hover:bg-[#1a5f9e] disabled:opacity-50">{salvando ? 'Salvando…' : 'Adicionar contato'}</button>
         </div>
+    );
+};
+
+const DiagnosticoBox: React.FC<{ diag: Diagnostico }> = ({ diag }) => {
+    const cor = diag.risco === 'Alto' ? 'bg-red-50 border-red-200 text-red-700'
+        : diag.risco === 'Médio' ? 'bg-amber-50 border-amber-200 text-amber-700'
+            : 'bg-emerald-50 border-emerald-200 text-emerald-700';
+    return (
+        <div className="border border-[#e5e7eb] rounded-lg p-3 bg-[#fafafa]">
+            <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6b7280]">Diagnóstico</span>
+                <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${cor}`}>Risco {diag.risco}</span>
+            </div>
+            <p className="text-xs text-[#111827]">{diag.leitura}</p>
+            <p className="text-xs text-[#111827] mt-1"><strong>Próximo passo:</strong> {diag.proximoPasso}</p>
+            {diag.observacoes.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                    {diag.observacoes.map((o, i) => <li key={i} className="text-[11px] text-[#6b7280] flex gap-1.5"><span className="text-[#1d6fb8]">▸</span>{o}</li>)}
+                </ul>
+            )}
+        </div>
+    );
+};
+
+// Funil de vendas (SVG) com export PNG. Conta empresas por etapa de avanço (1–7).
+const FunilModal: React.FC<{ empresas: CrmEmpresa[]; onClose: () => void }> = ({ empresas, onClose }) => {
+    const svgRef = React.useRef<SVGSVGElement>(null);
+    const counts = ETAPAS_FUNIL.map(et => ({ etapa: et, n: empresas.filter(e => e.etapa === et).length }));
+    const totalFunil = counts.reduce((s, c) => s + c.n, 0);
+    const fechamento = counts.find(c => c.etapa === 'Fechamento')?.n || 0;
+    const topo = counts[0]?.n || 0;
+    const conv = topo > 0 ? ((fechamento / topo) * 100).toFixed(1) : '0';
+    const foraFunil = empresas.filter(e => e.etapa === 'Barreira produto' || e.etapa === 'Perdido').length;
+    const max = Math.max(1, ...counts.map(c => c.n));
+    const W = 760, rowH = 54, padTop = 20;
+
+    const baixarPng = () => {
+        const svg = svgRef.current; if (!svg) return;
+        const xml = new XMLSerializer().serializeToString(svg);
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = W * 2; canvas.height = (padTop * 2 + counts.length * rowH) * 2;
+            const ctx = canvas.getContext('2d'); if (!ctx) return;
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.scale(2, 2); ctx.drawImage(img, 0, 0);
+            const a = document.createElement('a'); a.download = 'funil-prospeccao.png'; a.href = canvas.toDataURL('image/png'); a.click();
+        };
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+    };
+
+    const H = padTop * 2 + counts.length * rowH;
+    return (
+        <Overlay onClose={onClose} titulo="Funil de vendas" largo>
+            <div className="flex flex-wrap gap-4 mb-3 text-sm">
+                <span className="text-[#6b7280]">No funil: <strong className="text-[#111827]">{totalFunil}</strong></span>
+                <span className="text-[#6b7280]">Conversão topo→fechamento: <strong className="text-emerald-600">{conv}%</strong></span>
+                <span className="text-[#6b7280]">Fora do funil (Barreira/Perdido): <strong className="text-[#111827]">{foraFunil}</strong></span>
+                <button onClick={baixarPng} className="ml-auto flex items-center gap-1.5 text-sm text-[#1d6fb8] hover:underline"><Download className="w-4 h-4" /> baixar PNG</button>
+            </div>
+            <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" style={{ background: '#fff' }}>
+                {counts.map((c, i) => {
+                    const wTop = 120 + (W - 240) * ((max ? c.n / max : 0));
+                    const wBot = 120 + (W - 240) * (i + 1 < counts.length ? (counts[i + 1].n / max) : (c.n / max));
+                    const y = padTop + i * rowH;
+                    const x1 = (W - wTop) / 2, x2 = (W + wTop) / 2;
+                    const x3 = (W + wBot) / 2, x4 = (W - wBot) / 2;
+                    return (
+                        <g key={c.etapa}>
+                            <polygon points={`${x1},${y} ${x2},${y} ${x3},${y + rowH - 6} ${x4},${y + rowH - 6}`} fill={`hsl(205 70% ${60 - i * 5}%)`} />
+                            <text x={W / 2} y={y + rowH / 2} textAnchor="middle" fontSize="14" fontWeight="600" fill="#fff" fontFamily="Inter, sans-serif">{c.etapa}: {c.n}</text>
+                        </g>
+                    );
+                })}
+            </svg>
+        </Overlay>
     );
 };
 

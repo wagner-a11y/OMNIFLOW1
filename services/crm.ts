@@ -179,3 +179,52 @@ export const empresaSemProva = (empresa: CrmEmpresa): boolean => empresa.contato
 
 // Contatos pendentes de prova (nominal — usado no diagnóstico e no registro rápido).
 export const contatosSemProva = (empresa: CrmEmpresa): CrmContato[] => empresa.contatos.filter(contatoSemProva);
+
+// ---------- 5.8 Motor de diagnóstico (regras, sem IA) ----------
+export type RiscoNivel = 'Alto' | 'Médio' | 'Baixo';
+export interface Diagnostico { risco: RiscoNivel; leitura: string; proximoPasso: string; observacoes: string[]; }
+
+const DIAG_BASE: Record<string, { leitura: string; acao: string; risco: RiscoNivel }> = {
+    'Fechamento': { leitura: 'Conta em fechamento — não relaxar.', acao: 'Confirmar onboarding, cadastro fiscal e primeira coleta.', risco: 'Baixo' },
+    'Homologação/DD': { leitura: 'Risco de travar em documento.', acao: 'Cobrar status do cadastro e das AFEs e já pedir uma cotação teste.', risco: 'Médio' },
+    'Negociação/BID': { leitura: 'Em negociação/BID.', acao: 'Garantir inclusão na próxima rodada de cotação e confirmar o nível de serviço exigido.', risco: 'Médio' },
+    'Proposta/Cotação': { leitura: 'O inimigo aqui é o silêncio.', acao: 'Ligar (não mandar e-mail), puxar a objeção de preço ou prazo e fechar.', risco: 'Médio' },
+    'Qualificação': { leitura: 'Em qualificação.', acao: 'Mapear volume, lanes e quem assina a decisão.', risco: 'Baixo' },
+    'Engajado': { leitura: 'Respondeu mas está frio.', acao: 'Marcar uma call curta com um caso parecido.', risco: 'Baixo' },
+    'Contato inicial': { leitura: 'Primeiro contato.', acao: 'Segundo toque por outro canal (se mandou e-mail, ligar).', risco: 'Baixo' },
+    'Barreira produto': { leitura: 'Barreira de produto.', acao: 'Registrar e revisitar quando tiver oferta — não gastar energia agora.', risco: 'Baixo' },
+    'Perdido': { leitura: 'Conta perdida.', acao: 'Só reabrir com gatilho novo (troca de fornecedor, problema com o atual, novo projeto).', risco: 'Baixo' },
+};
+
+export function diagnosticar(empresa: CrmEmpresa, limiteDias: number): Diagnostico {
+    const base = DIAG_BASE[empresa.etapa] || DIAG_BASE['Contato inicial'];
+    let risco: RiscoNivel = base.risco;
+    let leitura = base.leitura;
+    const observacoes: string[] = [];
+
+    if (isEmpocada(empresa, limiteDias)) {
+        const d = diasParado(empresa.lastTouch);
+        risco = 'Alto';
+        leitura = `Parado ${d === null ? 'sem registro de contato' : `há ${d} dias`} — ${leitura} Agir hoje.`;
+    }
+
+    if (empresa.contatos.some(c => c.status === 'Respondeu' && !!c.telefone?.trim()))
+        observacoes.push('Tem contato que respondeu e tem telefone: ligar, não ficar no e-mail.');
+
+    const semTelefone = !empresa.contatos.some(c => !!c.telefone?.trim());
+    const semConversaReal = !empresa.contatos.some(c => contatoPrecisaProva(c.status));
+    if (empresa.contatos.length > 0 && semTelefone && semConversaReal)
+        observacoes.push('Só e-mail frio sem retorno e sem telefone: trocar de canal, achar o telefone ou outro decisor.');
+
+    if (deriveOrigem(empresa.contatos) === 'Optus + Omnicargo')
+        observacoes.push('Conta tocada por Optus e Omnicargo: alinhar com o Carlos para não falar coisas diferentes.');
+
+    if (empresa.contatos.length >= 3)
+        observacoes.push('3+ contatos: usar isso — se um trava, atacar por outro decisor.');
+
+    const pend = contatosSemProva(empresa);
+    if (pend.length)
+        observacoes.push(`Falta prova com: ${pend.map(c => c.nome || '(sem nome)').join(', ')}. Cobrar print ou link antes de dar a conta como tocada.`);
+
+    return { risco, leitura, proximoPasso: base.acao, observacoes };
+}
