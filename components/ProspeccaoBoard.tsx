@@ -31,6 +31,8 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
     const [limiteDias, setLimiteDias] = useState(10);
     const [selecionada, setSelecionada] = useState<CrmEmpresa | null>(null);
     const [showNova, setShowNova] = useState(false);
+    const [arrastandoId, setArrastandoId] = useState<string | null>(null);
+    const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
 
     const autor = { id: currentUser.id, nome: currentUser.name };
     const carregar = async () => { setLoading(true); setEmpresas(await getCrmEmpresas()); setLoading(false); };
@@ -62,6 +64,17 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
     }), [empresas, limiteDias]);
 
     const porEtapa = (etapa: string) => filtradas.filter(e => e.etapa === etapa);
+
+    // Drag-and-drop: solta o card numa coluna -> muda etapa (otimista) + evento.
+    const soltarEm = async (etapaDestino: string) => {
+        const e = empresas.find(x => x.id === arrastandoId);
+        setColunaAlvo(null); setArrastandoId(null);
+        if (!e || e.etapa === etapaDestino) return;
+        setEmpresas(prev => prev.map(x => x.id === e.id ? { ...x, etapa: etapaDestino } : x)); // otimista
+        const ok = await moveCrmEmpresaEtapa(e.id, e.etapa, etapaDestino, autor);
+        if (ok) onFeedback?.(`${e.nome}: ${e.etapa} → ${etapaDestino}`, 'success');
+        else { onFeedback?.('Erro ao mover.', 'error'); carregar(); }
+    };
 
     return (
         <div className="space-y-5 animate-fade-in-up">
@@ -108,15 +121,25 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
                 <div className="flex gap-4 overflow-x-auto pb-4">
                     {ETAPAS.map(etapa => {
                         const lista = porEtapa(etapa);
+                        const alvo = colunaAlvo === etapa;
                         return (
-                            <div key={etapa} className="shrink-0 w-72">
+                            <div key={etapa} className="shrink-0 w-72"
+                                onDragOver={ev => { ev.preventDefault(); if (colunaAlvo !== etapa) setColunaAlvo(etapa); }}
+                                onDragLeave={() => setColunaAlvo(c => (c === etapa ? null : c))}
+                                onDrop={() => soltarEm(etapa)}>
                                 <div className="flex items-center justify-between px-2 mb-2">
                                     <span className="text-xs font-semibold uppercase tracking-wide text-[#111827]">{etapa}</span>
                                     <span className="text-xs font-medium text-[#6b7280] bg-[#f3f4f6] px-2 py-0.5 rounded-full">{lista.length}</span>
                                 </div>
-                                <div className="space-y-2">
-                                    {lista.map(e => <Card key={e.id} empresa={e} limiteDias={limiteDias} onClick={() => setSelecionada(e)} />)}
-                                    {lista.length === 0 && <div className="text-[11px] text-[#9ca3af] px-2 py-4 text-center border border-dashed border-[#e5e7eb] rounded-lg">vazio</div>}
+                                <div className={`space-y-2 rounded-lg min-h-[64px] p-1 transition-all ${alvo ? 'ring-2 ring-[#1d6fb8] bg-[#eff6ff]/50' : ''}`}>
+                                    {lista.map(e => (
+                                        <Card key={e.id} empresa={e} limiteDias={limiteDias}
+                                            onClick={() => setSelecionada(e)}
+                                            onDragStart={() => setArrastandoId(e.id)}
+                                            onDragEnd={() => { setArrastandoId(null); setColunaAlvo(null); }}
+                                            arrastando={arrastandoId === e.id} />
+                                    ))}
+                                    {lista.length === 0 && <div className="text-[11px] text-[#9ca3af] px-2 py-4 text-center border border-dashed border-[#e5e7eb] rounded-lg">{alvo ? 'soltar aqui' : 'vazio'}</div>}
                                 </div>
                             </div>
                         );
@@ -137,13 +160,18 @@ const Kpi: React.FC<{ label: string; valor: number; cor?: string; ativo?: boolea
     </button>
 );
 
-const Card: React.FC<{ empresa: CrmEmpresa; limiteDias: number; onClick: () => void }> = ({ empresa, limiteDias, onClick }) => {
+const Card: React.FC<{ empresa: CrmEmpresa; limiteDias: number; onClick: () => void; onDragStart: () => void; onDragEnd: () => void; arrastando: boolean }> = ({ empresa, limiteDias, onClick, onDragStart, onDragEnd, arrastando }) => {
     const empocada = isEmpocada(empresa, limiteDias);
     const dias = diasParado(empresa.lastTouch);
     const semProva = empresaSemProva(empresa);
     const origem = deriveOrigem(empresa.contatos);
     return (
-        <div onClick={onClick} className={`cursor-pointer p-3 rounded-xl border shadow-sm hover:border-[#1d6fb8] transition-all ${empocada ? 'bg-red-50 border-red-200' : 'bg-white border-[#e5e7eb]'}`}>
+        <div
+            draggable
+            onDragStart={ev => { ev.dataTransfer.effectAllowed = 'move'; onDragStart(); }}
+            onDragEnd={onDragEnd}
+            onClick={onClick}
+            className={`cursor-pointer p-3 rounded-xl border shadow-sm hover:border-[#1d6fb8] transition-all ${arrastando ? 'opacity-40' : ''} ${empocada ? 'bg-red-50 border-red-200' : 'bg-white border-[#e5e7eb]'}`}>
             <div className="flex items-start justify-between gap-2">
                 <p className="font-medium text-sm text-[#111827] leading-tight">{empresa.nome}</p>
                 <span className="shrink-0 text-[10px] text-[#6b7280] bg-[#f3f4f6] px-1.5 py-0.5 rounded-full">{empresa.contatos.length}</span>
