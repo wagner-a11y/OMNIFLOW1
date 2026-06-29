@@ -745,3 +745,101 @@ export const getPainelTvToken = async (): Promise<string | null> => {
     if (error || !data) return null;
     return data.token;
 };
+
+// =================== MINI CRM (Prospecção) ===================
+import { CrmEmpresa, CrmContato, CrmEvento, chaveGrupo, computeLastTouch } from './crm';
+
+const mapContato = (r: any): CrmContato => ({
+    id: r.id, empresaId: r.empresa_id, nome: r.nome || '', cargo: r.cargo || '',
+    email: r.email || '', telefone: r.telefone || '', canal: r.canal || '',
+    origem: r.origem === 'Optus' ? 'Optus' : 'Omnicargo', status: r.status || 'Novo',
+    data: r.data || null, codigo: r.codigo || '', evidencia: r.evidencia || '',
+    printRef: r.print_ref || '', resumoUltimo: r.resumo_ultimo || '',
+});
+
+// Carrega empresas (não deletadas) com seus contatos (não deletados).
+export const getCrmEmpresas = async (): Promise<CrmEmpresa[]> => {
+    const [{ data: emps, error: e1 }, { data: cts, error: e2 }] = await Promise.all([
+        supabase.from('crm_empresa').select('*').is('deleted_at', null).order('atualizado_em', { ascending: false }).limit(2000),
+        supabase.from('crm_contato').select('*').is('deleted_at', null).limit(10000),
+    ]);
+    if (e1 || e2) { console.error('Erro getCrmEmpresas:', e1 || e2); return []; }
+    const porEmpresa = new Map<string, CrmContato[]>();
+    (cts || []).forEach((r: any) => {
+        const arr = porEmpresa.get(r.empresa_id) || [];
+        arr.push(mapContato(r)); porEmpresa.set(r.empresa_id, arr);
+    });
+    return (emps || []).map((r: any): CrmEmpresa => ({
+        id: r.id, nome: r.nome, chaveGrupo: r.chave_grupo, etapa: r.etapa,
+        proximoPasso: r.proximo_passo || '', responsavel: r.responsavel || '',
+        lastTouch: r.last_touch || null, contatos: porEmpresa.get(r.id) || [],
+        criadoEm: r.criado_em, atualizadoEm: r.atualizado_em,
+    }));
+};
+
+export const getCrmEventos = async (empresaId: string): Promise<CrmEvento[]> => {
+    const { data, error } = await supabase.from('crm_evento').select('*').eq('empresa_id', empresaId).order('data', { ascending: false });
+    if (error || !data) return [];
+    return data.map((r: any): CrmEvento => ({ id: r.id, empresaId: r.empresa_id, tipo: r.tipo, data: r.data, autorNome: r.autor_nome || '', texto: r.texto || '', link: r.link || '' }));
+};
+
+export const addCrmEvento = async (empresaId: string, tipo: string, texto: string, link: string | null, autor?: { id?: string; nome?: string }): Promise<void> => {
+    await supabase.from('crm_evento').insert([{ empresa_id: empresaId, tipo, texto, link: link || null, autor: autor?.id || null, autor_nome: autor?.nome || null }]);
+};
+
+export const createCrmEmpresa = async (e: { nome: string; etapa: string; responsavel?: string; proximoPasso?: string }, autor?: { id?: string; nome?: string }): Promise<string | null> => {
+    const { data, error } = await supabase.from('crm_empresa').insert([{
+        nome: e.nome, chave_grupo: chaveGrupo(e.nome), etapa: e.etapa,
+        responsavel: e.responsavel || null, proximo_passo: e.proximoPasso || null,
+    }]).select('id').single();
+    if (error || !data) { console.error('Erro createCrmEmpresa:', error); return null; }
+    await addCrmEvento(data.id, 'nota', `Empresa criada na etapa ${e.etapa}.`, null, autor);
+    return data.id;
+};
+
+export const updateCrmEmpresa = async (id: string, patch: Partial<{ nome: string; etapa: string; responsavel: string; proximoPasso: string }>): Promise<boolean> => {
+    const dbPatch: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
+    if (patch.nome !== undefined) { dbPatch.nome = patch.nome; dbPatch.chave_grupo = chaveGrupo(patch.nome); }
+    if (patch.etapa !== undefined) dbPatch.etapa = patch.etapa;
+    if (patch.responsavel !== undefined) dbPatch.responsavel = patch.responsavel;
+    if (patch.proximoPasso !== undefined) dbPatch.proximo_passo = patch.proximoPasso;
+    const { error } = await supabase.from('crm_empresa').update(dbPatch).eq('id', id);
+    if (error) { console.error('Erro updateCrmEmpresa:', error); return false; }
+    return true;
+};
+
+// Move a empresa de etapa: grava evento de movimentação e atualiza.
+export const moveCrmEmpresaEtapa = async (id: string, de: string, para: string, autor?: { id?: string; nome?: string }): Promise<boolean> => {
+    const ok = await updateCrmEmpresa(id, { etapa: para });
+    if (ok) await addCrmEvento(id, 'movimentacao', `Etapa: ${de} → ${para}`, null, autor);
+    return ok;
+};
+
+// Recalcula o last_touch da empresa a partir das datas dos contatos (regra 5.5).
+const recomputeLastTouch = async (empresaId: string): Promise<void> => {
+    const { data } = await supabase.from('crm_contato').select('data').eq('empresa_id', empresaId).is('deleted_at', null);
+    const last = computeLastTouch((data || []).map((r: any) => ({ data: r.data } as CrmContato)));
+    await supabase.from('crm_empresa').update({ last_touch: last, atualizado_em: new Date().toISOString() }).eq('id', empresaId);
+};
+
+const contatoToDb = (c: Partial<CrmContato>) => ({
+    nome: c.nome || null, cargo: c.cargo || null, email: c.email || null, telefone: c.telefone || null,
+    canal: c.canal || null, origem: c.origem === 'Optus' ? 'Optus' : 'Omnicargo', status: c.status || 'Novo',
+    data: c.data || null, codigo: c.codigo || null, evidencia: c.evidencia || null,
+    print_ref: c.printRef || null, resumo_ultimo: c.resumoUltimo || null,
+});
+
+export const createCrmContato = async (empresaId: string, c: Partial<CrmContato>, autor?: { id?: string; nome?: string }): Promise<boolean> => {
+    const { error } = await supabase.from('crm_contato').insert([{ empresa_id: empresaId, ...contatoToDb(c) }]);
+    if (error) { console.error('Erro createCrmContato:', error); return false; }
+    await recomputeLastTouch(empresaId);
+    await addCrmEvento(empresaId, 'contato', `Contato ${c.nome || ''} (${c.status || 'Novo'})${c.data ? ' em ' + c.data : ''}`.trim(), c.evidencia || null, autor);
+    return true;
+};
+
+export const updateCrmContato = async (id: string, empresaId: string, c: Partial<CrmContato>): Promise<boolean> => {
+    const { error } = await supabase.from('crm_contato').update({ ...contatoToDb(c), atualizado_em: new Date().toISOString() }).eq('id', id);
+    if (error) { console.error('Erro updateCrmContato:', error); return false; }
+    await recomputeLastTouch(empresaId);
+    return true;
+};

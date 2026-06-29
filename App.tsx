@@ -6,6 +6,7 @@ import {
     LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, CopyPlus, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send, Tv
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
+import { ProspeccaoBoard } from './components/ProspeccaoBoard';
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
@@ -161,7 +162,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao'>('dashboard');
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -1789,6 +1790,7 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
                         { id: 'history', icon: History, label: 'Histórico' },
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
+                        { id: 'prospeccao', icon: Target, label: 'Prospecção', adminOnly: true },
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
@@ -1839,6 +1841,7 @@ Disponibilidade: ${disponibilidade}`;
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
                                 activeTab === 'crm' ? 'CRM' :
                                     activeTab === 'tracking' ? 'Acompanhamento de Cargas' :
+                                        activeTab === 'prospeccao' ? 'Prospecção · Mini CRM' :
                                         activeTab === 'trash' ? 'Lixeira' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
@@ -1865,6 +1868,10 @@ Disponibilidade: ${disponibilidade}`;
                     )}
 
                     {activeTab === 'tracking' && <PipefyBoard />}
+
+                    {activeTab === 'prospeccao' && currentUser.role === 'master' && (
+                        <ProspeccaoBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} />
+                    )}
 
                     {activeTab === 'dashboard' && (
                         <div className="space-y-8 animate-fade-in-up">
