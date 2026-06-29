@@ -1790,7 +1790,9 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
                         { id: 'history', icon: History, label: 'Histórico' },
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
-                        { id: 'prospeccao', icon: Target, label: 'Prospecção', adminOnly: true },
+                        // Prospecção (Mini CRM) OCULTA por enquanto. Código, tabelas e dados preservados.
+                        // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
+                        // { id: 'prospeccao', icon: Target, label: 'Prospecção', adminOnly: true },
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
