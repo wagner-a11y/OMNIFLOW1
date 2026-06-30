@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Plus, Target, AlertTriangle, ShieldCheck, Search, RefreshCw, Filter, Download } from 'lucide-react';
 import {
     CrmEmpresa, CrmContato, CrmEvento, ETAPAS, ETAPAS_FUNIL, corStatus, deriveOrigem,
@@ -123,20 +124,20 @@ export const ProspeccaoBoard: React.FC<Props> = ({ currentUser, onFeedback }) =>
 
             {/* Kanban */}
             {loading ? <p className="text-sm text-[#6b7280] px-1">Carregando…</p> : (
-                <div className="flex gap-4 overflow-x-auto pb-4">
+                <div className="flex gap-4 overflow-x-auto pb-4" style={{ height: 'calc(100vh - 300px)' }}>
                     {ETAPAS.map(etapa => {
                         const lista = porEtapa(etapa);
                         const alvo = colunaAlvo === etapa;
                         return (
-                            <div key={etapa} className="shrink-0 w-72"
+                            <div key={etapa} className="shrink-0 w-72 flex flex-col h-full"
                                 onDragOver={ev => { ev.preventDefault(); if (colunaAlvo !== etapa) setColunaAlvo(etapa); }}
                                 onDragLeave={() => setColunaAlvo(c => (c === etapa ? null : c))}
                                 onDrop={() => soltarEm(etapa)}>
-                                <div className="flex items-center justify-between px-2 mb-2">
+                                <div className="flex items-center justify-between px-2 mb-2 shrink-0">
                                     <span className="text-xs font-semibold uppercase tracking-wide text-[#111827]">{etapa}</span>
                                     <span className="text-xs font-medium text-[#6b7280] bg-[#f3f4f6] px-2 py-0.5 rounded-full">{lista.length}</span>
                                 </div>
-                                <div className={`space-y-2 rounded-lg min-h-[64px] p-1 transition-all ${alvo ? 'ring-2 ring-[#1d6fb8] bg-[#eff6ff]/50' : ''}`}>
+                                <div className={`space-y-2 rounded-lg p-1 flex-1 min-h-0 overflow-y-auto transition-all ${alvo ? 'ring-2 ring-[#1d6fb8] bg-[#eff6ff]/50' : ''}`}>
                                     {lista.map(e => (
                                         <Card key={e.id} empresa={e} limiteDias={limiteDias}
                                             onClick={() => setSelecionada(e)}
@@ -468,7 +469,10 @@ const ImportExportModal: React.FC<{ empresas: CrmEmpresa[]; autor: any; onClose:
     );
 };
 
-const Overlay: React.FC<{ onClose: () => void; titulo: string; largo?: boolean; children: React.ReactNode }> = ({ onClose, titulo, largo, children }) => (
+// Renderizado via portal no document.body: escapa do ancestral com transform
+// (.animate-fade-in-up deixa translateY(0), que viraria containing block do
+// position:fixed e jogava o modal pra fora da viewport).
+const Overlay: React.FC<{ onClose: () => void; titulo: string; largo?: boolean; children: React.ReactNode }> = ({ onClose, titulo, largo, children }) => createPortal(
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-6 animate-fade-in" onClick={onClose}>
         <div className={`bg-white w-full ${largo ? 'max-w-4xl' : 'max-w-md'} rounded-xl border border-[#e5e7eb] shadow-lg p-6 max-h-[90vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
@@ -477,7 +481,8 @@ const Overlay: React.FC<{ onClose: () => void; titulo: string; largo?: boolean; 
             </div>
             {children}
         </div>
-    </div>
+    </div>,
+    document.body
 );
 
 const Campo: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
