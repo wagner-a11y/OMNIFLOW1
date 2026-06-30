@@ -771,7 +771,7 @@ export const getCrmEmpresas = async (): Promise<CrmEmpresa[]> => {
     });
     return (emps || []).map((r: any): CrmEmpresa => ({
         id: r.id, nome: r.nome, chaveGrupo: r.chave_grupo, etapa: r.etapa,
-        proximoPasso: r.proximo_passo || '', responsavel: r.responsavel || '',
+        proximoPasso: r.proximo_passo || '', responsavel: r.responsavel || '', resumo: r.resumo || '',
         lastTouch: r.last_touch || null, contatos: porEmpresa.get(r.id) || [],
         criadoEm: r.criado_em, atualizadoEm: r.atualizado_em,
     }));
@@ -797,12 +797,13 @@ export const createCrmEmpresa = async (e: { nome: string; etapa: string; respons
     return data.id;
 };
 
-export const updateCrmEmpresa = async (id: string, patch: Partial<{ nome: string; etapa: string; responsavel: string; proximoPasso: string }>): Promise<boolean> => {
+export const updateCrmEmpresa = async (id: string, patch: Partial<{ nome: string; etapa: string; responsavel: string; proximoPasso: string; resumo: string }>): Promise<boolean> => {
     const dbPatch: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
     if (patch.nome !== undefined) { dbPatch.nome = patch.nome; dbPatch.chave_grupo = chaveGrupo(patch.nome); }
     if (patch.etapa !== undefined) dbPatch.etapa = patch.etapa;
     if (patch.responsavel !== undefined) dbPatch.responsavel = patch.responsavel;
     if (patch.proximoPasso !== undefined) dbPatch.proximo_passo = patch.proximoPasso;
+    if (patch.resumo !== undefined) dbPatch.resumo = patch.resumo;
     const { error } = await supabase.from('crm_empresa').update(dbPatch).eq('id', id);
     if (error) { console.error('Erro updateCrmEmpresa:', error); return false; }
     return true;

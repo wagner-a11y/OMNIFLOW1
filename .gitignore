@@ -10,3 +10,6 @@ dist-ssr
 *.log
 .vercel
 .env*.local
+
+# Base de prospeccao com dados pessoais — NUNCA commitar (repo publico)
+crm_base_omniflow.json

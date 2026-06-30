@@ -228,6 +228,7 @@ const DetalheModal: React.FC<{ empresa: CrmEmpresa; limiteDias: number; autor: a
     const [etapa, setEtapa] = useState(empresa.etapa);
     const [responsavel, setResponsavel] = useState(empresa.responsavel);
     const [proximoPasso, setProximoPasso] = useState(empresa.proximoPasso);
+    const [resumo, setResumo] = useState(empresa.resumo);
     const [showAddContato, setShowAddContato] = useState(false);
     const dias = diasParado(empresa.lastTouch);
 
@@ -235,7 +236,7 @@ const DetalheModal: React.FC<{ empresa: CrmEmpresa; limiteDias: number; autor: a
 
     const salvarCampos = async () => {
         if (etapa !== empresa.etapa) await moveCrmEmpresaEtapa(empresa.id, empresa.etapa, etapa, autor);
-        await updateCrmEmpresa(empresa.id, { responsavel, proximoPasso });
+        await updateCrmEmpresa(empresa.id, { responsavel, proximoPasso, resumo });
         onFeedback?.('Empresa atualizada.', 'success');
         await onChanged();
     };
@@ -248,6 +249,7 @@ const DetalheModal: React.FC<{ empresa: CrmEmpresa; limiteDias: number; autor: a
                         <Campo label="Etapa"><select value={etapa} onChange={e => setEtapa(e.target.value)} className="inp">{ETAPAS.map(et => <option key={et} value={et}>{et}</option>)}</select></Campo>
                         <Campo label="Responsável"><input value={responsavel} onChange={e => setResponsavel(e.target.value)} className="inp" /></Campo>
                     </div>
+                    <Campo label="Situação (resumo da empresa)"><textarea value={resumo} onChange={e => setResumo(e.target.value)} rows={2} className="inp" /></Campo>
                     <Campo label="Próximo passo"><textarea value={proximoPasso} onChange={e => setProximoPasso(e.target.value)} rows={2} className="inp" /></Campo>
                     <p className="text-xs text-[#6b7280]">Último contato: <strong className="text-[#111827]">{fmtBR(empresa.lastTouch)}</strong>{dias !== null && `, há ${dias} dia(s)`}{isEmpocada(empresa, limiteDias) && <span className="text-red-600 font-medium"> · empoçado</span>}</p>
                     <button onClick={salvarCampos} className="px-4 py-2 bg-[#1d6fb8] text-white rounded-lg text-sm font-medium hover:bg-[#1a5f9e]">Salvar</button>

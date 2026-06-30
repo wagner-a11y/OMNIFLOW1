@@ -28,6 +28,7 @@ export interface CrmEmpresa {
     etapa: string;
     proximoPasso: string;
     responsavel: string;
+    resumo: string;            // "situacao" — posição/resumo da empresa
     lastTouch: string | null;  // ISO yyyy-mm-dd
     contatos: CrmContato[];
     criadoEm?: string;
