@@ -132,3 +132,76 @@ export const getEvidenciaUrl = async (path: string): Promise<string | null> => {
     if (error || !data) return null;
     return data.signedUrl;
 };
+
+// =================== Camada 3: painel de cobrança (gestor / master) ===================
+export interface CobrancaItem {
+    solicitanteId: string; nome: string; analistaId: string; analistaNome: string;
+    emDia: boolean; contatoHoje: boolean; cotouHoje: boolean; diasParado: number | null; esfriando: boolean;
+}
+export interface PainelCobranca {
+    itens: CobrancaItem[];
+    kpis: { total: number; emDia: number; ausentes: number; esfriando: number };
+}
+
+const norm = (s: string) => (s || '').trim().toLowerCase();
+
+// Cruza carteira × (contatos registrados + cotações reais). Determinístico, lido
+// do banco. "Em dia" = contato hoje OU cotou hoje (casando o solicitante canônico
+// e seus aliases contra o campo solicitante das cotações). Só faz sentido p/ master
+// (a RLS já impede o operador de ver a carteira/contatos dos outros).
+export const getPainelCobranca = async (limiteDias: number): Promise<PainelCobranca> => {
+    const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0);
+    const inicioHojeMs = inicioHoje.getTime();
+
+    const [{ data: atr }, sols, analistas, { data: cts }, { data: fcs }] = await Promise.all([
+        supabase.from('cd_atribuicao').select('solicitante_id, analista_id').is('deleted_at', null),
+        getCdSolicitantes(),
+        getAnalistas(),
+        supabase.from('cd_contato').select('solicitante_id, data_hora'),
+        supabase.from('freight_calculations').select('solicitante, created_at').not('solicitante', 'is', null).limit(8000),
+    ]);
+
+    const solById = new Map(sols.map(s => [s.id, s]));
+    const analistaNome = new Map(analistas.map(a => [a.id, a.nome]));
+
+    // Último contato (ms) e contato-hoje por solicitante.
+    const ultContato = new Map<string, number>(), contatoHoje = new Set<string>();
+    for (const r of (cts || []) as any[]) {
+        const ms = new Date(r.data_hora).getTime();
+        if (ms > (ultContato.get(r.solicitante_id) || 0)) ultContato.set(r.solicitante_id, ms);
+        if (ms >= inicioHojeMs) contatoHoje.add(r.solicitante_id);
+    }
+    // Cotações: por nome de solicitante (cru) -> última (ms) e se cotou hoje.
+    const ultCotacaoNome = new Map<string, number>(), cotouHojeNome = new Set<string>();
+    for (const r of (fcs || []) as any[]) {
+        const nome = norm(r.solicitante); const ms = Number(r.created_at) || 0;
+        if (ms > (ultCotacaoNome.get(nome) || 0)) ultCotacaoNome.set(nome, ms);
+        if (ms >= inicioHojeMs) cotouHojeNome.add(nome);
+    }
+
+    const itens: CobrancaItem[] = [];
+    for (const a of (atr || []) as any[]) {
+        const s = solById.get(a.solicitante_id); if (!s) continue;
+        const nomes = [s.nomeCanonico, ...s.aliases].map(norm).filter(Boolean);
+        const cotHoje = nomes.some(n => cotouHojeNome.has(n));
+        const conHoje = contatoHoje.has(a.solicitante_id);
+        const ultCot = Math.max(0, ...nomes.map(n => ultCotacaoNome.get(n) || 0));
+        const ultCon = ultContato.get(a.solicitante_id) || 0;
+        const ultimoToque = Math.max(ultCot, ultCon);
+        const emDia = cotHoje || conHoje;
+        const diasParado = ultimoToque ? Math.max(0, Math.floor((inicioHojeMs - ultimoToque) / 86400000)) : null;
+        const esfriando = !emDia && (diasParado === null || diasParado >= limiteDias);
+        itens.push({
+            solicitanteId: a.solicitante_id, nome: s.nomeCanonico, analistaId: a.analista_id,
+            analistaNome: analistaNome.get(a.analista_id) || '—',
+            emDia, contatoHoje: conHoje, cotouHoje: cotHoje, diasParado, esfriando,
+        });
+    }
+    const kpis = {
+        total: itens.length,
+        emDia: itens.filter(i => i.emDia).length,
+        ausentes: itens.filter(i => !i.emDia).length,
+        esfriando: itens.filter(i => i.esfriando).length,
+    };
+    return { itens, kpis };
+};
