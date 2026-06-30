@@ -8,6 +8,7 @@ import {
 import { CRMBoard } from './components/CRMBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
 import { CarteiraBoard } from './components/CarteiraBoard';
+import { RegistroContatoBoard } from './components/RegistroContatoBoard';
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
@@ -163,7 +164,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro'>('dashboard');
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -1792,9 +1793,10 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'history', icon: History, label: 'Histórico' },
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
                         { id: 'prospeccao', icon: Target, label: 'Prospecção', adminOnly: true },
-                        // Contato Diário (Camada 1) NASCE OCULTO — em construção. Tabelas/código preservados.
-                        // Reversível: descomentar a linha abaixo pra revelar o item (master).
-                        // { id: 'contato-diario', icon: UserCheck, label: 'Contato Diário', adminOnly: true },
+                        // Contato Diário NASCE OCULTO — em construção. Tabelas/código preservados.
+                        // Reversível: descomentar p/ revelar. C1 = carteira (master); C2 = registrar (analista).
+                        // { id: 'contato-diario', icon: UserCheck, label: 'Carteira (gestor)', adminOnly: true },
+                        // { id: 'cd-registro', icon: FileText, label: 'Contato Diário' },
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
@@ -1880,6 +1882,10 @@ Disponibilidade: ${disponibilidade}`;
 
                     {activeTab === 'contato-diario' && currentUser.role === 'master' && (
                         <CarteiraBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} />
+                    )}
+
+                    {activeTab === 'cd-registro' && (
+                        <RegistroContatoBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} />
                     )}
 
                     {activeTab === 'dashboard' && (

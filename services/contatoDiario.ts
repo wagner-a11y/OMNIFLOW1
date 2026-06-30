@@ -83,3 +83,52 @@ export const removeCdAtribuicao = async (id: string): Promise<boolean> => {
     if (error) { console.error('removeCdAtribuicao:', error); return false; }
     return true;
 };
+
+// =================== Camada 2: registro de contato + evidência ===================
+const BUCKET = 'cd-evidencias';
+export const CD_TIPOS = [
+    { v: 'whatsapp', l: 'WhatsApp' }, { v: 'ligacao', l: 'Ligação' }, { v: 'email', l: 'E-mail' },
+    { v: 'visita', l: 'Visita' }, { v: 'reuniao', l: 'Reunião' },
+];
+export const CD_RESULTADOS = [
+    { v: 'sem_demanda', l: 'Sem demanda hoje' }, { v: 'cotar_depois', l: 'Vai cotar depois' },
+    { v: 'negociacao', l: 'Em negociação' }, { v: 'sem_resposta', l: 'Sem resposta' }, { v: 'outro', l: 'Outro' },
+];
+export interface CdContato { id: string; solicitanteId: string; analistaId: string; dataHora: string; tipo: string; resultado: string; observacao: string; evidenciaPath: string; }
+
+// A carteira do analista logado (RLS já devolve só os solicitantes dele).
+export const getMinhaCarteira = getCdSolicitantes;
+
+// Sobe o arquivo de evidência pro bucket PRIVADO, na pasta do próprio analista.
+export const uploadEvidencia = async (file: File, analistaId: string): Promise<string | null> => {
+    const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+    const path = `${analistaId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false });
+    if (error) { console.error('uploadEvidencia:', error); return null; }
+    return path;
+};
+
+// Registra o contato. Exige evidenciaPath (a tela só chama isto após o upload);
+// o banco ainda barra por NOT NULL + RLS se vier sem prova ou fora da carteira.
+export const createCdContato = async (c: { solicitanteId: string; tipo: string; resultado: string; observacao?: string; evidenciaPath: string }, analistaId: string): Promise<boolean> => {
+    if (!c.evidenciaPath) return false;
+    const { error } = await supabase.from('cd_contato').insert([{
+        solicitante_id: c.solicitanteId, analista_id: analistaId, tipo: c.tipo, resultado: c.resultado,
+        observacao: c.observacao || null, evidencia_path: c.evidenciaPath,
+    }]);
+    if (error) { console.error('createCdContato:', error); return false; }
+    return true;
+};
+
+export const getMeusContatos = async (): Promise<CdContato[]> => {
+    const { data, error } = await supabase.from('cd_contato').select('*').order('data_hora', { ascending: false }).limit(500);
+    if (error || !data) { if (error) console.error('getMeusContatos:', error); return []; }
+    return (data as any[]).map(r => ({ id: r.id, solicitanteId: r.solicitante_id, analistaId: r.analista_id, dataHora: r.data_hora, tipo: r.tipo, resultado: r.resultado, observacao: r.observacao || '', evidenciaPath: r.evidencia_path }));
+};
+
+// URL assinada temporária p/ visualizar a evidência (bucket é privado).
+export const getEvidenciaUrl = async (path: string): Promise<string | null> => {
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
+    if (error || !data) return null;
+    return data.signedUrl;
+};
