@@ -1794,11 +1794,10 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'history', icon: History, label: 'Histórico' },
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
                         { id: 'prospeccao', icon: Target, label: 'Prospecção', adminOnly: true },
-                        // Contato Diário NASCE OCULTO — em construção. Tabelas/código preservados.
-                        // Reversível: descomentar p/ revelar. C1 = carteira (master); C2 = registrar (analista).
-                        // { id: 'contato-diario', icon: UserCheck, label: 'Carteira (gestor)', adminOnly: true },
-                        // { id: 'cd-registro', icon: FileText, label: 'Contato Diário' },
-                        // { id: 'cd-cobranca', icon: PieChart, label: 'Cobrança (gestor)', adminOnly: true },
+                        // Contato Diário — TEMP: revelado só no preview da branch p/ teste. RE-OCULTAR (comentar) antes do merge.
+                        { id: 'contato-diario', icon: UserCheck, label: 'Carteira (gestor)', adminOnly: true },
+                        { id: 'cd-registro', icon: FileText, label: 'Contato Diário' },
+                        { id: 'cd-cobranca', icon: PieChart, label: 'Cobrança (gestor)', adminOnly: true },
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
