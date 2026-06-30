@@ -1793,8 +1793,8 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
                         { id: 'prospeccao', icon: Target, label: 'Prospecção', adminOnly: true },
                         // Contato Diário (Camada 1) NASCE OCULTO — em construção. Tabelas/código preservados.
-                        // Reversível: descomentar a linha abaixo pra revelar o item (master).
-                        // { id: 'contato-diario', icon: UserCheck, label: 'Contato Diário', adminOnly: true },
+                        // TEMP: revelado só no preview da branch p/ teste. RE-OCULTAR (comentar) antes do merge.
+                        { id: 'contato-diario', icon: UserCheck, label: 'Contato Diário', adminOnly: true },
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
