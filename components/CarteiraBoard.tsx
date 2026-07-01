@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Users, Plus, X, Trash2, RefreshCw, Check, Link2 } from 'lucide-react';
+import { Users, Plus, X, Trash2, RefreshCw, Check, Link2, Building2 } from 'lucide-react';
 import {
-    SolicitanteCotacao, CdSolicitante, Analista, CdAtribuicao,
+    SolicitanteCotacao, CdSolicitante, Analista, CdAtribuicao, ClienteRef,
     getSolicitantesCotacao, getCdSolicitantes, createCdSolicitante, updateCdSolicitante, deleteCdSolicitante,
-    getAnalistas, getCdAtribuicoes, setCdAtribuicao, removeCdAtribuicao,
+    getAnalistas, getCdAtribuicoes, setCdAtribuicao, removeCdAtribuicao, getClientes, getMapaSolicitanteClientes,
 } from '../services/contatoDiario';
 
 interface Props {
@@ -12,20 +12,22 @@ interface Props {
 }
 
 export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
-    const [aba, setAba] = useState<'solicitantes' | 'carteira'>('solicitantes');
+    const [aba, setAba] = useState<'solicitantes' | 'carteira' | 'clientes'>('solicitantes');
     const [loading, setLoading] = useState(true);
     const [raw, setRaw] = useState<SolicitanteCotacao[]>([]);
     const [canon, setCanon] = useState<CdSolicitante[]>([]);
     const [analistas, setAnalistas] = useState<Analista[]>([]);
     const [atrib, setAtrib] = useState<CdAtribuicao[]>([]);
+    const [clientes, setClientes] = useState<ClienteRef[]>([]);
+    const [mapaCli, setMapaCli] = useState<Map<string, string[]>>(new Map());
     const [sel, setSel] = useState<Set<string>>(new Set());
     const [nomeCanon, setNomeCanon] = useState('');
 
     const autorId = currentUser.id;
     const carregar = async () => {
         setLoading(true);
-        const [r, c, a, at] = await Promise.all([getSolicitantesCotacao(), getCdSolicitantes(), getAnalistas(), getCdAtribuicoes()]);
-        setRaw(r); setCanon(c); setAnalistas(a); setAtrib(at); setLoading(false);
+        const [r, c, a, at, cl, mp] = await Promise.all([getSolicitantesCotacao(), getCdSolicitantes(), getAnalistas(), getCdAtribuicoes(), getClientes(), getMapaSolicitanteClientes()]);
+        setRaw(r); setCanon(c); setAnalistas(a); setAtrib(at); setClientes(cl); setMapaCli(mp); setLoading(false);
     };
     useEffect(() => { carregar(); }, []);
 
@@ -34,6 +36,24 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
     const naoMapeados = useMemo(() => raw.filter(r => !mapeados.has(r.nome)), [raw, mapeados]);
     const atribPorSol = useMemo(() => new Map(atrib.map(a => [a.solicitanteId, a.analistaId])), [atrib]);
     const nomeAnalista = (id?: string) => analistas.find(a => a.id === id)?.nome || '';
+    const nomeCliente = (id?: string | null) => clientes.find(c => c.id === id)?.nome || '';
+    const normN = (s: string) => (s || '').trim().toLowerCase();
+    // Palpite: se todas as variações do solicitante cotaram p/ UM único cliente, sugere.
+    const sugestaoCliente = (c: CdSolicitante): string | null => {
+        const set = new Set<string>();
+        [c.nomeCanonico, ...c.aliases].map(normN).forEach(n => (mapaCli.get(n) || []).forEach(id => set.add(id)));
+        return set.size === 1 ? Array.from(set)[0] : null;
+    };
+    const associarCliente = async (c: CdSolicitante, clienteId: string) => {
+        if (await updateCdSolicitante(c.id, { clienteId: clienteId || null })) { onFeedback?.(clienteId ? 'Cliente vinculado.' : 'Vínculo removido.', 'success'); await carregar(); }
+        else onFeedback?.('Erro ao vincular cliente.', 'error');
+    };
+    // Agrupamento por cliente (visão "os dois lados").
+    const porCliente = useMemo(() => {
+        const g = new Map<string, CdSolicitante[]>();
+        canon.forEach(c => { const k = c.clienteId || '__sem__'; const arr = g.get(k) || []; arr.push(c); g.set(k, arr); });
+        return g;
+    }, [canon]);
 
     const toggle = (nome: string) => setSel(s => { const n = new Set(s); n.has(nome) ? n.delete(nome) : n.add(nome); return n; });
 
@@ -75,9 +95,9 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
             </div>
 
             <div className="flex gap-2">
-                {(['solicitantes', 'carteira'] as const).map(t => (
+                {(['solicitantes', 'carteira', 'clientes'] as const).map(t => (
                     <button key={t} onClick={() => setAba(t)} className={`px-4 py-2 rounded-lg text-sm font-medium ${aba === t ? 'bg-[#1d6fb8] text-white' : 'bg-white border border-[#e5e7eb] text-[#6b7280] hover:bg-[#f9fafb]'}`}>
-                        {t === 'solicitantes' ? '1. Cadastro de solicitantes' : '2. Montar carteira'}
+                        {t === 'solicitantes' ? '1. Cadastro de solicitantes' : t === 'carteira' ? '2. Montar carteira' : '3. Por cliente'}
                     </button>
                 ))}
             </div>
@@ -126,13 +146,24 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
                                             </span>
                                         ))}
                                     </div>
+                                    {/* Vínculo com o cliente (dropdown do cadastro que já existe) + palpite */}
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <Building2 className="w-3.5 h-3.5 text-[#9ca3af] shrink-0" />
+                                        <select value={c.clienteId || ''} onChange={e => associarCliente(c, e.target.value)} className="inp" style={{ flex: 1 }}>
+                                            <option value="">— sem cliente —</option>
+                                            {clientes.map(cl => <option key={cl.id} value={cl.id}>{cl.nome}</option>)}
+                                        </select>
+                                        {!c.clienteId && sugestaoCliente(c) && (
+                                            <button onClick={() => associarCliente(c, sugestaoCliente(c)!)} title="Aplicar palpite do histórico de cotações" className="text-[10px] whitespace-nowrap text-[#1d6fb8] hover:underline shrink-0">palpite: {nomeCliente(sugestaoCliente(c))} ✓</button>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                             {canon.length === 0 && <p className="text-xs text-[#9ca3af]">Nenhum solicitante cadastrado ainda.</p>}
                         </div>
                     </div>
                 </div>
-            ) : (
+            ) : aba === 'carteira' ? (
                 <div className="bg-white border border-[#e5e7eb] rounded-xl p-4">
                     <h3 className="text-sm font-semibold text-[#111827] mb-1">Montar carteira ({canon.length} solicitantes)</h3>
                     <p className="text-[11px] text-[#6b7280] mb-3">Atribua cada solicitante canônico a um analista. O analista só verá a própria carteira.</p>
@@ -154,6 +185,31 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
                         </div>
                     )}
                     {analistas.length === 0 && <p className="text-xs text-amber-600 mt-2">Nenhum analista (operador) cadastrado em usuários.</p>}
+                </div>
+            ) : (
+                /* 3. Por cliente — os dois lados: cada cliente e seus solicitantes */
+                <div className="bg-white border border-[#e5e7eb] rounded-xl p-4">
+                    <h3 className="text-sm font-semibold text-[#111827] mb-1">Solicitantes por cliente</h3>
+                    <p className="text-[11px] text-[#6b7280] mb-3">Cada cliente e os solicitantes vinculados a ele. Vincule na aba 1.</p>
+                    <div className="space-y-3 max-h-[62vh] overflow-y-auto pr-1">
+                        {clientes.filter(cl => porCliente.has(cl.id)).map(cl => (
+                            <div key={cl.id} className="border border-[#e5e7eb] rounded-lg p-2.5">
+                                <div className="flex items-center gap-2 mb-1"><Building2 className="w-4 h-4 text-[#1d6fb8]" /><span className="font-medium text-sm text-[#111827]">{cl.nome}</span><span className="text-[11px] text-[#6b7280]">· {porCliente.get(cl.id)!.length} solicitante(s)</span></div>
+                                <div className="flex flex-wrap gap-1 ml-6">
+                                    {porCliente.get(cl.id)!.map(s => <span key={s.id} className="text-[11px] bg-[#eff6ff] text-[#1d6fb8] px-2 py-0.5 rounded">{s.nomeCanonico}</span>)}
+                                </div>
+                            </div>
+                        ))}
+                        {porCliente.has('__sem__') && (
+                            <div className="border border-dashed border-amber-200 bg-amber-50 rounded-lg p-2.5">
+                                <p className="text-xs font-medium text-amber-700 mb-1">Sem cliente vinculado ({porCliente.get('__sem__')!.length})</p>
+                                <div className="flex flex-wrap gap-1">
+                                    {porCliente.get('__sem__')!.map(s => <span key={s.id} className="text-[11px] bg-white text-[#6b7280] border border-[#e5e7eb] px-2 py-0.5 rounded">{s.nomeCanonico}</span>)}
+                                </div>
+                            </div>
+                        )}
+                        {canon.length === 0 && <p className="text-xs text-[#9ca3af]">Cadastre e vincule solicitantes primeiro.</p>}
+                    </div>
                 </div>
             )}
         </div>

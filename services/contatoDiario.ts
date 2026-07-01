@@ -3,7 +3,8 @@
 import { supabase } from './supabase';
 
 export interface SolicitanteCotacao { nome: string; pipefyId: string | null; cotacoes: number; }
-export interface CdSolicitante { id: string; nomeCanonico: string; pipefyId: string | null; aliases: string[]; }
+export interface CdSolicitante { id: string; nomeCanonico: string; pipefyId: string | null; aliases: string[]; clienteId: string | null; }
+export interface ClienteRef { id: string; nome: string; }
 export interface Analista { id: string; nome: string; email: string; }
 export interface CdAtribuicao { id: string; solicitanteId: string; analistaId: string; }
 
@@ -28,7 +29,7 @@ export const getSolicitantesCotacao = async (): Promise<SolicitanteCotacao[]> =>
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 };
 
-const mapSol = (r: any): CdSolicitante => ({ id: r.id, nomeCanonico: r.nome_canonico, pipefyId: r.solicitante_pipefy_id || null, aliases: Array.isArray(r.aliases) ? r.aliases : [] });
+const mapSol = (r: any): CdSolicitante => ({ id: r.id, nomeCanonico: r.nome_canonico, pipefyId: r.solicitante_pipefy_id || null, aliases: Array.isArray(r.aliases) ? r.aliases : [], clienteId: r.cliente_id || null });
 
 export const getCdSolicitantes = async (): Promise<CdSolicitante[]> => {
     const { data, error } = await supabase.from('cd_solicitante').select('*').is('deleted_at', null).order('nome_canonico');
@@ -42,11 +43,12 @@ export const createCdSolicitante = async (s: { nomeCanonico: string; pipefyId?: 
     return true;
 };
 
-export const updateCdSolicitante = async (id: string, patch: { nomeCanonico?: string; pipefyId?: string | null; aliases?: string[] }): Promise<boolean> => {
+export const updateCdSolicitante = async (id: string, patch: { nomeCanonico?: string; pipefyId?: string | null; aliases?: string[]; clienteId?: string | null }): Promise<boolean> => {
     const db: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
     if (patch.nomeCanonico !== undefined) db.nome_canonico = patch.nomeCanonico;
     if (patch.pipefyId !== undefined) db.solicitante_pipefy_id = patch.pipefyId || null;
     if (patch.aliases !== undefined) db.aliases = patch.aliases;
+    if (patch.clienteId !== undefined) db.cliente_id = patch.clienteId || null;
     const { error } = await supabase.from('cd_solicitante').update(db).eq('id', id);
     if (error) { console.error('updateCdSolicitante:', error); return false; }
     return true;
@@ -56,6 +58,28 @@ export const deleteCdSolicitante = async (id: string): Promise<boolean> => {
     const { error } = await supabase.from('cd_solicitante').update({ deleted_at: new Date().toISOString() }).eq('id', id);
     if (error) { console.error('deleteCdSolicitante:', error); return false; }
     return true;
+};
+
+// Clientes do OmniFlow (customers) — mesmo cadastro do Dashboard/Ramper/PDF.
+export const getClientes = async (): Promise<ClienteRef[]> => {
+    const { data, error } = await supabase.from('customers').select('id, name').order('name');
+    if (error || !data) { if (error) console.error('getClientes:', error); return []; }
+    return (data as any[]).map(c => ({ id: c.id, nome: c.name || c.id }));
+};
+
+// Histórico: por nome de solicitante (normalizado), os clientes distintos p/ quem
+// ele já cotou. Usado no palpite assistido (1 cliente = sugere; vários = em branco).
+const normNome = (s: string) => (s || '').trim().toLowerCase();
+export const getMapaSolicitanteClientes = async (): Promise<Map<string, string[]>> => {
+    const { data } = await supabase.from('freight_calculations').select('solicitante, customer_id').not('solicitante', 'is', null).not('customer_id', 'is', null).limit(8000);
+    const m = new Map<string, Set<string>>();
+    for (const r of (data || []) as any[]) {
+        const nome = normNome(r.solicitante); if (!nome || !r.customer_id) continue;
+        const s = m.get(nome) || new Set<string>(); s.add(r.customer_id); m.set(nome, s);
+    }
+    const out = new Map<string, string[]>();
+    m.forEach((v, k) => out.set(k, Array.from(v)));
+    return out;
 };
 
 export const getAnalistas = async (): Promise<Analista[]> => {
