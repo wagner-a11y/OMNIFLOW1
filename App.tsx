@@ -10,6 +10,10 @@ import { ProspeccaoBoard } from './components/ProspeccaoBoard';
 import { CarteiraBoard } from './components/CarteiraBoard';
 import { RegistroContatoBoard } from './components/RegistroContatoBoard';
 import { PainelCobrancaBoard } from './components/PainelCobrancaBoard';
+
+// Interruptor do submenu "Ações do Comercial". false = OCULTO em produção (padrão).
+// Reversível: trocar por true pra revelar (a trava por papel dentro dele é mantida).
+const MOSTRAR_ACOES_COMERCIAL = false;
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
@@ -166,6 +170,7 @@ const App: React.FC = () => {
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
     const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca'>('dashboard');
+    const [acoesAbertas, setAcoesAbertas] = useState(true); // submenu "Ações do Comercial" aberto/fechado
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -1793,11 +1798,7 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
                         { id: 'history', icon: History, label: 'Histórico' },
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
-                        { id: 'prospeccao', icon: Target, label: 'Prospecção', adminOnly: true },
-                        // Contato Diário — TEMP: revelado só no preview da branch p/ teste. RE-OCULTAR (comentar) antes do merge.
-                        { id: 'contato-diario', icon: UserCheck, label: 'Carteira (gestor)', adminOnly: true },
-                        { id: 'cd-registro', icon: FileText, label: 'Contato Diário' },
-                        { id: 'cd-cobranca', icon: PieChart, label: 'Cobrança (gestor)', adminOnly: true },
+                        // Prospecção + Contato Diário migraram pro submenu "Ações do Comercial" (abaixo).
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
@@ -1808,6 +1809,39 @@ Disponibilidade: ${disponibilidade}`;
                             <span className="font-medium text-sm">{item.label}</span>
                         </button>
                     ))}
+
+                    {/* Submenu "Ações do Comercial" — OCULTO por padrão (MOSTRAR_ACOES_COMERCIAL=false).
+                        Só reorganiza/renomeia itens; a trava por papel é preservada: os 3 de gestão
+                        (master) e o Registrar (analista). Reversível: flip do interruptor pra revelar. */}
+                    {MOSTRAR_ACOES_COMERCIAL && (() => {
+                        const filhos = [
+                            { id: 'prospeccao', icon: Target, label: 'Meu CRM', master: true },
+                            { id: 'contato-diario', icon: UserCheck, label: 'Minha Carteira', master: true },
+                            { id: 'cd-cobranca', icon: PieChart, label: 'Contato Diário · Análise', master: true },
+                            { id: 'cd-registro', icon: FileText, label: 'Contato Diário · Registrar', master: false },
+                        ].filter(f => !f.master || currentUser.role === 'master');
+                        if (!filhos.length) return null;
+                        return (
+                            <div>
+                                <button onClick={() => setAcoesAbertas(v => !v)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
+                                    <Layers className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                                    <span className="font-medium text-sm flex-1 text-left">Ações do Comercial</span>
+                                    <ChevronDown className={`w-4 h-4 transition-transform ${acoesAbertas ? '' : '-rotate-90'}`} strokeWidth={1.75} />
+                                </button>
+                                {acoesAbertas && (
+                                    <div className="ml-4 pl-2 border-l border-[#e5e7eb] space-y-1 mt-1">
+                                        {filhos.map(f => (
+                                            <button key={f.id} onClick={() => { setActiveTab(f.id as any); resetForm(); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === f.id ? 'bg-[#eff6ff] text-[#1d6fb8]' : 'text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827]'}`}>
+                                                <f.icon className="w-4 h-4" strokeWidth={1.75} />
+                                                <span className="font-medium text-[13px]">{f.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+
                     {/* Painel TV: abre o painel público em nova aba. Token vem do banco
                         (RLS só p/ logado), nunca do bundle. Visível só p/ master, como o Dashboard. */}
                     {currentUser.role === 'master' && painelTvToken && (
