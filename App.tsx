@@ -11,9 +11,10 @@ import { CarteiraBoard } from './components/CarteiraBoard';
 import { RegistroContatoBoard } from './components/RegistroContatoBoard';
 import { PainelCobrancaBoard } from './components/PainelCobrancaBoard';
 
-// Interruptor do submenu "Ações do Comercial". false = OCULTO em produção (padrão).
-// Reversível: trocar por true pra revelar (a trava por papel dentro dele é mantida).
-const MOSTRAR_ACOES_COMERCIAL = false;
+// Interruptor do submenu "Ações do Comercial". REVELADO (true) — visível pro time.
+// A trava por papel é mantida: operador vê só "Contato Diário · Registrar";
+// master vê os 3 (Minha Carteira, Análise, Registrar). Voltar a ocultar = false.
+const MOSTRAR_ACOES_COMERCIAL = true;
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
