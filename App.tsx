@@ -13,7 +13,7 @@ import { PainelCobrancaBoard } from './components/PainelCobrancaBoard';
 
 // Interruptor do submenu "Ações do Comercial". false = OCULTO em produção (padrão).
 // Reversível: trocar por true pra revelar (a trava por papel dentro dele é mantida).
-const MOSTRAR_ACOES_COMERCIAL = true; // TEMP preview
+const MOSTRAR_ACOES_COMERCIAL = false;
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
@@ -1798,7 +1798,8 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
                         { id: 'history', icon: History, label: 'Histórico' },
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
-                        // Prospecção + Contato Diário migraram pro submenu "Ações do Comercial" (abaixo).
+                        { id: 'prospeccao', icon: Target, label: 'Meu CRM', adminOnly: true },
+                        // Contato Diário migrou pro submenu "Ações do Comercial" (abaixo).
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
@@ -1815,7 +1816,6 @@ Disponibilidade: ${disponibilidade}`;
                         (master) e o Registrar (analista). Reversível: flip do interruptor pra revelar. */}
                     {MOSTRAR_ACOES_COMERCIAL && (() => {
                         const filhos = [
-                            { id: 'prospeccao', icon: Target, label: 'Meu CRM', master: true },
                             { id: 'contato-diario', icon: UserCheck, label: 'Minha Carteira', master: true },
                             { id: 'cd-cobranca', icon: PieChart, label: 'Contato Diário · Análise', master: true },
                             { id: 'cd-registro', icon: FileText, label: 'Contato Diário · Registrar', master: false },
