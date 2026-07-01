@@ -13,7 +13,7 @@ import { PainelCobrancaBoard } from './components/PainelCobrancaBoard';
 
 // Interruptor do submenu "Ações do Comercial". false = OCULTO em produção (padrão).
 // Reversível: trocar por true pra revelar (a trava por papel dentro dele é mantida).
-const MOSTRAR_ACOES_COMERCIAL = false;
+const MOSTRAR_ACOES_COMERCIAL = true; // TEMP preview
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
