@@ -92,6 +92,8 @@ export interface FreightCalculation {
     adValorem: number;
     profitMargin: number;
     icmsPercent: number;
+    icmsManual?: boolean;   // ICMS ajustado manualmente pelo operador: trava o recálculo automático (fica congelado com o valor salvo)
+    pagadorMg?: boolean;    // pagador é de MG — só relevante quando a origem é MG; alimenta a isenção da regra 2
     pisPercent: number;
     cofinsPercent: number;
     csllPercent: number;

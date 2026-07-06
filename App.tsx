@@ -218,6 +218,13 @@ const App: React.FC = () => {
     const [insurancePercent, setInsurancePercent] = useState<string>('0.2');
     const [profitMargin, setProfitMargin] = useState<string>('15');
     const [icmsPercent, setIcmsPercent] = useState<string>('12');
+    // Trava do ICMS manual: quando o operador digita o ICMS na mão, o automático para de sobrescrever.
+    const [icmsManual, setIcmsManual] = useState(false);
+    // Pagador é de MG? (só aparece quando a origem é MG; alimenta a isenção da regra 2)
+    const [pagadorMg, setPagadorMg] = useState(false);
+    // Rota (origem|destino|pagadorMg) da cotação salva recém-aberta. Enquanto a rota não mudar, o ICMS
+    // salvo é preservado (não recalcula o passado). null = cotação nova/edição já iniciada -> recalcula normal.
+    const loadedIcmsRouteRef = useRef<string | null>(null);
     const [loadingDistance, setLoadingDistance] = useState(false);
     const [disponibilidade, setDisponibilidade] = useState<Disponibilidade>("Imediato");
     const [merchandiseType, setMerchandiseType] = useState('');
@@ -510,14 +517,22 @@ const App: React.FC = () => {
 
 
 
+    // ICMS automático: aplica a tabela por rota.
+    // - Ajuste manual (icmsManual) nunca é sobrescrito pelo automático.
+    // - Cotação salva recém-aberta: enquanto a rota (origem|destino|pagadorMg) não mudar, preserva o
+    //   ICMS salvo (não recalcula o passado). Ao mudar origem/destino, recalcula pela rota nova.
     useEffect(() => {
+        if (icmsManual) return;
+        const routeKey = `${origin}|${destination}|${pagadorMg}`;
+        if (loadedIcmsRouteRef.current !== null && loadedIcmsRouteRef.current === routeKey) return; // rota da cotação salva inalterada
+        loadedIcmsRouteRef.current = null; // a partir daqui é edição do usuário: recalcula normalmente
         const orgUF = getUF(origin);
         const dstUF = getUF(destination);
         if (orgUF && dstUF) {
-            const rate = getIcmsRate(orgUF, dstUF, fedTaxes.icmsRates);
+            const rate = getIcmsRate(orgUF, dstUF, fedTaxes.icmsRates, orgUF === 'MG' && pagadorMg);
             setIcmsPercent(rate.toString());
         }
-    }, [origin, destination, fedTaxes.icmsRates]);
+    }, [origin, destination, fedTaxes.icmsRates, pagadorMg, icmsManual]);
 
     // Login via Supabase Auth (e-mail + senha). A sessão e o papel são definidos pelo onAuthStateChange.
     const handleLogin = async (e?: React.FormEvent | React.MouseEvent) => {
@@ -1238,6 +1253,7 @@ const App: React.FC = () => {
             carroceriaTipoOperacao: implemento || undefined,   // Implemento da calculadora -> flui pra carga fechada/card
             baseFreight: num(baseFreight),
             tolls: num(tolls), extraCosts: num(extraCosts), extraCostsDescription, goodsValue: num(goodsValue), insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
+            icmsManual, pagadorMg,
             pisPercent: fedTaxes.pis, cofinsPercent: fedTaxes.cofins, csllPercent: fedTaxes.csll, irpjPercent: fedTaxes.irpj,
             totalFreight: calcData.finalFreight, createdAt: createdDate, disponibilidade, status, updatedBy: currentUser?.id, updatedByName: currentUser?.name,
             // Autoria imutável: na criação grava o usuário atual; na edição preserva o autor original.
@@ -1294,7 +1310,10 @@ const App: React.FC = () => {
         setVehicleType(quote.vehicleType); setWeight(quote.weight.toString()); setSelectedCustomerId(quote.customerId); setBaseFreight(maskCurrency(quote.baseFreight));
         setTolls(maskCurrency(quote.tolls)); setExtraCosts(maskCurrency(quote.extraCosts || 0)); setExtraCostsDescription(quote.extraCostsDescription || '');
         setGoodsValue(maskCurrency(quote.goodsValue)); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
-        setIcmsPercent(quote.icmsPercent.toString()); setEditingId(quote.id); setDisponibilidade(quote.disponibilidade || "Imediato");
+        // ICMS preservado: restaura o valor salvo e a marca de manual. Enquanto a rota não mudar, o
+        // automático não recalcula (não mexe no passado); mudar origem/destino recalcula pela rota nova.
+        loadedIcmsRouteRef.current = `${quote.origin}|${quote.destination}|${quote.pagadorMg ?? false}`;
+        setIcmsPercent(quote.icmsPercent.toString()); setIcmsManual(quote.icmsManual ?? false); setPagadorMg(quote.pagadorMg ?? false); setEditingId(quote.id); setDisponibilidade(quote.disponibilidade || "Imediato");
         setMerchandiseType(quote.merchandiseType || '');
         setSolicitante(quote.solicitante || ''); setSolicitantePipefyId(quote.solicitantePipefyId);
         setImplemento(quote.carroceriaTipoOperacao || '');
@@ -1312,7 +1331,10 @@ const App: React.FC = () => {
         setVehicleType(quote.vehicleType); setWeight(quote.weight.toString()); setSelectedCustomerId(quote.customerId); setBaseFreight(maskCurrency(quote.baseFreight));
         setTolls(maskCurrency(quote.tolls)); setExtraCosts(maskCurrency(quote.extraCosts || 0)); setExtraCostsDescription(quote.extraCostsDescription || '');
         setGoodsValue(maskCurrency(quote.goodsValue)); setInsurancePercent(quote.insurancePercent.toString()); setProfitMargin(quote.profitMargin.toString());
-        setIcmsPercent(quote.icmsPercent.toString()); setDisponibilidade(quote.disponibilidade || "Imediato");
+        // Duplicada é cotação NOVA: carrega o ICMS/pagador da origem. Sem rota travada (ref null), se não
+        // for manual o automático reaplica a tabela nova sobre a rota copiada.
+        loadedIcmsRouteRef.current = null;
+        setIcmsPercent(quote.icmsPercent.toString()); setIcmsManual(quote.icmsManual ?? false); setPagadorMg(quote.pagadorMg ?? false); setDisponibilidade(quote.disponibilidade || "Imediato");
         setMerchandiseType(quote.merchandiseType || '');
         setSolicitante(quote.solicitante || ''); setSolicitantePipefyId(quote.solicitantePipefyId);
         setImplemento(quote.carroceriaTipoOperacao || '');
@@ -1327,6 +1349,7 @@ const App: React.FC = () => {
         setOrigin(''); setDestination(''); setDestinations([]); setShowMap(false); setRouteGeometry(null); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
         setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setEditingId(null);
         setDisponibilidade("Imediato"); setMerchandiseType(''); setCargoType('Carga geral'); setOtherCosts([]);
+        setIcmsManual(false); setPagadorMg(false); loadedIcmsRouteRef.current = null;   // nova cotação: destrava o automático, zera o pagador MG e a rota travada
         setSolicitante(''); setSolicitantePipefyId(undefined); setImplemento('');
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
     };
@@ -2555,10 +2578,26 @@ Disponibilidade: ${disponibilidade}`;
                                                 <input type="text" className="w-full p-4 bg-[#f9fafb] rounded-xl font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none transition-all" value={profitMargin} onChange={e => setProfitMargin(e.target.value)} />
                                             </div>
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium text-[#6b7280] uppercase">ICMS Destino (%)</span></div>
-                                                <input type="text" className="w-full p-4 bg-[#f9fafb] rounded-xl font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none transition-all" value={icmsPercent} onChange={e => setIcmsPercent(e.target.value)} />
+                                                <div className="flex justify-between mb-2">
+                                                    <span className="text-[10px] font-medium text-[#6b7280] uppercase">ICMS Destino (%)</span>
+                                                    {icmsManual && <span className="text-[9px] font-medium text-amber-600 uppercase" title="ICMS ajustado manualmente — o automático não sobrescreve">Manual</span>}
+                                                </div>
+                                                {/* Alterar na mão marca a trava: o valor digitado vence o automático e fica salvo assim. */}
+                                                <input type="text" className="w-full p-4 bg-[#f9fafb] rounded-xl font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none transition-all" value={icmsPercent} onChange={e => { setIcmsPercent(e.target.value); setIcmsManual(true); }} />
                                             </div>
                                         </div>
+
+                                        {/* Pagador de MG: só aparece quando a origem é MG. Alimenta a isenção da regra 2 (origem MG + pagador MG = isento). */}
+                                        {getUF(origin) === 'MG' && (
+                                            <div className="mb-8 -mt-2 flex flex-wrap items-center gap-3 bg-amber-50/60 border border-amber-100 rounded-xl p-4">
+                                                <span className="text-[11px] font-medium uppercase text-amber-700">O pagador é de MG?</span>
+                                                <div className="flex gap-2">
+                                                    <button type="button" onClick={() => setPagadorMg(true)} className={`px-4 py-2 rounded-lg text-[11px] font-medium uppercase transition-all border ${pagadorMg ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-[#6b7280] border-[#e5e7eb] hover:border-amber-200'}`}>Sim</button>
+                                                    <button type="button" onClick={() => setPagadorMg(false)} className={`px-4 py-2 rounded-lg text-[11px] font-medium uppercase transition-all border ${!pagadorMg ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-[#6b7280] border-[#e5e7eb] hover:border-amber-200'}`}>Não</button>
+                                                </div>
+                                                <span className="text-[10px] font-normal text-amber-600/80">Origem MG + pagador de MG = ICMS isento (0%).</span>
+                                            </div>
+                                        )}
 
                                         {/* Advanced Extra Costs Management */}
                                         <div className="pt-8 border-t border-slate-100 border-dashed animate-in fade-in slide-in-from-top-4 duration-700">
