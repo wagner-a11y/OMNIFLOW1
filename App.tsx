@@ -10,17 +10,23 @@ import { ProspeccaoBoard } from './components/ProspeccaoBoard';
 import { CarteiraBoard } from './components/CarteiraBoard';
 import { RegistroContatoBoard } from './components/RegistroContatoBoard';
 import { PainelCobrancaBoard } from './components/PainelCobrancaBoard';
+import { NegociacoesBoard } from './components/NegociacoesBoard';
 
 // Interruptor do submenu "Ações do Comercial". REVELADO (true) — visível pro time.
 // A trava por papel é mantida: operador vê só "Contato Diário · Registrar";
 // master vê os 3 (Minha Carteira, Análise, Registrar). Voltar a ocultar = false.
 const MOSTRAR_ACOES_COMERCIAL = true;
+// Acompanhamento de Negociações (Camada 1). NASCE OCULTO (false): não aparece no menu E o
+// gatilho automático de entrada (no "Mandar pro Ramper") fica dormente — o envio se comporta
+// idêntico a hoje. Revelar = true (exige a migração neg_ aplicada). Reversível.
+const MOSTRAR_NEGOCIACOES = false;
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
+import { createNegociacaoFromRamper } from './services/negociacoes';
 import { createPipefyCard } from './services/pipefy';
 import { PipefyAutocomplete } from './components/PipefyAutocomplete';
 import { PipefyBoard } from './components/PipefyBoard';
@@ -170,7 +176,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios'>('dashboard');
     const [acoesAbertas, setAcoesAbertas] = useState(true); // submenu "Ações do Comercial" aberto/fechado
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
@@ -1540,6 +1546,24 @@ Disponibilidade: ${disponibilidade}`;
                 showFeedback(`Falha ao criar card no Ramper: ${res.error}`, 'error');
             } else {
                 showFeedback('Card criado no Ramper');
+                // Acompanhamento de Negociações (Camada 1): entra na lista quando vai pro Ramper.
+                // Dormente enquanto MOSTRAR_NEGOCIACOES=false. Best-effort: nunca atrapalha o envio.
+                if (MOSTRAR_NEGOCIACOES && currentUser) {
+                    try {
+                        const rr: any = (res as any)?.result;
+                        const rampId = rr?.id ?? rr?.opportunity?.id ?? rr?.data?.id ?? rr?.get_item?.id ?? rr?.itens?.[0]?.id ?? null;
+                        await createNegociacaoFromRamper({
+                            cotacaoId: q?.id || editingId || '',
+                            propostaNumero: q?.proposalNumber || null,
+                            clienteNome: customerName || solicitanteVal || null,
+                            rota: `${origin || '—'} x ${destination || '—'}`,
+                            mercadoria: (q?.merchandiseType ?? merchandiseType) || null,
+                            veiculo: veiculoVal || null,
+                            valorCotado: Number(q?.totalFreight ?? calcData.finalFreight) || null,
+                            ramperOpportunityId: rampId ? String(rampId) : null,
+                        }, currentUser.id, currentUser.name);
+                    } catch (e) { console.error('negociacao auto-entry:', e); }
+                }
                 setShowPostSaveModal(false);
                 resetForm();
                 setActiveTab('history');
@@ -1871,6 +1895,8 @@ Disponibilidade: ${disponibilidade}`;
                             { id: 'contato-diario', icon: UserCheck, label: 'Minha Carteira', master: true },
                             { id: 'cd-cobranca', icon: PieChart, label: 'Contato Diário · Análise', master: true },
                             { id: 'cd-registro', icon: FileText, label: 'Contato Diário · Registrar', master: false },
+                            // Acompanhamento de Negociações: transparência de time (todos veem), nasce OCULTO.
+                            ...(MOSTRAR_NEGOCIACOES ? [{ id: 'negocios', icon: Activity, label: 'Acompanhamento de Negociações', master: false }] : []),
                         ].filter(f => !f.master || currentUser.role === 'master');
                         if (!filhos.length) return null;
                         return (
@@ -1977,6 +2003,11 @@ Disponibilidade: ${disponibilidade}`;
 
                     {activeTab === 'cd-cobranca' && currentUser.role === 'master' && (
                         <PainelCobrancaBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} />
+                    )}
+
+                    {/* Acompanhamento de Negociações: visível a todos os papéis (transparência de time). */}
+                    {activeTab === 'negocios' && (
+                        <NegociacoesBoard currentUser={{ id: currentUser.id, name: currentUser.name, role: currentUser.role }} onFeedback={showFeedback} />
                     )}
 
                     {activeTab === 'dashboard' && (
