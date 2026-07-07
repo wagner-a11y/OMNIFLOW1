@@ -9,6 +9,12 @@ export const createRamperCard = async (payload: {
     personName?: string;
     stageId?: string | number;
     stageName?: string;
+    // Campos personalizados da Oportunidade + data do card (chaves resolvidas na Edge Function).
+    solicitante?: string;
+    tipoDeVeiculo?: string;
+    documento?: string;
+    valorCarga?: number;
+    closeIn?: string; // AAAA-MM-DD (data de criação da cotação)
 }) => {
     try {
         const { data, error } = await supabase.functions.invoke('create-ramper-card', { body: payload });

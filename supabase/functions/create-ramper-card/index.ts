@@ -42,7 +42,11 @@ Deno.serve(async (req) => {
     }
 
     // --- Modo criação de card (oportunidade) ---
-    const { title, value, basePrice, organizationName, personName, stageId, stageName } = body;
+    const {
+      title, value, basePrice, organizationName, personName, stageId, stageName,
+      // Campos adicionais da Oportunidade (chaves confirmadas no painel Ramper) + data do card.
+      solicitante, tipoDeVeiculo, documento, valorCarga, closeIn,
+    } = body;
     if (!title) throw new Error('title é obrigatório.');
 
     // Resolve o stage_id: usa o informado, senão busca pela etapa "Cotações" (por nome).
@@ -69,6 +73,20 @@ Deno.serve(async (req) => {
       const v = Number(basePrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       form.set('history', `Valor a pagar pro terceiro: R$ ${v}`);
     }
+
+    // Campos personalizados da Oportunidade (additional_values[opportunities][<chave>]).
+    // Chaves confirmadas no painel Ramper. Campo vazio NÃO é enviado -> fica em branco no card,
+    // nunca quebra a criação da oportunidade.
+    if (solicitante) form.set('additional_values[opportunities][solicitante]', String(solicitante));
+    if (tipoDeVeiculo) form.set('additional_values[opportunities][tipo_de_veiculo]', String(tipoDeVeiculo));
+    if (documento) form.set('additional_values[opportunities][documento_sote_ste_etc]', String(documento));
+    if (valorCarga != null && !isNaN(Number(valorCarga))) {
+      // Número decimal (ponto como separador), como o campo espera.
+      form.set('additional_values[opportunities][valor_da_carga]', String(Number(valorCarga)));
+    }
+    // Data do card (Data de fechamento): sobrescreve o padrão de +7 dias do Ramper com a data de
+    // criação da cotação no OmniFlow. Formato AAAA-MM-DD.
+    if (closeIn) form.set('close_in', String(closeIn));
 
     const res = await fetch(`${RAMPER_BASE}/opportunities`, {
       method: 'POST',

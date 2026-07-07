@@ -255,6 +255,8 @@ const App: React.FC = () => {
     // Modal pós-salvar (Mandar pro Ramper / Nova Cotação / Ver Histórico)
     const [showPostSaveModal, setShowPostSaveModal] = useState(false);
     const [ramperSending, setRamperSending] = useState(false);
+    // Última cotação salva: fonte da verdade pro card do Ramper (data de criação + valores gravados).
+    const [lastSavedQuote, setLastSavedQuote] = useState<FreightCalculation | null>(null);
 
     // Importar Solicitação (leitura inteligente via Gemini)
     const [showImportModal, setShowImportModal] = useState(false);
@@ -1274,6 +1276,7 @@ const App: React.FC = () => {
                 const result = await updateFreightCalculation(data);
                 if (result.success) {
                     setHistory(prev => prev.map(h => h.id === editingId ? data : h));
+                    setLastSavedQuote(data);
                     if (stayOnForm) {
                         showFeedback("Cotação enviada e sinalizada no CRM.");
                     } else {
@@ -1287,6 +1290,7 @@ const App: React.FC = () => {
                 const result = await createFreightCalculation(data);
                 if (result.success) {
                     setHistory(prev => [data, ...prev]);
+                    setLastSavedQuote(data);
                     if (stayOnForm) {
                         // Mantém o formulário na tela e entra em modo edição do registro recém-criado
                         setEditingId(quoteId);
@@ -1499,6 +1503,24 @@ Disponibilidade: ${disponibilidade}`;
             // Título: "[REF] - Cotação de Frete SPOT - origem x destino" (omite o prefixo se não houver Ref).
             const refPart = clientReference.trim() ? `${clientReference.trim()} - ` : '';
             const title = `${refPart}Cotação de Frete SPOT - ${origin || '—'} x ${destination || '—'}`;
+
+            // Campos personalizados do card: da cotação salva (lastSavedQuote), com fallback pro form atual.
+            const q = lastSavedQuote;
+            const solicitanteVal = ((q?.solicitante ?? solicitante) || '').trim();
+            const documentoVal = ((q?.clientReference ?? clientReference) || '').trim();
+            // Tipo de Veículo = veículo + carroceria, no formato que o time usa (ex.: "Carreta Simples Sider").
+            // Pula carroceria vazia ou "N/A".
+            const veiculoVal = String(q?.vehicleType ?? vehicleType ?? '').trim();
+            const carroceriaRaw = String(q?.carroceriaTipoOperacao ?? implemento ?? '').trim();
+            const carroceriaVal = carroceriaRaw && carroceriaRaw.toUpperCase() !== 'N/A' ? carroceriaRaw : '';
+            const tipoDeVeiculo = [veiculoVal, carroceriaVal].filter(Boolean).join(' ');
+            // Valor da carga (número); só envia quando > 0, senão fica em branco no card.
+            const valorCargaNum = Number(q?.goodsValue ?? num(goodsValue));
+            // Data do card = data de criação da cotação (AAAA-MM-DD), sobrescreve o +7 padrão do Ramper.
+            const createdMs = q?.createdAt ?? Date.now();
+            const cd = new Date(createdMs);
+            const closeIn = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, '0')}-${String(cd.getDate()).padStart(2, '0')}`;
+
             const res = await createRamperCard({
                 title,
                 value: calcData.finalFreight,
@@ -1506,6 +1528,12 @@ Disponibilidade: ${disponibilidade}`;
                 organizationName: customerName || solicitante, // garante uma organização
                 personName: solicitante,
                 stageName: 'Cotações',
+                // Campos personalizados + data (vazio vira undefined -> não é enviado, fica em branco).
+                solicitante: solicitanteVal || undefined,
+                tipoDeVeiculo: tipoDeVeiculo || undefined,
+                documento: documentoVal || undefined,
+                valorCarga: valorCargaNum > 0 ? valorCargaNum : undefined,
+                closeIn,
             });
             if (res?.error) {
                 console.error('Ramper error:', res.error);
