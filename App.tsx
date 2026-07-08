@@ -19,7 +19,10 @@ const MOSTRAR_ACOES_COMERCIAL = true;
 // Acompanhamento de Negociações (Camada 1). NASCE OCULTO (false): não aparece no menu E o
 // gatilho automático de entrada (no "Mandar pro Ramper") fica dormente — o envio se comporta
 // idêntico a hoje. Revelar = true (exige a migração neg_ aplicada). Reversível.
-const MOSTRAR_NEGOCIACOES = false;
+// Acompanhamento de Negociações (Camada 1). LIBERADO (true) — visível pro time (todos os papéis,
+// transparência: veem todas, editam só as próprias; dono em destaque). O gatilho automático de
+// entrada no "Mandar pro Ramper" fica ativo. Tabelas neg_ e RLS já aplicadas. Voltar a ocultar = false.
+const MOSTRAR_NEGOCIACOES = true;
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
