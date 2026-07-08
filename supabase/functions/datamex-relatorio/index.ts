@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { fetchFromBsoftApi } from "./fonteApiBsoft.ts";
+import type { Pendencia } from "./classificador.ts";
 
 // datamex-relatorio
 // Busca o total de faturamento do mês corrente no TMS Bsoft/NSTech (e-login),
@@ -76,10 +78,30 @@ const brToNumber = (s: string): number => Number(s.replace(/\./g, '').replace(',
 
 const MONEY_CELL = /^\d{1,3}(?:\.\d{3})*,\d{2}$/;   // valor 2 casas (descarta peso 4 casas)
 const DATE_CELL = /^\d{2}\/\d{2}\/\d{4}$/;           // DD/MM/YYYY
+const INT_CELL = /^\d{1,7}$/;                        // inteiro puro (candidato a CTRC/nº do conhecimento)
+
+// CTRC (nº do conhecimento) da linha: primeira célula inteira pura depois da data.
+// Anulações têm série própria de numeração baixa (ex.: 20-25) — CTRC < 1000 não é
+// faturamento. Retorna null se não achar (aí, por segurança, NÃO descartamos a linha).
+const ctrcDaLinha = (cells: string[]): number | null => {
+  for (let i = 1; i < Math.min(cells.length, 5); i++) {
+    if (INT_CELL.test(cells[i])) return Number(cells[i]);
+  }
+  return null;
+};
 
 // Data de hoje em BRT (America/Sao_Paulo) no formato DD/MM/YYYY, p/ casar com a
 // coluna "Emissão" do relatório (a função roda em UTC).
 const hojeBR = (): string => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+// Data BRT em 'YYYY-MM-DD' (para a janela de emissão da API Bsoft).
+const hojeYMDBR = (): string =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+// 1º dia do mês corrente (BRT) em 'YYYY-MM-DD'.
+const inicioMesYMDBR = (): string => hojeYMDBR().slice(0, 8) + '01';
+
+// Flag da fonte API Bsoft (default OFF). Off = mantém o scraping atual.
+const usarApiBsoft = (): boolean => (Deno.env.get('USE_BSOFT_API') ?? 'false').toLowerCase() === 'true';
 
 // Soma o "Total" por CTe (última coluna 2-casas da linha) das linhas cuja
 // Emissão (1ª célula) é HOJE. Mesmo HTML do mês — sem request extra ao TMS.
@@ -89,6 +111,9 @@ function somaFaturadoHoje(html: string, hoje: string): number {
     const cells = [...tr[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)]
       .map(c => c[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim());
     if (cells.length >= 20 && DATE_CELL.test(cells[0]) && cells[0] === hoje) {
+      // Descarta CTe de anulação (série própria, CTRC < 1000) — não é faturamento.
+      const ctrc = ctrcDaLinha(cells);
+      if (ctrc !== null && ctrc < 1000) continue;
       const monies = cells.filter(x => MONEY_CELL.test(x));
       if (monies.length) soma += brToNumber(monies[monies.length - 1]);
     }
@@ -113,7 +138,11 @@ const FETCH_HEADERS = (cookie: string) => ({
 // Grava o resultado no cache lido pelo painel (linha única id=1).
 // Sucesso: atualiza total/ctes e zera o erro. Erro: marca status/erro SEM
 // sobrescrever o último total bom — o painel mantém o valor anterior e sinaliza.
-async function writeCache(fields: { total?: number; ctes?: number | null; totalHoje?: number; status: 'ok' | 'erro'; erro?: string | null }) {
+async function writeCache(fields: {
+  total?: number; ctes?: number | null; totalHoje?: number;
+  faturamentoAutorizado?: number | null; valorTravado?: number | null; pendencias?: Pendencia[];
+  status: 'ok' | 'erro'; erro?: string | null;
+}) {
   try {
     const url = Deno.env.get('SUPABASE_URL');
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -124,6 +153,10 @@ async function writeCache(fields: { total?: number; ctes?: number | null; totalH
       patch.total = fields.total;
       patch.ctes = fields.ctes ?? null;
       patch.total_hoje = fields.totalHoje ?? 0;
+      // Dois números do painel. No scraping, autorizado espelha o total e travado = 0.
+      patch.faturamento_autorizado = fields.faturamentoAutorizado ?? fields.total ?? null;
+      patch.valor_travado = fields.valorTravado ?? 0;
+      patch.pendencias = fields.pendencias ?? [];
       patch.erro = null;
     } else {
       patch.erro = fields.erro ?? 'erro';
@@ -137,6 +170,41 @@ async function writeCache(fields: { total?: number; ctes?: number | null; totalH
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  // === Fonte API Bsoft (atrás da flag USE_BSOFT_API) ===
+  // Quando ligada, substitui o scraping: chama a API com a janela de emissão do
+  // mês corrente (BRT) e classifica autorizado x travado. Falha aqui NÃO derruba o
+  // painel — marca erro e mantém o último valor bom (igual ao scraping).
+  if (usarApiBsoft()) {
+    const dataIni = inicioMesYMDBR();
+    const dataFim = hojeYMDBR();
+    try {
+      const r = await fetchFromBsoftApi(dataIni, dataFim, {
+        url: Deno.env.get('BSOFT_API_URL'),
+        user: Deno.env.get('BSOFT_API_USER'),
+        pass: Deno.env.get('BSOFT_API_PASS'),
+      }, dataFim);
+      await writeCache({
+        status: 'ok',
+        total: r.faturamentoAutorizado,          // painel principal = faturamento autorizado
+        ctes: r.autorizadoCount,
+        totalHoje: r.autorizadoHoje,
+        faturamentoAutorizado: r.faturamentoAutorizado,
+        valorTravado: r.valorTravado,
+        pendencias: r.pendencias,
+      });
+      return json({
+        fonte: 'api_bsoft', periodo: `${dataIni}..${dataFim}`,
+        faturamentoAutorizado: r.faturamentoAutorizado, valorTravado: r.valorTravado,
+        ctes: r.autorizadoCount, autorizadoHoje: r.autorizadoHoje,
+        pendencias: r.pendencias, descartados: r.descartados, geradoEm: new Date().toISOString(),
+      });
+    } catch (e) {
+      await writeCache({ status: 'erro', erro: `API Bsoft: ${(e as Error).message}` });
+      return json({ error: 'Falha na API Bsoft.', detalhe: (e as Error).message }, 502);
+    }
+  }
+
+  // === Scraping do relatório HTML (fonte atual; flag off) ===
   const cookie = Deno.env.get('DATAMEX_SESSION_COOKIE');
   if (!cookie) return json({ error: 'DATAMEX_SESSION_COOKIE não configurado no Supabase.' }, 500);
 
