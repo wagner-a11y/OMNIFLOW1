@@ -5,10 +5,21 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 // passado na URL: /painel-tv?k=<token>. O token NÃO fica no bundle — vem da URL.
 // Atualiza por polling (o cron atualiza o cache a cada 2 min no servidor).
 
+interface Pendencia {
+    nroConhecimento: string;
+    valor: number;
+    statusSefaz: string;
+    tomador: string;
+}
+
 interface Dados {
     total: number | null;
     ctes: number | null;
     totalHoje: number | null;
+    // Dois números: faturamento autorizado e valor travado (pendências não transmitidas/rejeitadas).
+    faturamentoAutorizado?: number | null;
+    valorTravado?: number | null;
+    pendencias?: Pendencia[];
     status: string;
     atualizadoEm: string;
 }
@@ -195,6 +206,17 @@ const PainelTV: React.FC = () => {
                     <p className="mt-8 text-3xl md:text-5xl font-medium text-emerald-200">
                         R$ {dados.totalHoje != null ? formatCur(dados.totalHoje) : '0,00'} <span className="text-white/50">emitidos hoje</span>
                     </p>
+
+                    {/* Destaque secundário: valor travado (CTe pendente/rejeitado, não faturado). */}
+                    {dados.valorTravado != null && dados.valorTravado > 0 && (
+                        <p className="mt-5 text-2xl md:text-3xl font-medium text-amber-300/90 flex items-center gap-3">
+                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400" />
+                            R$ {formatCur(dados.valorTravado)} <span className="text-white/50">travado</span>
+                            {dados.pendencias && dados.pendencias.length > 0 && (
+                                <span className="text-white/40 text-lg md:text-xl">· {dados.pendencias.length} CTe(s) pendente(s)</span>
+                            )}
+                        </p>
+                    )}
                     <div className="mt-12 flex items-center gap-3 text-white/50 text-lg">
                         <span className={`w-3 h-3 rounded-full ${dados.status === 'erro' ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
                         <span>{dados.status === 'erro' ? 'última leitura falhou — exibindo o último valor' : relativo}</span>

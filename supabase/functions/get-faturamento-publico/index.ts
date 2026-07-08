@@ -48,16 +48,21 @@ Deno.serve(async (req) => {
     const db = createClient(supaUrl, key);
     const { data, error } = await db
       .from('faturamento_cache')
-      .select('total, ctes, total_hoje, status, atualizado_em')
+      .select('total, ctes, total_hoje, faturamento_autorizado, valor_travado, pendencias, status, atualizado_em')
       .eq('id', 1)
       .maybeSingle();
 
     if (error || !data) return json({ error: 'sem dados' }, 502);
 
+    const num = (v: unknown) => (v !== null && v !== undefined ? Number(v) : null);
     return json({
-      total: data.total !== null ? Number(data.total) : null,
+      total: num(data.total),
       ctes: data.ctes ?? null,
-      totalHoje: data.total_hoje !== null && data.total_hoje !== undefined ? Number(data.total_hoje) : null,
+      totalHoje: num(data.total_hoje),
+      // Dois números do painel: faturamento autorizado e valor travado (pendências).
+      faturamentoAutorizado: num(data.faturamento_autorizado),
+      valorTravado: num(data.valor_travado),
+      pendencias: Array.isArray(data.pendencias) ? data.pendencias : [],
       status: data.status,
       atualizadoEm: data.atualizado_em,
     });
