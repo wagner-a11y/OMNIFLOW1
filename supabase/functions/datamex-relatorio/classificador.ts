@@ -98,6 +98,9 @@ export function agregar(
             // Corte por data: fora do período -> descarta.
             if (!dentroDoPeriodo(emissao, dataIni, dataFim)) { descartados++; continue; }
             // Anulação com série própria (ex.: 20-25): CTRC < 1000 não é faturamento.
+            // TODO(provisório): esta é uma HEURÍSTICA por número (cinto de segurança).
+            // A regra definitiva é filtrar anulação pelo TIPO do documento, assim que o
+            // Fabricio incluir esse campo no JSON da API Bsoft. Trocar CTRC<1000 pelo tipo então.
             if (Number.isFinite(nroNum) && nroNum < 1000) { descartados++; continue; }
 
             const valor = parseValor(r?.valor_frete);

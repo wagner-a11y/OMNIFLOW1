@@ -2,6 +2,11 @@
 // pelo suporte; a URL ainda não existe). Atrás da flag USE_BSOFT_API (default off):
 // enquanto off, a Edge Function segue no scraping atual. Toda a lógica de
 // classificação/agregação vive em ./classificador.ts (pura e testada).
+//
+// TODO(provisório): a exclusão de anulação hoje usa a heurística CTRC < 1000
+// (ver classificador.ts/agregar). A regra DEFINITIVA é filtrar pelo TIPO do
+// documento, quando o Fabricio adicionar esse campo ao JSON da API. Ao chegar,
+// trocar a heurística de número pelo tipo.
 
 import { RegistroBsoft, ResultadoBsoft, agregar } from './classificador.ts';
 
