@@ -33,7 +33,7 @@ const REPORT_PARAMS: Record<string, string> = {
   dados_statusConhecimento: 'N',
   dados_anulacao: 'N',
   dados_anulado: 'N',
-  dados_situacaoSefaz: 'T',
+  dados_situacaoSefaz: 'V',   // Válidos (ativos e anulações): exclui CTe rejeitado/denegado (não são faturamento). Antes era 'T' (Todos), que inflava o total.
   dados_averbado: 'A',
   dados_gerouCce: 'A',
   dados_gerouReciboFrete: 'A',
