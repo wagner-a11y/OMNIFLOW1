@@ -229,3 +229,84 @@ export const getPainelCobranca = async (limiteDias: number): Promise<PainelCobra
     };
     return { itens, kpis };
 };
+
+// =================== Camada 3.1: Análise por analista (ação de HOJE por solicitante) ===================
+// Resumo da cotação p/ o modal de conferência (só leitura; não abre a calculadora).
+export interface QuoteResumo {
+    id: string; proposalNumber: string; clienteNome: string; origin: string; destination: string;
+    vehicleType: string; merchandiseType: string; goodsValue: number; totalFreight: number;
+    createdAt: number; clientReference: string; solicitante: string;
+}
+// A ação registrada HOJE p/ um solicitante e de qual fonte veio.
+export interface AcaoHoje {
+    emDia: boolean;
+    // Contato registrado pelo analista na tela de registro (com a evidência que ele anexou).
+    registrado: { id: string; tipo: string; resultado: string; dataHora: string; evidenciaPath: string } | null;
+    // OU o solicitante apareceu numa cotação de hoje (contato automático; evidência = a cotação).
+    cotacao: QuoteResumo | null;
+}
+export interface AnaliseSolicitante { solicitanteId: string; nome: string; acao: AcaoHoje; }
+
+const mapQuoteResumo = (r: any, clienteNome: Map<string, string>): QuoteResumo => ({
+    id: r.id, proposalNumber: r.proposal_number || r.id, clienteNome: clienteNome.get(r.customer_id) || '—',
+    origin: r.origin || '', destination: r.destination || '', vehicleType: r.vehicle_type || '',
+    merchandiseType: r.merchandise_type || '', goodsValue: Number(r.goods_value) || 0,
+    totalFreight: Number(r.total_freight) || 0, createdAt: Number(r.created_at) || 0,
+    clientReference: r.client_reference || '', solicitante: r.solicitante || '',
+});
+
+// Para o analista escolhido: cada solicitante da carteira dele + a ação de HOJE.
+// Determinístico, lido do banco (sem IA). "Em dia" = contato registrado hoje OU cotação hoje.
+// O cruzamento com cotações usa o cadastro canônico cd_solicitante (nome + aliases) contra
+// freight_calculations.solicitante. Só faz sentido p/ master (a RLS já restringe o operador).
+export const getAnaliseCarteira = async (analistaId: string): Promise<AnaliseSolicitante[]> => {
+    if (!analistaId) return [];
+    const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0);
+    const inicioMs = inicioHoje.getTime();
+
+    const [{ data: atr }, sols, { data: cts }, { data: fcs }, clientes] = await Promise.all([
+        supabase.from('cd_atribuicao').select('solicitante_id, analista_id').is('deleted_at', null).eq('analista_id', analistaId),
+        getCdSolicitantes(),
+        supabase.from('cd_contato').select('id, solicitante_id, tipo, resultado, data_hora, evidencia_path')
+            .gte('data_hora', inicioHoje.toISOString()).order('data_hora', { ascending: false }),
+        supabase.from('freight_calculations')
+            .select('id, proposal_number, solicitante, customer_id, origin, destination, vehicle_type, merchandise_type, goods_value, total_freight, created_at, client_reference')
+            .gte('created_at', inicioMs).not('solicitante', 'is', null).order('created_at', { ascending: false }).limit(3000),
+        getClientes(),
+    ]);
+
+    const solById = new Map(sols.map(s => [s.id, s]));
+    const clienteNome = new Map(clientes.map(c => [c.id, c.nome]));
+
+    // Contato registrado hoje por solicitante (o mais recente; a query já vem desc).
+    const regHoje = new Map<string, any>();
+    for (const r of (cts || []) as any[]) if (!regHoje.has(r.solicitante_id)) regHoje.set(r.solicitante_id, r);
+
+    // Cotações de hoje: por nome de solicitante (normalizado) -> a mais recente.
+    const cotHojePorNome = new Map<string, QuoteResumo>();
+    for (const r of (fcs || []) as any[]) {
+        const nome = norm(r.solicitante); if (!nome) continue;
+        if (!cotHojePorNome.has(nome)) cotHojePorNome.set(nome, mapQuoteResumo(r, clienteNome));
+    }
+
+    const out: AnaliseSolicitante[] = [];
+    for (const a of (atr || []) as any[]) {
+        const s = solById.get(a.solicitante_id); if (!s) continue;
+        const reg = regHoje.get(a.solicitante_id) || null;
+        // Casa o solicitante pelo canônico + aliases contra as cotações de hoje.
+        const nomes = [s.nomeCanonico, ...s.aliases].map(norm).filter(Boolean);
+        let cot: QuoteResumo | null = null;
+        for (const n of nomes) { const q = cotHojePorNome.get(n); if (q) { cot = q; break; } }
+        out.push({
+            solicitanteId: a.solicitante_id, nome: s.nomeCanonico,
+            acao: {
+                emDia: !!reg || !!cot,
+                registrado: reg ? { id: reg.id, tipo: reg.tipo, resultado: reg.resultado, dataHora: reg.data_hora, evidenciaPath: reg.evidencia_path } : null,
+                cotacao: cot,
+            },
+        });
+    }
+    // "Sem contato hoje" no topo (cobrança); depois por nome.
+    out.sort((a, b) => Number(a.acao.emDia) - Number(b.acao.emDia) || a.nome.localeCompare(b.nome, 'pt-BR'));
+    return out;
+};
