@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const db = createClient(supaUrl, key);
     const { data, error } = await db
       .from('faturamento_cache')
-      .select('total, ctes, total_hoje, faturamento_autorizado, valor_travado, pendencias, status, atualizado_em')
+      .select('total, ctes, total_hoje, faturamento_autorizado, valor_travado, pendencias, status, atualizado_em, sucesso_em')
       .eq('id', 1)
       .maybeSingle();
 
@@ -64,7 +64,8 @@ Deno.serve(async (req) => {
       valorTravado: num(data.valor_travado),
       pendencias: Array.isArray(data.pendencias) ? data.pendencias : [],
       status: data.status,
-      atualizadoEm: data.atualizado_em,
+      atualizadoEm: data.atualizado_em,   // última tentativa (ok ou erro)
+      sucessoEm: data.sucesso_em ?? null,  // última coleta BEM-SUCEDIDA (staleness)
     });
   } catch (e) {
     return json({ error: 'falha ao ler faturamento', detalhe: (e as Error).message }, 502);

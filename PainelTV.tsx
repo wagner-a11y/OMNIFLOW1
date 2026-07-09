@@ -21,8 +21,11 @@ interface Dados {
     valorTravado?: number | null;
     pendencias?: Pendencia[];
     status: string;
-    atualizadoEm: string;
+    atualizadoEm: string;       // última tentativa (ok ou erro)
+    sucessoEm?: string | null;  // última coleta BEM-SUCEDIDA
 }
+
+const STALE_MIN = 15; // acima disso sem coleta bem-sucedida, o painel se marca desatualizado
 
 const POLL_MS = 30_000; // relê o cache a cada 30s (cron grava a cada 2 min)
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-faturamento-publico`;
@@ -139,11 +142,18 @@ const PainelTV: React.FC = () => {
         return () => clearInterval(id);
     }, []);
 
-    const relativo = (() => {
-        if (!dados?.atualizadoEm) return '';
-        void tick;
-        const min = Math.floor((Date.now() - new Date(dados.atualizadoEm).getTime()) / 60000);
-        return min <= 0 ? 'atualizado agora há pouco' : min === 1 ? 'atualizado há 1 min' : `atualizado há ${min} min`;
+    // Staleness: a TV usa a última coleta BEM-SUCEDIDA (sucessoEm). Desatualizado =
+    // sem sucesso conhecido, OU última tentativa com erro, OU passou de STALE_MIN.
+    // Painel congelado mostrando número velho como se fosse atual é pior que errado.
+    const stale = (() => {
+        void tick; // recomputa a cada 30s
+        const okMs = dados?.sucessoEm ? new Date(dados.sucessoEm).getTime() : null;
+        const ageMin = okMs != null ? Math.floor((Date.now() - okMs) / 60000) : null;
+        const desatualizado = okMs == null || dados?.status === 'erro' || (ageMin != null && ageMin > STALE_MIN);
+        const horaSucesso = okMs != null ? new Date(okMs).toLocaleTimeString('pt-BR') : '—';
+        const textoIdade = ageMin == null ? 'sem coleta bem-sucedida'
+            : ageMin <= 0 ? 'agora há pouco' : ageMin === 1 ? 'há 1 min' : `há ${ageMin} min`;
+        return { desatualizado, ageMin, horaSucesso, textoIdade };
     })();
 
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
@@ -185,6 +195,18 @@ const PainelTV: React.FC = () => {
                 <span className="text-lg font-medium text-white/60">· Faturamento {hoje}</span>
             </div>
 
+            {/* Banner de DESATUALIZADO — precisa ser visto na parede. Só aparece quando há dado
+                mas ele está velho/coleta falhando (não na tela de carregando/erro de token). */}
+            {dados && stale.desatualizado && (
+                <div className="absolute top-0 left-0 right-0 z-30 bg-red-600 text-white px-6 py-3 flex items-center justify-center gap-4 shadow-lg animate-pulse">
+                    <span className="text-2xl md:text-3xl">⚠️</span>
+                    <span className="text-lg md:text-2xl font-bold uppercase tracking-wide">
+                        Painel desatualizado — última atualização {stale.textoIdade}
+                        {dados.status === 'erro' ? ' · coleta falhando' : ''}
+                    </span>
+                </div>
+            )}
+
             {erro ? (
                 <div className="text-center">
                     <p className="text-3xl font-medium text-amber-200">{erro}</p>
@@ -217,9 +239,13 @@ const PainelTV: React.FC = () => {
                             )}
                         </p>
                     )}
-                    <div className="mt-12 flex items-center gap-3 text-white/50 text-lg">
-                        <span className={`w-3 h-3 rounded-full ${dados.status === 'erro' ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
-                        <span>{dados.status === 'erro' ? 'última leitura falhou — exibindo o último valor' : relativo}</span>
+                    <div className="mt-12 flex items-center gap-3 text-lg">
+                        <span className={`w-3 h-3 rounded-full ${stale.desatualizado ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
+                        <span className={stale.desatualizado ? 'text-red-300 font-medium' : 'text-white/50'}>
+                            {stale.desatualizado
+                                ? `desatualizado — última coleta OK ${stale.horaSucesso} (${stale.textoIdade})`
+                                : `atualizado ${stale.horaSucesso} (${stale.textoIdade})`}
+                        </span>
                         {ultimaLeitura && (
                             <span className="text-white/40 text-sm ml-2">· tela sincronizada {ultimaLeitura.toLocaleTimeString('pt-BR')}</span>
                         )}

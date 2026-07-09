@@ -157,6 +157,7 @@ async function writeCache(fields: {
       patch.faturamento_autorizado = fields.faturamentoAutorizado ?? fields.total ?? null;
       patch.valor_travado = fields.valorTravado ?? 0;
       patch.pendencias = fields.pendencias ?? [];
+      patch.sucesso_em = new Date().toISOString(); // hora da última coleta BEM-SUCEDIDA (p/ a TV sinalizar staleness)
       patch.erro = null;
     } else {
       patch.erro = fields.erro ?? 'erro';
