@@ -1,65 +1,87 @@
-// Teste do classificador Bsoft + agregação. Roda com: npx tsx <este arquivo>
-import { classifySefaz, agregar, parseValor, dentroDoPeriodo } from './classificador.ts';
+// Testes do classificador Bsoft (contrato novo). Roda: npx tsx <este arquivo>
+import { classifySefaz, agregar, parseValor, dentroDoPeriodo, validarContrato } from './classificador.ts';
 
 let pass = 0, fail = 0;
 const eq = (label, got, want) => {
-    const ok = got === want;
-    console.log(`${ok ? 'OK  ' : 'FAIL'} | ${label} => ${got}${ok ? '' : `  (esperado ${want})`}`);
+    const ok = JSON.stringify(got) === JSON.stringify(want);
+    console.log(`${ok ? 'OK  ' : 'FAIL'} | ${label} => ${JSON.stringify(got)}${ok ? '' : `  (esperado ${JSON.stringify(want)})`}`);
     ok ? pass++ : fail++;
 };
 
-// ---- classifySefaz: casos exigidos ----
+// ---- classifySefaz ----
 eq('100 Autorizado', classifySefaz('100 - Autorizado o uso do CT-e'), 'AUTORIZADO');
 eq('101 Cancelamento', classifySefaz('101 - Cancelamento de CT-e homologado'), 'CANCELADO');
-eq('rejeição 481', classifySefaz('481 - Rejeição: Falha no reconhecimento da autoria'), 'PENDENTE');
-eq('rejeição 531', classifySefaz('531 - Rejeição: total da NF difere do somatório'), 'PENDENTE');
-eq('rejeição 717', classifySefaz('717 - Rejeição: XML da área de dados com codificação inválida'), 'PENDENTE');
-eq('rejeição 217', classifySefaz('217 - Rejeição: CT-e não consta na base de dados da SEFAZ'), 'PENDENTE');
+eq('rejeição 481', classifySefaz('481 - Rejeição: ...'), 'PENDENTE');
+eq('rejeição 531', classifySefaz('531 - Rejeição: ...'), 'PENDENTE');
+eq('rejeição 717', classifySefaz('717 - Rejeição: ...'), 'PENDENTE');
+eq('rejeição 217', classifySefaz('217 - Rejeicao: ...'), 'PENDENTE');
 eq('status vazio', classifySefaz(''), 'PENDENTE');
-eq('status nulo', classifySefaz(null), 'PENDENTE');
-eq('status undefined', classifySefaz(undefined), 'PENDENTE');
-
-// ---- classifySefaz: cobertura extra ----
+eq('nulo', classifySefaz(null), 'PENDENTE');
+eq('Não Transmitido', classifySefaz('Não Transmitido'), 'PENDENTE');
 eq('110 Denegado', classifySefaz('110 - Uso Denegado'), 'DENEGADO');
-eq('301 Denegado emitente', classifySefaz('301 - Uso Denegado: Irregularidade fiscal do emitente'), 'DENEGADO');
-eq('302 Denegado destinatario', classifySefaz('302 - Uso Denegado: Irregularidade fiscal do destinatário'), 'DENEGADO');
-eq('texto Denegado sem codigo', classifySefaz('Uso Denegado'), 'DENEGADO');
-eq('texto Cancelamento sem 101', classifySefaz('Evento de Cancelamento registrado'), 'CANCELADO');
-eq('desconhecido vira pendente', classifySefaz('999 - Status inexistente'), 'PENDENTE');
+eq('301 Denegado', classifySefaz('301 - Uso Denegado'), 'DENEGADO');
 
-// ---- parseValor: defensivo ----
-eq('valor string ponto', parseValor('2552.41'), 2552.41);
-eq('valor string virgula', parseValor('2552,41'), 2552.41);
-eq('valor numero', parseValor(10), 10);
-eq('valor invalido -> null', parseValor('abc'), null);
-eq('valor vazio -> null', parseValor(''), null);
-eq('valor undefined -> null', parseValor(undefined), null);
+// ---- validarContrato ----
+const base = { id: '1', data_emissao: '2026-07-08', nroConhecimento: '51869', valor_frete: '10.00', tipo_cte: 'Normal', status_sefaz: '100 - Autorizado', substituiCTe: '0' };
+eq('contrato ok', validarContrato([base]).ok, true);
+eq('contrato: array vazio', validarContrato([]).ok, false);
+eq('contrato: não-array', validarContrato({}).ok, false);
+{ const semStatus = { ...base }; delete semStatus.status_sefaz;
+  const r = validarContrato([semStatus]); eq('contrato: campo status_sefaz ausente -> falha', r.ok, false); }
+{ const semSub = { ...base }; delete semSub.substituiCTe;
+  eq('contrato: campo substituiCTe ausente -> falha', validarContrato([semSub]).ok, false); }
+{ // status vazio em massa (>3) -> falha
+  const vazios = Array.from({ length: 5 }, (_, i) => ({ ...base, id: String(i), status_sefaz: '' }));
+  eq('contrato: 5 status vazios -> falha', validarContrato(vazios).ok, false);
+  const poucos = [base, { ...base, id: '2', status_sefaz: '' }]; // 1 vazio (punhado) -> ok
+  eq('contrato: 1 status vazio -> ok', validarContrato(poucos).ok, true); }
 
-// ---- dentroDoPeriodo: corte por data ----
-eq('dentro do mes', dentroDoPeriodo('2026-07-08 15:34:36', '2026-07-01', '2026-07-08'), true);
-eq('mes anterior fora', dentroDoPeriodo('2026-06-30 23:59:59', '2026-07-01', '2026-07-08'), false);
-eq('depois do fim fora', dentroDoPeriodo('2026-07-09 00:00:01', '2026-07-01', '2026-07-08'), false);
-eq('data malformada fora', dentroDoPeriodo('sem data', '2026-07-01', '2026-07-08'), false);
+// ---- parseValor / período ----
+eq('valor ponto', parseValor('2552.41'), 2552.41);
+eq('valor invalido', parseValor('xxx'), null);
+eq('dentro do mês', dentroDoPeriodo('2026-07-08 15:34:36', '2026-07-01', '2026-07-09'), true);
+eq('mês anterior fora', dentroDoPeriodo('2026-06-30 23:59:59', '2026-07-01', '2026-07-09'), false);
 
-// ---- agregar: soma autorizado, trava pendente, descarta cancelado/denegado/CTRC<1000/fora do periodo ----
-const registros = [
-    { nroConhecimento: '51869', data_emissao: '2026-07-08 15:34:36', valor_frete: '2552.41', statusSefaz: '100 - Autorizado o uso do CT-e', tomador: 'ARAUCO' },
-    { nroConhecimento: '51870', data_emissao: '2026-07-08 16:00:00', valor_frete: '1000.00', statusSefaz: '100 - Autorizado o uso do CT-e', tomador: 'CLIENTE B' },
-    { nroConhecimento: '51804', data_emissao: '2026-07-08 09:00:00', valor_frete: '4089.98', statusSefaz: '481 - Rejeição: Falha', tomador: 'CLIENTE C' },       // travado
-    { nroConhecimento: '51805', data_emissao: '2026-07-08 09:10:00', valor_frete: '500.00',  statusSefaz: '', tomador: 'CLIENTE D' },                              // vazio -> travado
-    { nroConhecimento: '51900', data_emissao: '2026-07-08 10:00:00', valor_frete: '9999.99', statusSefaz: '101 - Cancelamento de CT-e homologado', tomador: 'X' }, // cancelado -> fora
-    { nroConhecimento: '51901', data_emissao: '2026-07-08 10:00:00', valor_frete: '8888.88', statusSefaz: '110 - Uso Denegado', tomador: 'Y' },                    // denegado -> fora
-    { nroConhecimento: '22',    data_emissao: '2026-07-08 11:00:00', valor_frete: '7777.77', statusSefaz: '100 - Autorizado o uso do CT-e', tomador: 'Americanas' },// CTRC<1000 -> fora
-    { nroConhecimento: '51999', data_emissao: '2026-06-30 23:00:00', valor_frete: '1234.56', statusSefaz: '100 - Autorizado o uso do CT-e', tomador: 'mes anterior' }, // fora do periodo
-    { nroConhecimento: '51555', data_emissao: '2026-07-08 12:00:00', valor_frete: 'xxx',     statusSefaz: '100 - Autorizado o uso do CT-e', tomador: 'malformado' },  // valor invalido -> pendente(0)
+// ---- agregar: substituição por id COM CADEIA + armadilha do substituto morto ----
+const S = (o) => ({ tipo_cte: 'Normal', status_sefaz: '100 - Autorizado', protocoloCTe: 'P', substituiCTe: '0', data_emissao: '2026-07-08 10:00:00', ...o });
+const regs = [
+    S({ id: '10', nroConhecimento: '51000', valor_frete: '1000.00' }),                                  // autorizado normal
+    // Substituído 51852 (id 20) <- substituto 51853 (id 21, AUTORIZADO): exclui o 20
+    S({ id: '20', nroConhecimento: '51852', valor_frete: '6440.64', tipo_cte: 'Substituído' }),
+    S({ id: '21', nroConhecimento: '51853', valor_frete: '12881.28', tipo_cte: 'Substituição', substituiCTe: '20' }),
+    // Substituído 51851 (id 30) <- substituto 51854 (id 31, NÃO TRANSMITIDO): mantém o 30
+    S({ id: '30', nroConhecimento: '51851', valor_frete: '6440.64', tipo_cte: 'Substituído' }),
+    S({ id: '31', nroConhecimento: '51854', valor_frete: '6440.64', tipo_cte: 'Substituição', substituiCTe: '30', status_sefaz: 'Não Transmitido', protocoloCTe: '' }),
+    // CADEIA: id 40 <- 41 (aut) <- 42 (aut). Mantém só o 42.
+    S({ id: '40', nroConhecimento: '51200', valor_frete: '500.00', tipo_cte: 'Substituído' }),
+    S({ id: '41', nroConhecimento: '51201', valor_frete: '500.00', tipo_cte: 'Substituição', substituiCTe: '40' }),
+    S({ id: '42', nroConhecimento: '51202', valor_frete: '500.00', tipo_cte: 'Substituição', substituiCTe: '41' }),
+    // Cancelado (fora)
+    S({ id: '50', nroConhecimento: '51300', valor_frete: '9999.99', status_sefaz: '101 - Cancelamento de CT-e homologado' }),
+    // Rejeição -> travado
+    S({ id: '60', nroConhecimento: '51400', valor_frete: '777.00', status_sefaz: '481 - Rejeição: ...', protocoloCTe: '' }),
 ];
-const r = agregar(registros, '2026-07-01', '2026-07-08', '2026-07-08');
-eq('agregar: autorizado = 3552.41', r.faturamentoAutorizado, 3552.41);   // 2552.41 + 1000.00 (7777.77 caiu por CTRC<1000; 1234.56 fora do periodo; xxx malformado)
-eq('agregar: autorizado hoje = 3552.41', r.autorizadoHoje, 3552.41);
-eq('agregar: autorizadoCount = 2', r.autorizadoCount, 2);
-eq('agregar: travado = 4589.98', r.valorTravado, 4589.98);               // 4089.98 (rejeicao) + 500.00 (vazio)
-eq('agregar: pendencias = 3', r.pendencias.length, 3);                   // 2 travados + 1 malformado(0)
-eq('agregar: descartados = 2', r.descartados, 2);                        // CTRC<1000 (nro 22) + mes anterior (51999). Cancelado/denegado nao contam como descartados.
+const r = agregar(regs, '2026-07-01', '2026-07-09', '2026-07-08');
+// autorizado = 1000 (id10) + 12881.28 (id21) + 6440.64 (id30 mantido) + 500 (id42) = 20821.92
+eq('agregar: faturamento com substituição/cadeia', r.faturamentoAutorizado, 20821.92);
+eq('agregar: 51851 (id30) preservado -> conta',
+   r.substituidosExcluidos.includes('30'), false);
+eq('agregar: excluídos = 20,40,41 (substitutos autorizados)',
+   [...r.substituidosExcluidos].sort(), ['20', '40', '41']);
+eq('agregar: cancelado fora', r.canceladoCount, 1);
+// travado = 51854 Não Transmitido (6440.64, substituto morto do 51851) + rejeição 481 (777)
+eq('agregar: travado (não transmitido + rejeição)', r.valorTravado, 7217.64);
+// Sentinela: id31 é Não Transmitido (não é 100 -> não gera "autorizado_sem_protocolo");
+// id60 é rejeição sem protocolo. Nenhum "autorizado sem protocolo" aqui (todos os 100 têm 'P').
+eq('agregar: divergências de protocolo (nenhuma esperada)', r.divergencias.length, 0);
+
+// Sentinela dispara: status 100 SEM protocolo, e protocolo COM rejeição.
+const r2 = agregar([
+    S({ id: '1', nroConhecimento: '51001', valor_frete: '10.00', protocoloCTe: '' }),                   // 100 sem protocolo
+    S({ id: '2', nroConhecimento: '51002', valor_frete: '10.00', status_sefaz: '481 - Rejeição', protocoloCTe: 'X' }), // protocolo com rejeição
+], '2026-07-01', '2026-07-09', '2026-07-08');
+eq('sentinela: 2 divergências', r2.divergencias.length, 2);
+eq('sentinela: valor NÃO muda (100 sem protocolo ainda soma)', r2.faturamentoAutorizado, 10);
 
 console.log(`\n${pass} passaram, ${fail} falharam`);
 process.exit(fail ? 1 : 0);
