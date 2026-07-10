@@ -197,6 +197,9 @@ Deno.serve(async (req) => {
         fonte: 'api_bsoft', periodo: `${dataIni}..${dataFim}`,
         faturamentoAutorizado: r.faturamentoAutorizado, valorTravado: r.valorTravado,
         ctes: r.autorizadoCount, autorizadoHoje: r.autorizadoHoje,
+        cancelados: { qtd: r.canceladoCount, valor: r.canceladoValor },
+        substituidosExcluidos: r.substituidosExcluidos,
+        divergencias: r.divergencias,            // sentinela do protocolo (não afeta o valor)
         pendencias: r.pendencias, descartados: r.descartados, geradoEm: new Date().toISOString(),
       });
     } catch (e) {
