@@ -5,6 +5,19 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const RAMPER_BASE = 'https://api.lscrm.com.br/v1';
 
+// Responsável do card: mapeia o e-mail do CRIADOR do frete (OmniFlow) -> user_id no Ramper.
+// Casamento EXATO por e-mail (chave em minúsculas). Inclui aliases confirmados de pessoas cujo
+// e-mail no OmniFlow difere do e-mail no Ramper (mesma pessoa):
+//   - enzo.bastos@       (OmniFlow) = expedicao@   (Ramper 14555, Enzo)
+//   - caroline.figueira@ (OmniFlow) = ana.figueira@ (Ramper 17680, Ana Caroline Figueira)
+// E-mail que não estiver aqui -> não envia user_id -> card nasce com o responsável padrão do Ramper.
+const RAMPER_USER_BY_EMAIL: Record<string, number> = {
+  'wagner@omnicargo.com.br': 14252,
+  'gustavo@omnicargo.com.br': 14382,
+  'enzo.bastos@omnicargo.com.br': 14555,
+  'caroline.figueira@omnicargo.com.br': 17680,
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform',
@@ -46,6 +59,8 @@ Deno.serve(async (req) => {
       title, value, basePrice, organizationName, personName, stageId, stageName,
       // Campos adicionais da Oportunidade (chaves confirmadas no painel Ramper) + data do card.
       solicitante, tipoDeVeiculo, documento, valorCarga, closeIn,
+      // Responsável do card: e-mail do criador do frete no OmniFlow (casa com user_id do Ramper).
+      responsavelEmail,
     } = body;
     if (!title) throw new Error('title é obrigatório.');
 
@@ -88,6 +103,17 @@ Deno.serve(async (req) => {
     // criação da cotação no OmniFlow. Formato AAAA-MM-DD.
     if (closeIn) form.set('close_in', String(closeIn));
 
+    // Responsável (user_id): casa o e-mail do criador com o usuário do Ramper. Sem casamento,
+    // NÃO envia user_id -> card fica com o responsável padrão do Ramper (nunca quebra a criação).
+    const emailKey = String(responsavelEmail ?? '').trim().toLowerCase();
+    const responsavelUserId = emailKey ? RAMPER_USER_BY_EMAIL[emailKey] : undefined;
+    const responsavelCasou = responsavelUserId != null;
+    if (responsavelCasou) {
+      form.set('user_id', String(responsavelUserId));
+    } else if (emailKey) {
+      console.warn(`CREATE-RAMPER-CARD: responsável NÃO casou para "${emailKey}" — card criado com responsável padrão do Ramper.`);
+    }
+
     const res = await fetch(`${RAMPER_BASE}/opportunities`, {
       method: 'POST',
       headers: { 'access-token': token, 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
@@ -96,7 +122,8 @@ Deno.serve(async (req) => {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`Ramper /opportunities ${res.status}: ${JSON.stringify(data)}`);
 
-    return json({ ok: true, stage_id: resolvedStageId, result: data });
+    // Devolve o resultado do casamento do responsável pro frontend poder avisar quando não casou.
+    return json({ ok: true, stage_id: resolvedStageId, result: data, responsavel: { email: emailKey || null, casou: responsavelCasou, userId: responsavelUserId ?? null } });
   } catch (error) {
     console.error('CREATE-RAMPER-CARD ERROR:', (error as Error).message);
     return json({ error: (error as Error).message }, 500);
