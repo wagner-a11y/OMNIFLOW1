@@ -5,17 +5,28 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const RAMPER_BASE = 'https://api.lscrm.com.br/v1';
 
-// Responsável do card: mapeia o e-mail do CRIADOR do frete (OmniFlow) -> user_id no Ramper.
-// Casamento EXATO por e-mail (chave em minúsculas). Inclui aliases confirmados de pessoas cujo
-// e-mail no OmniFlow difere do e-mail no Ramper (mesma pessoa):
-//   - enzo.bastos@       (OmniFlow) = expedicao@   (Ramper 14555, Enzo)
-//   - caroline.figueira@ (OmniFlow) = ana.figueira@ (Ramper 17680, Ana Caroline Figueira)
-// E-mail que não estiver aqui -> não envia user_id -> card nasce com o responsável padrão do Ramper.
+// =====================================================================================
+// TABELA DE RESPONSÁVEIS (MANUTENÇÃO) — e-mail do criador no OmniFlow -> user_id no Ramper
+// =====================================================================================
+// O responsável do card = quem CRIOU o frete no OmniFlow. Casamento EXATO por e-mail
+// (chave sempre em minúsculas). Alguns e-mails diferem entre OmniFlow e Ramper (mesma
+// pessoa) — por isso a tabela é explícita, não um match automático de string igual.
+//
+// >>> COMO ADICIONAR/ATUALIZAR alguém (entrou no time, ou trocou de e-mail):
+//     1. Pegue o e-mail da pessoa no OMNIFLOW (o de login; é a CHAVE, à esquerda).
+//     2. Pegue o id dela no RAMPER (user_id — visível no JSON de uma oportunidade dela,
+//        ou na lista de usuários da API: GET https://api.lscrm.com.br/v1/users).
+//     3. Adicione uma linha:  'email.no.omniflow@...': <user_id>,   // Nome (e-mail no Ramper)
+//     4. Faça deploy: supabase functions deploy create-ramper-card
+//
+// E-mail que NÃO estiver aqui -> não envia user_id -> o card nasce com o responsável
+// padrão do Ramper (nunca quebra a criação; o frontend avisa que não casou).
 const RAMPER_USER_BY_EMAIL: Record<string, number> = {
-  'wagner@omnicargo.com.br': 14252,
-  'gustavo@omnicargo.com.br': 14382,
-  'enzo.bastos@omnicargo.com.br': 14555,
-  'caroline.figueira@omnicargo.com.br': 17680,
+  'wagner@omnicargo.com.br': 14252,            // Wagner Ribeiro (Ramper: wagner@omnicargo.com.br)
+  'gustavo@omnicargo.com.br': 14382,           // Gustavo Holz  (Ramper: gustavo@omnicargo.com.br)
+  'enzo.bastos@omnicargo.com.br': 14555,       // Enzo Bastos   (Ramper: expedicao@omnicargo.com.br)
+  'caroline.figueira@omnicargo.com.br': 17680, // Caroline Figueira (Ramper: ana.figueira@omnicargo.com.br)
+  // '<novo.email@omnicargo.com.br>': <user_id>,  // <Nome> (Ramper: <email no ramper>)
 };
 
 const corsHeaders = {
