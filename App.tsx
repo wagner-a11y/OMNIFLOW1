@@ -1529,6 +1529,11 @@ Disponibilidade: ${disponibilidade}`;
             const createdMs = q?.createdAt ?? Date.now();
             const cd = new Date(createdMs);
             const closeIn = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, '0')}-${String(cd.getDate()).padStart(2, '0')}`;
+            // Responsável do card = quem CRIOU o frete (createdBy). Resolve o e-mail pelo perfil (users);
+            // se o criador for o próprio remetente, usa o e-mail dele. O casamento com o Ramper é na Edge Function.
+            const criadorId = q?.createdBy || currentUser?.id;
+            const responsavelEmail = (criadorId && users.find(u => u.id === criadorId)?.username)
+                || (criadorId === currentUser?.id ? currentUser?.username : '') || '';
 
             const res = await createRamperCard({
                 title,
@@ -1543,12 +1548,18 @@ Disponibilidade: ${disponibilidade}`;
                 documento: documentoVal || undefined,
                 valorCarga: valorCargaNum > 0 ? valorCargaNum : undefined,
                 closeIn,
+                responsavelEmail: responsavelEmail || undefined,
             });
             if (res?.error) {
                 console.error('Ramper error:', res.error);
                 showFeedback(`Falha ao criar card no Ramper: ${res.error}`, 'error');
             } else {
                 showFeedback('Card criado no Ramper');
+                // Avisa quando o responsável não casou (card ficou com o padrão do Ramper). Não é erro.
+                if (res?.responsavel && res.responsavel.email && !res.responsavel.casou) {
+                    console.warn('Ramper: responsável não casou:', res.responsavel.email);
+                    showFeedback(`Card criado, mas o responsável (${res.responsavel.email}) não casou no Ramper — ficou o padrão.`, 'info');
+                }
                 // Acompanhamento de Negociações (Camada 1): entra na lista quando vai pro Ramper.
                 // Dormente enquanto MOSTRAR_NEGOCIACOES=false. Best-effort: nunca atrapalha o envio.
                 if (MOSTRAR_NEGOCIACOES && currentUser) {

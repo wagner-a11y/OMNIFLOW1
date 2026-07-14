@@ -15,6 +15,7 @@ export const createRamperCard = async (payload: {
     documento?: string;
     valorCarga?: number;
     closeIn?: string; // AAAA-MM-DD (data de criação da cotação)
+    responsavelEmail?: string; // e-mail do criador do frete (casa com user_id do Ramper na Edge Function)
 }) => {
     try {
         const { data, error } = await supabase.functions.invoke('create-ramper-card', { body: payload });
