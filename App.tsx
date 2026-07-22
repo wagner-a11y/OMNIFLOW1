@@ -200,6 +200,9 @@ const App: React.FC = () => {
     const [showCelebration, setShowCelebration] = useState(false);
     // Link do card recém-criado no Pipefy (botão "Abrir card no Pipefy" pós-envio).
     const [lastPipefyUrl, setLastPipefyUrl] = useState<string | null>(null);
+    // Valor do frete fechado (herói da tela "Venda Fechada") + contagem elegante até ele.
+    const [celebrationValue, setCelebrationValue] = useState(0);
+    const [celebCount, setCelebCount] = useState(0);
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
     // Relatório diário (só master): período + resultado calculado do banco (determinístico).
     const [reportPreset, setReportPreset] = useState<'hoje' | 'ontem' | '7d' | '30d' | 'mes'>('hoje');
@@ -523,6 +526,22 @@ const App: React.FC = () => {
             return () => clearTimeout(timer);
         }
     }, [toast]);
+
+    // Contagem elegante do valor do frete na tela "Venda Fechada": sobe de 0 ao valor com ease-out
+    // suave (~1,1s). Sem exagero. Zera quando a tela fecha.
+    useEffect(() => {
+        if (!showCelebration || celebrationValue <= 0) { setCelebCount(showCelebration ? celebrationValue : 0); return; }
+        let raf = 0;
+        const dur = 1100, start = performance.now();
+        const tick = (now: number) => {
+            const t = Math.min(1, (now - start) / dur);
+            const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+            setCelebCount(celebrationValue * eased);
+            if (t < 1) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [showCelebration, celebrationValue]);
 
     // Cronômetro: incrementa a cada segundo enquanto estiver rodando
     useEffect(() => {
@@ -1106,6 +1125,7 @@ const App: React.FC = () => {
         setSelectedWonQuote(null);
         const pipefyFailed = pipefyMsg.includes('⚠️');
         if (!pipefyFailed) {
+            setCelebrationValue(Number(wonData.nossoFrete) || finalQuote.totalFreight || 0);
             setShowCelebration(true);
             // Sem card do Pipefy: mantém o auto-fechar de 4s. Com card: fica aberta pro operador
             // clicar em "Abrir card no Pipefy" (fecha no botão Fechar). Nunca some antes de poder clicar.
@@ -4067,23 +4087,40 @@ Disponibilidade: ${disponibilidade}`;
 
             {
                 showCelebration && (
-                    <div className="fixed inset-0 pointer-events-none z-[2000] flex items-center justify-center overflow-hidden">
-                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-                        {[...Array(50)].map((_, i) => (
-                            <div key={i} className="confetti" style={{ left: `${Math.random() * 100}vw`, animationDelay: `${Math.random() * 2}s`, backgroundColor: ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00bcd4', '#e91e63'][Math.floor(Math.random() * 7)], width: `${Math.random() * 10 + 5}px`, height: `${Math.random() * 20 + 10}px` }} />
-                        ))}
-                        <div className="bg-white p-12 rounded-xl shadow-sm text-center celebration-text relative z-10 border border-[#e5e7eb] pointer-events-auto">
-                            <div className="text-7xl mb-6">🎉 💸 🚚</div>
-                            <h1 className="text-4xl font-medium text-emerald-600 mb-2 tracking-tight">Venda Fechada!</h1>
-                            <p className="text-[#6b7280] font-normal text-sm mt-2">Parabéns pelo excelente trabalho</p>
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center overflow-hidden p-4">
+                        {/* Fundo sóbrio: escurece e desfoca o app, entrada suave */}
+                        <style>{`
+                            @keyframes vf-backdrop { from { opacity: 0 } to { opacity: 1 } }
+                            @keyframes vf-card { 0% { opacity: 0; transform: translateY(14px) scale(.985) } 100% { opacity: 1; transform: translateY(0) scale(1) } }
+                            @keyframes vf-line { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+                        `}</style>
+                        <div className="absolute inset-0 bg-[#0b1a2b]/55 backdrop-blur-md" style={{ animation: 'vf-backdrop .4s ease-out both' }} onClick={() => setShowCelebration(false)} />
+                        <div className="relative z-10 w-full max-w-md bg-white rounded-2xl border border-[#e5e7eb] shadow-[0_20px_60px_-15px_rgba(11,26,43,0.35)] px-10 py-12 text-center pointer-events-auto"
+                            style={{ animation: 'vf-card .55s cubic-bezier(0.22,1,0.36,1) both' }} onClick={e => e.stopPropagation()}>
+                            {/* Selo discreto de conclusão */}
+                            <div className="w-12 h-12 mx-auto rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-6">
+                                <Check className="w-6 h-6 text-emerald-600" strokeWidth={2.25} />
+                            </div>
+                            <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-[#9ca3af] mb-2">Negócio fechado</p>
+                            <h1 className="text-2xl md:text-[1.75rem] font-medium text-[#111827] tracking-tight">Mais um frete fechado!</h1>
+
+                            {/* Divisor fino que "cresce" na entrada */}
+                            <div className="mx-auto mt-6 mb-7 h-px w-16 bg-[#e5e7eb] origin-center" style={{ animation: 'vf-line .6s .25s cubic-bezier(0.22,1,0.36,1) both' }} />
+
+                            {/* Herói: o valor do frete, com a contagem elegante */}
+                            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#9ca3af] mb-1.5">Valor do frete</p>
+                            <p className="font-semibold text-[#1d6fb8] leading-none tracking-tight tabular-nums" style={{ fontSize: 'clamp(2.75rem, 8vw, 4.5rem)' }}>
+                                <span className="text-[#9ca3af] align-top font-medium" style={{ fontSize: '0.36em' }}>R$ </span>{formatCur(celebCount)}
+                            </p>
+
                             {lastPipefyUrl && (
-                                <div className="mt-7 flex flex-col items-center gap-3">
+                                <div className="mt-9 flex flex-col items-center gap-3">
                                     <a href={lastPipefyUrl} target="_blank" rel="noopener noreferrer"
                                         onClick={() => { setShowCelebration(false); }}
                                         className="inline-flex items-center gap-2 bg-[#1d6fb8] text-white px-6 py-3 rounded-lg font-medium text-sm hover:bg-[#1a5f9e] transition-colors">
                                         <Send className="w-4 h-4" strokeWidth={1.75} /> Abrir card no Pipefy
                                     </a>
-                                    <button onClick={() => setShowCelebration(false)} className="text-xs font-medium text-[#6b7280] hover:text-[#111827]">Fechar</button>
+                                    <button onClick={() => setShowCelebration(false)} className="text-xs font-medium text-[#6b7280] hover:text-[#111827] transition-colors">Fechar</button>
                                 </div>
                             )}
                         </div>
