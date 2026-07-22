@@ -234,6 +234,9 @@ const App: React.FC = () => {
     // Rota (origem|destino|pagadorMg) da cotação salva recém-aberta. Enquanto a rota não mudar, o ICMS
     // salvo é preservado (não recalcula o passado). null = cotação nova/edição já iniciada -> recalcula normal.
     const loadedIcmsRouteRef = useRef<string | null>(null);
+    // Assinatura (veículo|km) de uma cotação UTILITÁRIA salva recém-aberta: enquanto não mudar, o preço
+    // base salvo é preservado (não sobrescreve com km×tarifa). Congela o base na reabertura, igual ao ICMS.
+    const loadedUtilRef = useRef<string | null>(null);
     const [loadingDistance, setLoadingDistance] = useState(false);
     const [disponibilidade, setDisponibilidade] = useState<Disponibilidade>("Imediato");
     const [merchandiseType, setMerchandiseType] = useState('');
@@ -529,6 +532,12 @@ const App: React.FC = () => {
 
     // Limiar de margem para o modal de confirmação (configurável, padrão 15%)
     const marginThreshold = fedTaxes.marginThreshold ?? 15;
+
+    // Rebaixamento de Ganha: uma cotação reaberta que já é Ganha está ligada à operação (Pipefy) e ao
+    // faturamento. Rebaixá-la (pra Pauta OU pra Perdida) é AÇÃO só de master, sempre com confirmação.
+    // O operador não rebaixa uma Ganha. Cotação em Pauta segue com os botões livres pra todos.
+    const cotacaoGanhaReaberta = !!editingId && history.find(h => h.id === editingId)?.status === 'won';
+    const podeRebaixarGanha = cotacaoGanhaReaberta && currentUser?.role === 'master';
 
 
 
@@ -1116,11 +1125,15 @@ const App: React.FC = () => {
     const suggestedFreightANTT = anttFloor ?? utilitarioFreight ?? 0;
 
     // Utilitários: o frete base é puramente KM × tarifa — preenche automaticamente o Preço Base.
+    // MAS numa cotação salva reaberta, o base salvo fica CONGELADO enquanto veículo/km não mudarem
+    // (não sobrescreve o que foi salvo). Ao mudar veículo/km, volta a autopreencher.
     useEffect(() => {
-        if (isUtilitario && utilitarioFreight !== null) {
-            setBaseFreight(maskCurrency(utilitarioFreight));
-        }
-    }, [isUtilitario, utilitarioFreight]);
+        if (!isUtilitario || utilitarioFreight === null) return;
+        const sig = `${vehicleType}|${distanceKm}`;
+        if (loadedUtilRef.current !== null && loadedUtilRef.current === sig) return; // cotação salva reaberta: preserva o base salvo
+        loadedUtilRef.current = null; // a partir daqui é edição do usuário: autopreenche normalmente
+        setBaseFreight(maskCurrency(utilitarioFreight));
+    }, [isUtilitario, utilitarioFreight, vehicleType, distanceKm]);
 
     const calcData = useMemo(() => {
         // Monetários: num() lida com "R$ 1.234,56", "42" cru e "42,00" de forma uniforme.
@@ -1245,10 +1258,17 @@ const App: React.FC = () => {
 
     const generateId = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
 
-    const saveQuote = async (status: QuoteStatus, bypassMarginCheck = false, stayOnForm = false) => {
-        // Gate de margem: ao comprometer a cotação (fechar/salvar em pauta) com margem
-        // abaixo do limiar configurado, exige confirmação no modal antes de prosseguir.
-        if (!bypassMarginCheck && (status === 'won' || status === 'pending') && calcData.realMarginPercent < marginThreshold) {
+    const saveQuote = async (statusArg: QuoteStatus, bypassMarginCheck = false, stayOnForm = false, keepStatus = false) => {
+        // Congela o status: "Salvar" (keepStatus) NÃO rebaixa uma cotação já comprometida.
+        // Numa edição, preserva o status salvo (Ganha continua Ganha); em cotação nova, usa o
+        // status pedido. Só ações explícitas (Fechado/Perdido/Voltar pra Pauta) mudam o status.
+        const existingQuote = editingId ? history.find(h => h.id === editingId) : undefined;
+        const status: QuoteStatus = (keepStatus && existingQuote) ? existingQuote.status : statusArg;
+        const isEditandoExistente = keepStatus && !!existingQuote; // "Salvar/Envio" de cotação já salva
+
+        // Gate de margem: nas ações de comprometer (won/pending), mas NÃO ao só re-salvar uma cotação
+        // existente (edição não re-alerta). Cotação nova via Salvar/Envio ainda passa pelo gate.
+        if (!bypassMarginCheck && !isEditandoExistente && (status === 'won' || status === 'pending') && calcData.realMarginPercent < marginThreshold) {
             setPendingSaveStatus(status);
             setPendingStayOnForm(stayOnForm);
             setShowMarginModal(true);
@@ -1263,7 +1283,6 @@ const App: React.FC = () => {
         setIsTimerRunning(false);
         const wasCreating = !editingId;   // decide create x update por valor capturado (editingId muda de forma assíncrona)
         const quoteId = editingId || generateId();
-        const existingQuote = history.find(h => h.id === editingId);
         const createdDate = existingQuote?.createdAt ? existingQuote.createdAt : Date.now();
 
         const data: FreightCalculation = {
@@ -1350,6 +1369,8 @@ const App: React.FC = () => {
         // ICMS preservado: restaura o valor salvo e a marca de manual. Enquanto a rota não mudar, o
         // automático não recalcula (não mexe no passado); mudar origem/destino recalcula pela rota nova.
         loadedIcmsRouteRef.current = `${quote.origin}|${quote.destination}|${quote.pagadorMg ?? false}`;
+        // Congela o preço base de cotação utilitária salva (não sobrescreve com km×tarifa na reabertura).
+        loadedUtilRef.current = `${quote.vehicleType}|${quote.distanceKm.toString()}`;
         setIcmsPercent(quote.icmsPercent.toString()); setIcmsManual(quote.icmsManual ?? false); setPagadorMg(quote.pagadorMg ?? false); setEditingId(quote.id); setDisponibilidade(quote.disponibilidade || "Imediato");
         setMerchandiseType(quote.merchandiseType || '');
         setSolicitante(quote.solicitante || ''); setSolicitantePipefyId(quote.solicitantePipefyId);
@@ -1371,6 +1392,7 @@ const App: React.FC = () => {
         // Duplicada é cotação NOVA: carrega o ICMS/pagador da origem. Sem rota travada (ref null), se não
         // for manual o automático reaplica a tabela nova sobre a rota copiada.
         loadedIcmsRouteRef.current = null;
+        loadedUtilRef.current = null; // nova: autopreenche o base utilitário normalmente
         setIcmsPercent(quote.icmsPercent.toString()); setIcmsManual(quote.icmsManual ?? false); setPagadorMg(quote.pagadorMg ?? false); setDisponibilidade(quote.disponibilidade || "Imediato");
         setMerchandiseType(quote.merchandiseType || '');
         setSolicitante(quote.solicitante || ''); setSolicitantePipefyId(quote.solicitantePipefyId);
@@ -1386,7 +1408,7 @@ const App: React.FC = () => {
         setOrigin(''); setDestination(''); setDestinations([]); setShowMap(false); setRouteGeometry(null); setClientReference(''); setDistanceKm('0'); setBaseFreight('0'); setTolls('0'); setExtraCosts('0');
         setExtraCostsDescription(''); setGoodsValue('0'); setWeight('0'); setSelectedCustomerId(''); setEditingId(null);
         setDisponibilidade("Imediato"); setMerchandiseType(''); setCargoType('Carga geral'); setOtherCosts([]);
-        setIcmsManual(false); setPagadorMg(false); loadedIcmsRouteRef.current = null;   // nova cotação: destrava o automático, zera o pagador MG e a rota travada
+        setIcmsManual(false); setPagadorMg(false); loadedIcmsRouteRef.current = null; loadedUtilRef.current = null;   // nova cotação: destrava o automático, zera o pagador MG e as travas de congelamento
         setSolicitante(''); setSolicitantePipefyId(undefined); setImplemento('');
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
     };
@@ -1424,7 +1446,9 @@ Disponibilidade: ${disponibilidade}`;
     // permanecendo na tela sem resetar o formulário.
     const handleQuickSend = () => {
         handleCopyQuoteText();
-        saveQuote('pending', false, true);
+        // keepStatus=true: numa cotação já salva, preserva o status (Ganha continua Ganha, não rebaixa).
+        // Cotação nova entra como 'pending' normalmente.
+        saveQuote('pending', false, true, true);
     };
 
     // ===== Importar Solicitação (leitura inteligente via Gemini) =====
@@ -2957,10 +2981,23 @@ Disponibilidade: ${disponibilidade}`;
                                                 <button onClick={() => saveQuote('won')} disabled={savingQuote} className="bg-emerald-600 text-white py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                     <ThumbsUp className="w-3.5 h-3.5" strokeWidth={1.75} /> Fechado
                                                 </button>
-                                                <button onClick={() => saveQuote('lost')} disabled={savingQuote} className="bg-white border border-[#e5e7eb] text-red-600 py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                {/* Perdido: livre em cotação de Pauta. Se já é Ganha, marcar Perdida é rebaixamento
+                                                    (mexe em faturamento/Pipefy) -> só master, com confirmação; operador fica bloqueado. */}
+                                                <button
+                                                    onClick={() => {
+                                                        if (cotacaoGanhaReaberta) {
+                                                            if (podeRebaixarGanha && window.confirm('Esta cotação está GANHA (ligada à operação no Pipefy e ao faturamento). Marcar como Perdida é um rebaixamento que pode gerar inconsistência. Confirmar?')) saveQuote('lost', true);
+                                                        } else {
+                                                            saveQuote('lost');
+                                                        }
+                                                    }}
+                                                    disabled={savingQuote || (cotacaoGanhaReaberta && !podeRebaixarGanha)}
+                                                    title={cotacaoGanhaReaberta && !podeRebaixarGanha ? 'Só o gestor pode rebaixar uma cotação Ganha' : undefined}
+                                                    className="bg-white border border-[#e5e7eb] text-red-600 py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                     <ThumbsDown className="w-3.5 h-3.5" strokeWidth={1.75} /> Perdido
                                                 </button>
-                                                <button onClick={() => saveQuote('pending')} disabled={savingQuote} className="bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                {/* Salvar edição: keepStatus=true -> NÃO rebaixa o status. Ganha continua Ganha. */}
+                                                <button onClick={() => saveQuote('pending', false, false, true)} disabled={savingQuote} className="bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                     <Save className="w-3.5 h-3.5" strokeWidth={1.75} /> {savingQuote ? 'Salvando...' : 'Salvar'}
                                                 </button>
                                                 <button onClick={handleCopyQuoteText} className="bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors">
@@ -2969,6 +3006,16 @@ Disponibilidade: ${disponibilidade}`;
                                                 <button onClick={handleQuickSend} className="col-span-2 bg-[#1d6fb8] text-white py-2.5 rounded-lg font-medium text-xs hover:bg-[#1a5f9e] flex items-center justify-center gap-1.5 transition-colors">
                                                     <Zap className="w-3.5 h-3.5" strokeWidth={1.75} /> Envio Rápido (Copiar + CRM)
                                                 </button>
+                                                {/* Rebaixar Ganha->Pauta: AÇÃO EXPLÍCITA e consciente (Ganha está ligada à operação/faturamento).
+                                                    Só master, só quando a cotação reaberta já é Ganha. Salvar edição NUNCA rebaixa. */}
+                                                {podeRebaixarGanha && (
+                                                    <button
+                                                        disabled={savingQuote}
+                                                        onClick={() => { if (window.confirm('Esta cotação está GANHA (ligada à operação no Pipefy e ao faturamento). Voltar pra Pauta pode gerar inconsistência. Confirmar o rebaixamento?')) saveQuote('pending', true); }}
+                                                        className="col-span-2 bg-amber-50 border border-amber-300 text-amber-700 py-2.5 rounded-lg font-medium text-xs hover:bg-amber-100 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                        <ThumbsDown className="w-3.5 h-3.5" strokeWidth={1.75} /> Voltar pra Pauta (rebaixar Ganha)
+                                                    </button>
+                                                )}
                                                 <button onClick={generatePDF} className="col-span-2 bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors">
                                                     <FileDown className="w-3.5 h-3.5 text-[#1d6fb8]" strokeWidth={1.75} /> PDF Comercial
                                                 </button>
