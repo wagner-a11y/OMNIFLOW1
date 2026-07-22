@@ -264,6 +264,10 @@ const App: React.FC = () => {
     // Modal pós-salvar (Mandar pro Ramper / Nova Cotação / Ver Histórico)
     const [showPostSaveModal, setShowPostSaveModal] = useState(false);
     const [ramperSending, setRamperSending] = useState(false);
+    // Trava anti-duplicação do salvar: estado (desabilita o botão) + ref (guarda de reentrância
+    // síncrona, pega clique repetido antes do re-render). Ver saveQuote.
+    const [savingQuote, setSavingQuote] = useState(false);
+    const savingQuoteRef = useRef(false);
     // Última cotação salva: fonte da verdade pro card do Ramper (data de criação + valores gravados).
     const [lastSavedQuote, setLastSavedQuote] = useState<FreightCalculation | null>(null);
 
@@ -1251,7 +1255,13 @@ const App: React.FC = () => {
             return;
         }
 
+        // Camada 1 — guard de reentrância SÍNCRONO: pega o clique repetido antes do re-render
+        // (o setSavingQuote/disabled só vale no próximo render; o ref já corta agora). Só aqui,
+        // depois do gate de margem, pra não travar a confirmação do modal.
+        if (savingQuoteRef.current) return;
+
         setIsTimerRunning(false);
+        const wasCreating = !editingId;   // decide create x update por valor capturado (editingId muda de forma assíncrona)
         const quoteId = editingId || generateId();
         const existingQuote = history.find(h => h.id === editingId);
         const createdDate = existingQuote?.createdAt ? existingQuote.createdAt : Date.now();
@@ -1276,12 +1286,19 @@ const App: React.FC = () => {
         };
 
         if (status === 'won') {
-            openWonModal(data);
+            openWonModal(data);   // abre modal (não grava aqui); não segura o guard
             return;
         }
 
+        // Ativa a trava (ref síncrono + estado que desabilita o botão).
+        savingQuoteRef.current = true;
+        setSavingQuote(true);
+        // Camada 2 — editingId SÍNCRONO: se é criação, já entra em modo edição do id gerado, pra que
+        // qualquer disparo seguinte vire UPDATE do mesmo registro, nunca um insert novo.
+        if (wasCreating) setEditingId(quoteId);
+
         try {
-            if (editingId) {
+            if (!wasCreating) {
                 const result = await updateFreightCalculation(data);
                 if (result.success) {
                     setHistory(prev => prev.map(h => h.id === editingId ? data : h));
@@ -1298,23 +1315,30 @@ const App: React.FC = () => {
             } else {
                 const result = await createFreightCalculation(data);
                 if (result.success) {
-                    setHistory(prev => [data, ...prev]);
-                    setLastSavedQuote(data);
+                    // Camada 3 (no banco): se detectou idêntica recém-criada, não inseriu de novo.
+                    if (result.duplicate) showFeedback("Cotação já havia sido salva — evitei duplicar.", "info");
+                    else showFeedback(stayOnForm ? "Cotação enviada e sinalizada no CRM." : "Salvo com sucesso!");
+                    const savedId = result.data?.id || quoteId;
+                    setHistory(prev => prev.some(h => h.id === savedId) ? prev : [{ ...data, id: savedId }, ...prev]);
+                    setLastSavedQuote({ ...data, id: savedId });
                     if (stayOnForm) {
-                        // Mantém o formulário na tela e entra em modo edição do registro recém-criado
-                        setEditingId(quoteId);
-                        showFeedback("Cotação enviada e sinalizada no CRM.");
+                        setEditingId(savedId);
                     } else {
-                        showFeedback("Salvo com sucesso!");
                         setEditingId(null); setShowPostSaveModal(true);
                     }
                 } else {
+                    // Falhou a criação: desfaz o editingId síncrono pra não apontar pra um id inexistente.
+                    setEditingId(null);
                     showFeedback(`Erro ao salvar no banco: ${result.error}`, "error");
                 }
             }
         } catch (error) {
+            if (wasCreating) setEditingId(null);
             console.error("Exception in saveQuote:", error);
             showFeedback("Erro inesperado ao salvar.", "error");
+        } finally {
+            savingQuoteRef.current = false;
+            setSavingQuote(false);
         }
     };
 
@@ -2930,14 +2954,14 @@ Disponibilidade: ${disponibilidade}`;
                                             )}
 
                                             <div className="grid grid-cols-2 gap-2 w-full mt-4">
-                                                <button onClick={() => saveQuote('won')} className="bg-emerald-600 text-white py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-700 transition-colors">
+                                                <button onClick={() => saveQuote('won')} disabled={savingQuote} className="bg-emerald-600 text-white py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                     <ThumbsUp className="w-3.5 h-3.5" strokeWidth={1.75} /> Fechado
                                                 </button>
-                                                <button onClick={() => saveQuote('lost')} className="bg-white border border-[#e5e7eb] text-red-600 py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-red-50 transition-colors">
+                                                <button onClick={() => saveQuote('lost')} disabled={savingQuote} className="bg-white border border-[#e5e7eb] text-red-600 py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                     <ThumbsDown className="w-3.5 h-3.5" strokeWidth={1.75} /> Perdido
                                                 </button>
-                                                <button onClick={() => saveQuote('pending')} className="bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors">
-                                                    <Save className="w-3.5 h-3.5" strokeWidth={1.75} /> Salvar
+                                                <button onClick={() => saveQuote('pending')} disabled={savingQuote} className="bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    <Save className="w-3.5 h-3.5" strokeWidth={1.75} /> {savingQuote ? 'Salvando...' : 'Salvar'}
                                                 </button>
                                                 <button onClick={handleCopyQuoteText} className="bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors">
                                                     <ClipboardCopy className="w-3.5 h-3.5" strokeWidth={1.75} /> Copiar
