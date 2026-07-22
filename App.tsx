@@ -533,6 +533,12 @@ const App: React.FC = () => {
     // Limiar de margem para o modal de confirmação (configurável, padrão 15%)
     const marginThreshold = fedTaxes.marginThreshold ?? 15;
 
+    // Rebaixamento de Ganha: uma cotação reaberta que já é Ganha está ligada à operação (Pipefy) e ao
+    // faturamento. Rebaixá-la (pra Pauta OU pra Perdida) é AÇÃO só de master, sempre com confirmação.
+    // O operador não rebaixa uma Ganha. Cotação em Pauta segue com os botões livres pra todos.
+    const cotacaoGanhaReaberta = !!editingId && history.find(h => h.id === editingId)?.status === 'won';
+    const podeRebaixarGanha = cotacaoGanhaReaberta && currentUser?.role === 'master';
+
 
 
     // ICMS automático: aplica a tabela por rota.
@@ -2975,7 +2981,19 @@ Disponibilidade: ${disponibilidade}`;
                                                 <button onClick={() => saveQuote('won')} disabled={savingQuote} className="bg-emerald-600 text-white py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                     <ThumbsUp className="w-3.5 h-3.5" strokeWidth={1.75} /> Fechado
                                                 </button>
-                                                <button onClick={() => saveQuote('lost')} disabled={savingQuote} className="bg-white border border-[#e5e7eb] text-red-600 py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                {/* Perdido: livre em cotação de Pauta. Se já é Ganha, marcar Perdida é rebaixamento
+                                                    (mexe em faturamento/Pipefy) -> só master, com confirmação; operador fica bloqueado. */}
+                                                <button
+                                                    onClick={() => {
+                                                        if (cotacaoGanhaReaberta) {
+                                                            if (podeRebaixarGanha && window.confirm('Esta cotação está GANHA (ligada à operação no Pipefy e ao faturamento). Marcar como Perdida é um rebaixamento que pode gerar inconsistência. Confirmar?')) saveQuote('lost', true);
+                                                        } else {
+                                                            saveQuote('lost');
+                                                        }
+                                                    }}
+                                                    disabled={savingQuote || (cotacaoGanhaReaberta && !podeRebaixarGanha)}
+                                                    title={cotacaoGanhaReaberta && !podeRebaixarGanha ? 'Só o gestor pode rebaixar uma cotação Ganha' : undefined}
+                                                    className="bg-white border border-[#e5e7eb] text-red-600 py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                     <ThumbsDown className="w-3.5 h-3.5" strokeWidth={1.75} /> Perdido
                                                 </button>
                                                 {/* Salvar edição: keepStatus=true -> NÃO rebaixa o status. Ganha continua Ganha. */}
@@ -2990,7 +3008,7 @@ Disponibilidade: ${disponibilidade}`;
                                                 </button>
                                                 {/* Rebaixar Ganha->Pauta: AÇÃO EXPLÍCITA e consciente (Ganha está ligada à operação/faturamento).
                                                     Só master, só quando a cotação reaberta já é Ganha. Salvar edição NUNCA rebaixa. */}
-                                                {editingId && currentUser?.role === 'master' && history.find(h => h.id === editingId)?.status === 'won' && (
+                                                {podeRebaixarGanha && (
                                                     <button
                                                         disabled={savingQuote}
                                                         onClick={() => { if (window.confirm('Esta cotação está GANHA (ligada à operação no Pipefy e ao faturamento). Voltar pra Pauta pode gerar inconsistência. Confirmar o rebaixamento?')) saveQuote('pending', true); }}
