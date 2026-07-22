@@ -23,6 +23,12 @@ const MOSTRAR_ACOES_COMERCIAL = true;
 // transparência: veem todas, editam só as próprias; dono em destaque). O gatilho automático de
 // entrada no "Mandar pro Ramper" fica ativo. Tabelas neg_ e RLS já aplicadas. Voltar a ocultar = false.
 const MOSTRAR_NEGOCIACOES = true;
+
+// Link direto pro card no Pipefy: usa a URL exata salva (pipefyCardUrl) e, no fallback,
+// monta o deep-link universal pelo id (open-cards/<id>). null = carga sem card no Pipefy.
+const pipefyCardLink = (q?: { pipefyCardUrl?: string; pipefyCardId?: string }): string | null =>
+    q?.pipefyCardUrl || (q?.pipefyCardId ? `https://app.pipefy.com/open-cards/${q.pipefyCardId}` : null);
+
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
@@ -192,6 +198,8 @@ const App: React.FC = () => {
     const [newCustomerLogo, setNewCustomerLogo] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [showCelebration, setShowCelebration] = useState(false);
+    // Link do card recém-criado no Pipefy (botão "Abrir card no Pipefy" pós-envio).
+    const [lastPipefyUrl, setLastPipefyUrl] = useState<string | null>(null);
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
     // Relatório diário (só master): período + resultado calculado do banco (determinístico).
     const [reportPreset, setReportPreset] = useState<'hoje' | 'ontem' | '7d' | '30d' | 'mes'>('hoje');
@@ -1083,9 +1091,10 @@ const App: React.FC = () => {
                 titulo: [wonData.clienteNomeOperacao, rota].map(s => (s || '').trim()).filter(Boolean).join(' — '),
             });
             if (pipefyRes.ok && pipefyRes.cardId) {
-                // Persiste a trava de duplicado + os ids escolhidos + os 3 campos espelhados.
-                finalQuote = { ...updatedQuote, pipefyCardId: pipefyRes.cardId, pipefySentAt: new Date().toISOString(), clientePipefyId: wonData.clientePipefyId, solicitantePipefyId: wonData.solicitantePipefyId };
+                // Persiste a trava de duplicado + os ids escolhidos + os 3 campos espelhados + a URL do card.
+                finalQuote = { ...updatedQuote, pipefyCardId: pipefyRes.cardId, pipefyCardUrl: pipefyRes.cardUrl || undefined, pipefySentAt: new Date().toISOString(), clientePipefyId: wonData.clientePipefyId, solicitantePipefyId: wonData.solicitantePipefyId };
                 await updateFreightCalculation(finalQuote);
+                setLastPipefyUrl(pipefyCardLink(finalQuote)); // botão "Abrir card no Pipefy" na celebração
                 pipefyMsg = ' e enviada pro Pipefy';
             } else {
                 pipefyMsg = ` — ⚠️ operação salva, mas falhou enviar pro Pipefy: ${pipefyRes.error || 'erro desconhecido'}`;
@@ -1098,7 +1107,9 @@ const App: React.FC = () => {
         const pipefyFailed = pipefyMsg.includes('⚠️');
         if (!pipefyFailed) {
             setShowCelebration(true);
-            setTimeout(() => setShowCelebration(false), 4000);
+            // Sem card do Pipefy: mantém o auto-fechar de 4s. Com card: fica aberta pro operador
+            // clicar em "Abrir card no Pipefy" (fecha no botão Fechar). Nunca some antes de poder clicar.
+            if (!pipefyCardLink(finalQuote)) setTimeout(() => setShowCelebration(false), 4000);
         }
         showFeedback(`Carga confirmada${pipefyMsg}!`, pipefyFailed ? 'error' : 'success');
         resetForm();
@@ -3111,7 +3122,13 @@ Disponibilidade: ${disponibilidade}`;
                                                 <p className="text-[8px] font-medium text-[#6b7280] uppercase">Lucro: R$ {formatCur(profitValue)}</p>
                                             </div>
                                             <div className="w-32 text-right"><p className="text-base font-medium text-[#111827]">R$ {formatCur(h.totalFreight)}</p></div>
-                                            <div className="w-28 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                            <div className="w-40 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                {/* Abrir card no Pipefy (cargas já enviadas) — visível a todos; usa URL salva ou open-cards/<id>. */}
+                                                {pipefyCardLink(h) && (
+                                                    <a href={pipefyCardLink(h)!} target="_blank" rel="noopener noreferrer" title="Abrir card no Pipefy" className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg">
+                                                        <Send className="w-4 h-4" />
+                                                    </a>
+                                                )}
                                                 <button onClick={() => loadQuote(h)} title="Editar" className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg">
                                                     <Edit3 className="w-4 h-4" />
                                                 </button>
@@ -4055,10 +4072,20 @@ Disponibilidade: ${disponibilidade}`;
                         {[...Array(50)].map((_, i) => (
                             <div key={i} className="confetti" style={{ left: `${Math.random() * 100}vw`, animationDelay: `${Math.random() * 2}s`, backgroundColor: ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00bcd4', '#e91e63'][Math.floor(Math.random() * 7)], width: `${Math.random() * 10 + 5}px`, height: `${Math.random() * 20 + 10}px` }} />
                         ))}
-                        <div className="bg-white p-12 rounded-xl shadow-sm text-center celebration-text relative z-10 border border-[#e5e7eb]">
+                        <div className="bg-white p-12 rounded-xl shadow-sm text-center celebration-text relative z-10 border border-[#e5e7eb] pointer-events-auto">
                             <div className="text-7xl mb-6">🎉 💸 🚚</div>
                             <h1 className="text-4xl font-medium text-emerald-600 mb-2 tracking-tight">Venda Fechada!</h1>
                             <p className="text-[#6b7280] font-normal text-sm mt-2">Parabéns pelo excelente trabalho</p>
+                            {lastPipefyUrl && (
+                                <div className="mt-7 flex flex-col items-center gap-3">
+                                    <a href={lastPipefyUrl} target="_blank" rel="noopener noreferrer"
+                                        onClick={() => { setShowCelebration(false); }}
+                                        className="inline-flex items-center gap-2 bg-[#1d6fb8] text-white px-6 py-3 rounded-lg font-medium text-sm hover:bg-[#1a5f9e] transition-colors">
+                                        <Send className="w-4 h-4" strokeWidth={1.75} /> Abrir card no Pipefy
+                                    </a>
+                                    <button onClick={() => setShowCelebration(false)} className="text-xs font-medium text-[#6b7280] hover:text-[#111827]">Fechar</button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )
