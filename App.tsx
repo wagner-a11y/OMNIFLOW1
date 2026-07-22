@@ -30,6 +30,7 @@ import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
 import { createNegociacaoFromRamper } from './services/negociacoes';
+import { buildQuoteChanges, registrarAlteracao, getAlteracoes, AlteracaoCotacao } from './services/auditoria';
 import { createPipefyCard } from './services/pipefy';
 import { PipefyAutocomplete } from './components/PipefyAutocomplete';
 import { PipefyBoard } from './components/PipefyBoard';
@@ -273,6 +274,10 @@ const App: React.FC = () => {
     const savingQuoteRef = useRef(false);
     // Última cotação salva: fonte da verdade pro card do Ramper (data de criação + valores gravados).
     const [lastSavedQuote, setLastSavedQuote] = useState<FreightCalculation | null>(null);
+    // Modal do histórico de auditoria (só master): cotação alvo + registros carregados.
+    const [auditQuote, setAuditQuote] = useState<FreightCalculation | null>(null);
+    const [auditLog, setAuditLog] = useState<AlteracaoCotacao[] | null>(null);
+    const abrirAuditoria = async (q: FreightCalculation) => { setAuditQuote(q); setAuditLog(null); setAuditLog(await getAlteracoes(q.id)); };
 
     // Importar Solicitação (leitura inteligente via Gemini)
     const [showImportModal, setShowImportModal] = useState(false);
@@ -1320,6 +1325,12 @@ const App: React.FC = () => {
             if (!wasCreating) {
                 const result = await updateFreightCalculation(data);
                 if (result.success) {
+                    // Auditoria (Parte C): registra o diff antes/depois SÓ em edição, best-effort.
+                    if (existingQuote) {
+                        const nomeCli = (id?: string) => customers.find(c => c.id === id)?.name || '—';
+                        const mudancas = buildQuoteChanges(existingQuote, data, nomeCli(existingQuote.customerId), nomeCli(data.customerId));
+                        registrarAlteracao(data, mudancas, { id: currentUser?.id, name: currentUser?.name });
+                    }
                     setHistory(prev => prev.map(h => h.id === editingId ? data : h));
                     setLastSavedQuote(data);
                     if (stayOnForm) {
@@ -3107,6 +3118,12 @@ Disponibilidade: ${disponibilidade}`;
                                                 <button onClick={() => duplicateQuote(h)} title="Duplicar como nova cotação" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg">
                                                     <CopyPlus className="w-4 h-4" />
                                                 </button>
+                                                {/* Histórico de alterações (auditoria): só master. Abre modal com quem mexeu e o antes/depois. */}
+                                                {currentUser.role === 'master' && (
+                                                    <button onClick={() => abrirAuditoria(h)} title="Histórico de alterações" className="p-2 text-[#6b7280] hover:bg-[#f9fafb] rounded-lg">
+                                                        <Clock className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                                 {/* Apagar (soft delete/lixeira): master apaga qualquer uma; operador só as PRÓPRIAS e
                                                     NÃO-Ganha (Ganha = Pipefy/faturamento, só master). O guard na função é a trava real. */}
                                                 {(currentUser.role === 'master' || (h.status !== 'won' && h.createdBy === currentUser.id)) && (
@@ -3218,6 +3235,51 @@ Disponibilidade: ${disponibilidade}`;
                     )}
                 </div>
             </main >
+
+            {/* Modal: Histórico de alterações (auditoria) — só master (o ícone só aparece pra master) */}
+            {auditQuote && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setAuditQuote(null); setAuditLog(null); }}>
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-3 p-6 border-b border-[#f3f4f6]">
+                            <Clock className="w-5 h-5 text-[#1d6fb8]" />
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-[#111827]">Histórico de alterações</h3>
+                                <p className="text-xs text-[#6b7280]">{auditQuote.proposalNumber} · {(auditQuote.origin || '—').split(',')[0]} → {(auditQuote.destination || '—').split(',')[0]}</p>
+                            </div>
+                            <button onClick={() => { setAuditQuote(null); setAuditLog(null); }} className="p-1.5 text-[#6b7280] hover:bg-[#f9fafb] rounded-lg"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="p-6 overflow-y-auto space-y-4">
+                            {auditLog === null ? (
+                                <p className="text-sm text-[#6b7280]">Carregando…</p>
+                            ) : auditLog.length === 0 ? (
+                                <p className="text-sm text-[#6b7280]">Nenhuma alteração registrada nesta cotação. (A auditoria registra edições feitas a partir de agora; criação e visualização não entram.)</p>
+                            ) : auditLog.map(a => (
+                                <div key={a.id} className="border border-[#e5e7eb] rounded-xl p-4">
+                                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                                        <span className="text-sm font-medium text-[#111827]">{a.alteradoPorNome || 'Usuário'}</span>
+                                        <span className="text-xs text-[#9ca3af]">{new Date(a.alteradoEm).toLocaleString('pt-BR')}</span>
+                                        {a.statusNoMomento && (
+                                            <span className={`text-[9px] uppercase font-medium px-1.5 py-0.5 rounded ${a.statusNoMomento === 'won' ? 'bg-emerald-100 text-emerald-700' : a.statusNoMomento === 'lost' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                {a.statusNoMomento === 'won' ? 'era Ganha' : a.statusNoMomento === 'lost' ? 'era Perdida' : 'em Pauta'}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="space-y-1">
+                                        {a.mudancas.map((c, i) => (
+                                            <div key={i} className="text-xs flex flex-wrap items-center gap-2">
+                                                <span className="font-medium text-[#6b7280] w-32 shrink-0">{c.label}</span>
+                                                <span className="text-red-600 line-through">{String(c.de)}</span>
+                                                <ArrowRight className="w-3 h-3 text-[#9ca3af]" />
+                                                <span className="text-emerald-700 font-medium">{String(c.para)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Validação de Margem */}
             {/* Modal: Trocar senha (usuário logado) */}
