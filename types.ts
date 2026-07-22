@@ -122,6 +122,8 @@ export interface FreightCalculation {
     outrasNecessidadesPipefy?: string; // select Pipefy "Outras Necessidades" (Compulog/Comprovei) — separado da obs livre
     necessidadeGR?: string[];         // checklist Pipefy "Necessidade GR" (lista de marcados)
     deletedAt?: string;               // lixeira (soft delete): ISO timestamp de quando foi movida; ausente = ativa
+    deletedBy?: string;               // quem moveu pra lixeira (id); nulo nas apagadas antes deste registro
+    deletedByName?: string;           // nome de quem apagou (p/ o relatório de apagadas)
     // Operation Pipeline Fields
     coletaDate?: string;
     entregaDate?: string;
