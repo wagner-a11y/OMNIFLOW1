@@ -115,6 +115,7 @@ export interface FreightCalculation {
     lostObs?: string;
     lostFileUrl?: string;
     pipefyCardId?: string;    // id do card na operação (Pipefy); presente = já enviado (trava duplicado)
+    pipefyCardUrl?: string;   // URL exata do card devolvida pelo Pipefy (p/ o botão "Abrir card no Pipefy")
     pipefySentAt?: string;    // quando foi enviado pro Pipefy
     clientePipefyId?: string;     // id do registro escolhido no autocomplete (tabela Clientes do Pipefy)
     solicitantePipefyId?: string; // id do registro escolhido (tabela Solicitantes do Pipefy)
