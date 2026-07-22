@@ -412,7 +412,41 @@ export const getDeletedFreightCalculations = async (): Promise<FreightCalculatio
     return (data || []).map(mapFreightRow);
 };
 
-export const createFreightCalculation = async (calc: FreightCalculation): Promise<{ success: boolean; data?: FreightCalculation; error?: string }> => {
+// Janela (ms) para considerar uma cotação "idêntica recém-criada" (defesa anti-duplicação).
+const DUP_WINDOW_MS = 15000;
+
+// Checa se já existe cotação idêntica do mesmo autor criada nos últimos segundos.
+// Camada 3 da trava anti-duplicado: protege TODOS os caminhos de criação (clique repetido,
+// retry de rede, reenvio), não só o botão. Fail-open: se a checagem falhar, deixa criar.
+const findRecentDuplicate = async (calc: FreightCalculation): Promise<string | null> => {
+    try {
+        const since = Date.now() - DUP_WINDOW_MS;
+        const { data, error } = await supabase
+            .from('freight_calculations')
+            .select('id, created_at, total_freight')
+            .eq('created_by', calc.createdBy || calc.updatedBy || '')
+            .eq('customer_id', calc.customerId || '')
+            .eq('origin', calc.origin)
+            .eq('destination', calc.destination)
+            .is('deleted_at', null)
+            .gte('created_at', since)
+            .limit(20);
+        if (error || !data) return null;
+        // Casa também pelo valor (arredondado a 2 casas) pra não confundir re-cotação real.
+        const alvo = Math.round((calc.totalFreight || 0) * 100);
+        const hit = (data as any[]).find(r => Math.round(Number(r.total_freight || 0) * 100) === alvo && r.id !== calc.id);
+        return hit ? hit.id : null;
+    } catch { return null; }
+};
+
+export const createFreightCalculation = async (calc: FreightCalculation): Promise<{ success: boolean; data?: FreightCalculation; error?: string; duplicate?: boolean }> => {
+    // Anti-duplicação (camada 3): se já há uma idêntica recém-criada, NÃO insere de novo.
+    const dupId = await findRecentDuplicate(calc);
+    if (dupId) {
+        console.warn(`createFreightCalculation: duplicata evitada (idêntica recém-criada id=${dupId}).`);
+        return { success: true, data: { ...calc, id: dupId }, duplicate: true };
+    }
+
     const dbRecord = {
         id: calc.id,
         proposal_number: calc.proposalNumber,
