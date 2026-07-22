@@ -3107,12 +3107,20 @@ Disponibilidade: ${disponibilidade}`;
                                                 <button onClick={() => duplicateQuote(h)} title="Duplicar como nova cotação" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg">
                                                     <CopyPlus className="w-4 h-4" />
                                                 </button>
-                                                {currentUser.role === 'master' && (
+                                                {/* Apagar (soft delete/lixeira): master apaga qualquer uma; operador só as PRÓPRIAS e
+                                                    NÃO-Ganha (Ganha = Pipefy/faturamento, só master). O guard na função é a trava real. */}
+                                                {(currentUser.role === 'master' || (h.status !== 'won' && h.createdBy === currentUser.id)) && (
                                                     <button onClick={async () => {
-                                                        if (await deleteFreightCalculation(h.id)) {
+                                                        const r = await deleteFreightCalculation(h.id, { id: currentUser.id, role: currentUser.role });
+                                                        if (r.ok) {
                                                             setHistory(prev => prev.filter(i => i.id !== h.id));
                                                             setTrash(prev => [{ ...h, deletedAt: new Date().toISOString() }, ...prev]);
                                                             showFeedback('Cotação movida para a lixeira.');
+                                                        } else {
+                                                            const msg = r.motivo === 'ganha_so_master' ? 'Cotação Ganha só o gestor apaga.'
+                                                                : r.motivo === 'nao_e_dona' ? 'Você só pode apagar cotações que criou.'
+                                                                : 'Não foi possível mover para a lixeira.';
+                                                            showFeedback(msg, 'error');
                                                         }
                                                     }} title="Mover para a lixeira" className="p-2 text-red-400 hover:bg-red-50 rounded-lg">
                                                         <Trash2 className="w-4 h-4" />

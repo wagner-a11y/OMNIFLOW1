@@ -681,7 +681,24 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
 };
 
 // Mover para a lixeira (soft delete): marca deleted_at, NÃO apaga o registro.
-export const deleteFreightCalculation = async (id: string): Promise<boolean> => {
+// Guard por papel (defesa além do botão da UI):
+//  - master: apaga qualquer cotação.
+//  - operador: só cotação NÃO-Ganha e criada por ele mesmo. Ganha (won) está ligada ao
+//    Pipefy/faturamento -> só master apaga. Retorna {ok, motivo} pra UI avisar.
+export const deleteFreightCalculation = async (
+    id: string,
+    actor?: { id?: string; role?: string }
+): Promise<{ ok: boolean; motivo?: string }> => {
+    if (actor && actor.role !== 'master') {
+        const { data: alvo, error: e0 } = await supabase
+            .from('freight_calculations')
+            .select('status, created_by')
+            .eq('id', id)
+            .maybeSingle();
+        if (e0 || !alvo) return { ok: false, motivo: 'nao_encontrada' };
+        if (alvo.status === 'won') return { ok: false, motivo: 'ganha_so_master' };
+        if (alvo.created_by && actor.id && alvo.created_by !== actor.id) return { ok: false, motivo: 'nao_e_dona' };
+    }
     const { error } = await supabase
         .from('freight_calculations')
         .update({ deleted_at: new Date().toISOString() })
@@ -689,9 +706,9 @@ export const deleteFreightCalculation = async (id: string): Promise<boolean> => 
 
     if (error) {
         console.error('Error moving freight calculation to trash:', error);
-        return false;
+        return { ok: false, motivo: error.message };
     }
-    return true;
+    return { ok: true };
 };
 
 // Restaurar da lixeira: limpa deleted_at, voltando a cotação para o Histórico.
