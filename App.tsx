@@ -3111,10 +3111,10 @@ Disponibilidade: ${disponibilidade}`;
                                                     NÃO-Ganha (Ganha = Pipefy/faturamento, só master). O guard na função é a trava real. */}
                                                 {(currentUser.role === 'master' || (h.status !== 'won' && h.createdBy === currentUser.id)) && (
                                                     <button onClick={async () => {
-                                                        const r = await deleteFreightCalculation(h.id, { id: currentUser.id, role: currentUser.role });
+                                                        const r = await deleteFreightCalculation(h.id, { id: currentUser.id, name: currentUser.name, role: currentUser.role });
                                                         if (r.ok) {
                                                             setHistory(prev => prev.filter(i => i.id !== h.id));
-                                                            setTrash(prev => [{ ...h, deletedAt: new Date().toISOString() }, ...prev]);
+                                                            setTrash(prev => [{ ...h, deletedAt: new Date().toISOString(), deletedBy: currentUser.id, deletedByName: currentUser.name }, ...prev]);
                                                             showFeedback('Cotação movida para a lixeira.');
                                                         } else {
                                                             const msg = r.motivo === 'ganha_so_master' ? 'Cotação Ganha só o gestor apaga.'
@@ -3164,13 +3164,19 @@ Disponibilidade: ${disponibilidade}`;
                                             return (
                                                 <div key={h.id} className="bg-white h-20 px-10 rounded-xl border shadow-sm flex items-center gap-6 group hover:border-blue-500 transition-all">
                                                     <div className="w-24"><span className={`px-3 py-1.5 rounded-lg text-[8px] font-medium text-white uppercase ${h.status === 'won' ? 'bg-emerald-500' : h.status === 'lost' ? 'bg-red-500' : 'bg-amber-400'}`}>{h.status === 'won' ? 'GANHO' : h.status === 'lost' ? 'PERDIDO' : 'PAUTA'}</span></div>
-                                                    <span className="w-32 text-[10px] font-medium text-[#6b7280]">
-                                                        {(() => {
-                                                            if (!h.deletedAt) return '—';
-                                                            const d = new Date(h.deletedAt);
-                                                            return isNaN(d.getTime()) ? '—' : d.toLocaleString();
-                                                        })()}
-                                                    </span>
+                                                    <div className="w-40 flex flex-col">
+                                                        <span className="text-[10px] font-medium text-[#6b7280]">
+                                                            {(() => {
+                                                                if (!h.deletedAt) return '—';
+                                                                const d = new Date(h.deletedAt);
+                                                                return isNaN(d.getTime()) ? '—' : d.toLocaleString();
+                                                            })()}
+                                                        </span>
+                                                        {/* Quem apagou (relatório de apagadas). Em branco nas apagadas antes deste registro. */}
+                                                        <span className="text-[9px] font-medium text-[#9ca3af] uppercase tracking-wide truncate">
+                                                            {h.deletedByName ? `por ${h.deletedByName}` : 'por —'}
+                                                        </span>
+                                                    </div>
                                                     <div className="flex-1 min-w-0 flex flex-col justify-center">
                                                         <div className="flex items-center gap-2">
                                                             <span className="font-medium text-[#111827] text-xs">{h.proposalNumber}</span>

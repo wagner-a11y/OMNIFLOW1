@@ -375,7 +375,9 @@ const mapFreightRow = (item: any): FreightCalculation => ({
         mercadoriaNovaUsada: item.mercadoria_nova_usada || undefined,
         outrasNecessidadesPipefy: item.outras_necessidades_pipefy || undefined,
         necessidadeGR: Array.isArray(item.necessidade_gr) ? item.necessidade_gr : undefined,
-        deletedAt: item.deleted_at || undefined
+        deletedAt: item.deleted_at || undefined,
+        deletedBy: item.deleted_by || undefined,
+        deletedByName: item.deleted_by_name || undefined
 });
 
 // Histórico: somente cotações ativas (não estão na lixeira).
@@ -687,7 +689,7 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
 //    Pipefy/faturamento -> só master apaga. Retorna {ok, motivo} pra UI avisar.
 export const deleteFreightCalculation = async (
     id: string,
-    actor?: { id?: string; role?: string }
+    actor?: { id?: string; name?: string; role?: string }
 ): Promise<{ ok: boolean; motivo?: string }> => {
     if (actor && actor.role !== 'master') {
         const { data: alvo, error: e0 } = await supabase
@@ -701,7 +703,8 @@ export const deleteFreightCalculation = async (
     }
     const { error } = await supabase
         .from('freight_calculations')
-        .update({ deleted_at: new Date().toISOString() })
+        // Registra QUEM apagou (relatório de apagadas), junto do quando.
+        .update({ deleted_at: new Date().toISOString(), deleted_by: actor?.id || null, deleted_by_name: actor?.name || null })
         .eq('id', id);
 
     if (error) {
