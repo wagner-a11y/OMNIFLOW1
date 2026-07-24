@@ -23,7 +23,10 @@ export function buildQuoteChanges(
     clienteAntes: string, clienteDepois: string,
 ): Mudanca[] {
     const m: Mudanca[] = [];
-    const add = (campo: string, label: string, de: unknown, para: unknown) => m.push({ campo, label, de, para });
+    // Arredonda valores numéricos a 2 casas ao gravar: o log guarda 1294.59, não 1294.5914844649021
+    // (mata o ruído de float; a comparação difN já é em centavos, então isso não muda o que conta como mudança).
+    const r2 = (v: unknown) => typeof v === 'number' ? Math.round(v * 100) / 100 : v;
+    const add = (campo: string, label: string, de: unknown, para: unknown) => m.push({ campo, label, de: r2(de), para: r2(para) });
 
     if (difS(before.status, after.status)) add('status', 'Status', STATUS_LABEL[before.status] || before.status, STATUS_LABEL[after.status] || after.status);
     if (difN(before.totalFreight, after.totalFreight)) add('totalFreight', 'Valor do frete', before.totalFreight, after.totalFreight);
