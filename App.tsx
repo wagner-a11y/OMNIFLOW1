@@ -29,6 +29,17 @@ const MOSTRAR_NEGOCIACOES = true;
 const pipefyCardLink = (q?: { pipefyCardUrl?: string; pipefyCardId?: string }): string | null =>
     q?.pipefyCardUrl || (q?.pipefyCardId ? `https://app.pipefy.com/open-cards/${q.pipefyCardId}` : null);
 
+// Próximo número de proposta = MAIOR número existente + 1. Não usa history.length (que conta
+// duplicados/apagados e por isso colidia). Só afeta a PRÓXIMA criação — NÃO renumera as antigas.
+const nextProposalNumber = (hist: { proposalNumber?: string }[]): string => {
+    const maxN = hist.reduce((mx, h) => {
+        const m = /(\d+)\s*$/.exec(h.proposalNumber || '');
+        const n = m ? parseInt(m[1], 10) : 0;
+        return n > mx ? n : mx;
+    }, 0);
+    return `CT-${new Date().getFullYear()}-${(maxN + 1).toString().padStart(4, '0')}`;
+};
+
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
@@ -283,6 +294,9 @@ const App: React.FC = () => {
     // síncrona, pega clique repetido antes do re-render). Ver saveQuote.
     const [savingQuote, setSavingQuote] = useState(false);
     const savingQuoteRef = useRef(false);
+    // Anti-ruído da auditoria: guarda a assinatura do último diff gravado p/ não logar o MESMO
+    // conjunto de mudanças duas vezes (double-save/re-render) numa janela curta.
+    const lastAuditRef = useRef<{ sig: string; at: number } | null>(null);
     // Última cotação salva: fonte da verdade pro card do Ramper (data de criação + valores gravados).
     const [lastSavedQuote, setLastSavedQuote] = useState<FreightCalculation | null>(null);
     // Modal do histórico de auditoria (só master): cotação alvo + registros carregados.
@@ -1127,9 +1141,7 @@ const App: React.FC = () => {
         if (!pipefyFailed) {
             setCelebrationValue(Number(wonData.nossoFrete) || finalQuote.totalFreight || 0);
             setShowCelebration(true);
-            // Sem card do Pipefy: mantém o auto-fechar de 4s. Com card: fica aberta pro operador
-            // clicar em "Abrir card no Pipefy" (fecha no botão Fechar). Nunca some antes de poder clicar.
-            if (!pipefyCardLink(finalQuote)) setTimeout(() => setShowCelebration(false), 4000);
+            // A tela SEMPRE espera a interação (X/Fechar ou "Abrir card no Pipefy"); nunca some sozinha.
         }
         showFeedback(`Carga confirmada${pipefyMsg}!`, pipefyFailed ? 'error' : 'success');
         resetForm();
@@ -1323,7 +1335,7 @@ const App: React.FC = () => {
 
         const data: FreightCalculation = {
             id: quoteId,
-            proposalNumber: editingId ? (history.find(h => h.id === editingId)?.proposalNumber || '') : `CT-${new Date().getFullYear()}-${(history.length + 1).toString().padStart(4, '0')}`,
+            proposalNumber: editingId ? (history.find(h => h.id === editingId)?.proposalNumber || '') : nextProposalNumber(history),
             clientReference, origin, destination, destinations: destinations.map(d => (d || '').trim()).filter(Boolean), distanceKm: parseFloat(distanceKm.replace(',', '.')) || 0, vehicleType: vehicleType as VehicleType, merchandiseType, weight: parseFloat(weight.replace(',', '.')) || 0,
             customerId: selectedCustomerId, suggestedFreight: suggestedFreightANTT, solicitante, solicitantePipefyId,
             carroceriaTipoOperacao: implemento || undefined,   // Implemento da calculadora -> flui pra carga fechada/card
@@ -1360,7 +1372,14 @@ const App: React.FC = () => {
                     if (existingQuote) {
                         const nomeCli = (id?: string) => customers.find(c => c.id === id)?.name || '—';
                         const mudancas = buildQuoteChanges(existingQuote, data, nomeCli(existingQuote.customerId), nomeCli(data.customerId));
-                        registrarAlteracao(data, mudancas, { id: currentUser?.id, name: currentUser?.name });
+                        // Só grava se houve mudança E não é o mesmo diff recém-gravado (double-save em <8s).
+                        const sig = `${data.id}|${JSON.stringify(mudancas)}`;
+                        const nowMs = Date.now();
+                        const dup = lastAuditRef.current && lastAuditRef.current.sig === sig && (nowMs - lastAuditRef.current.at) < 8000;
+                        if (mudancas.length && !dup) {
+                            lastAuditRef.current = { sig, at: nowMs };
+                            registrarAlteracao(data, mudancas, { id: currentUser?.id, name: currentUser?.name });
+                        }
                     }
                     setHistory(prev => prev.map(h => h.id === editingId ? data : h));
                     setLastSavedQuote(data);
@@ -1622,6 +1641,7 @@ Disponibilidade: ${disponibilidade}`;
             // Responsável do card = quem CRIOU o frete (createdBy). Resolve o e-mail pelo perfil (users);
             // se o criador for o próprio remetente, usa o e-mail dele. O casamento com o Ramper é na Edge Function.
             const criadorId = q?.createdBy || currentUser?.id;
+            const criadorNome = q?.createdByName || users.find(u => u.id === criadorId)?.name || currentUser?.name || null;
             const responsavelEmail = (criadorId && users.find(u => u.id === criadorId)?.username)
                 || (criadorId === currentUser?.id ? currentUser?.username : '') || '';
 
@@ -1665,7 +1685,8 @@ Disponibilidade: ${disponibilidade}`;
                             veiculo: veiculoVal || null,
                             valorCotado: Number(q?.totalFreight ?? calcData.finalFreight) || null,
                             ramperOpportunityId: rampId ? String(rampId) : null,
-                        }, currentUser.id, currentUser.name);
+                            // Dono da negociação = quem CRIOU o frete (createdBy), não quem mandou pro Ramper.
+                        }, criadorId || currentUser.id, criadorNome || currentUser.name);
                     } catch (e) { console.error('negociacao auto-entry:', e); }
                 }
                 setShowPostSaveModal(false);
@@ -3130,11 +3151,15 @@ Disponibilidade: ${disponibilidade}`;
                                             </div>
                                             <div className="w-32 flex items-center gap-2">
                                                 <div className="w-7 h-7 rounded-lg bg-[#f9fafb] flex items-center justify-center font-medium text-[10px] text-[#111827] shadow-sm border border-[#e5e7eb]">
-                                                    {h.updatedByName?.charAt(0) || 'A'}
+                                                    {h.createdByName?.charAt(0) || 'A'}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-[9px] font-medium text-[#111827] uppercase truncate">{h.updatedByName || 'Admin'}</p>
+                                                    {/* Responsável = CRIADOR (createdByName), imutável. "editado por" mostra o último editor sem virar dono. */}
+                                                    <p className="text-[9px] font-medium text-[#111827] uppercase truncate">{h.createdByName || 'Admin'}</p>
                                                     <p className="text-[7px] font-medium text-[#6b7280] uppercase tracking-tighter">Responsável</p>
+                                                    {h.updatedByName && h.updatedByName !== h.createdByName && (
+                                                        <p className="text-[7px] font-medium text-[#9ca3af] tracking-tight truncate">editado por {h.updatedByName}</p>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="w-28 text-right">
@@ -3467,7 +3492,15 @@ Disponibilidade: ${disponibilidade}`;
             {/* Modal pós-salvar: Nova Cotação ou Ver Histórico */}
             {showPostSaveModal && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-6 animate-fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-xl border border-[#e5e7eb] shadow-sm p-6 text-center">
+                    <div className="relative bg-white w-full max-w-sm rounded-xl border border-[#e5e7eb] shadow-sm p-6 text-center">
+                        {/* Fechar: volta pra calculadora com a cotação ABERTA (restaura editingId p/ não duplicar no próximo Salvar). */}
+                        <button
+                            onClick={() => { setShowPostSaveModal(false); if (lastSavedQuote) setEditingId(lastSavedQuote.id); }}
+                            title="Fechar e continuar na calculadora"
+                            className="absolute top-3 right-3 p-1.5 text-[#9ca3af] hover:text-[#111827] hover:bg-[#f9fafb] rounded-lg transition-colors"
+                        >
+                            <X className="w-4 h-4" strokeWidth={2} />
+                        </button>
                         <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-emerald-50 flex items-center justify-center">
                             <CheckCircle className="w-6 h-6 text-emerald-600" strokeWidth={1.75} />
                         </div>
@@ -4097,6 +4130,13 @@ Disponibilidade: ${disponibilidade}`;
                         <div className="absolute inset-0 bg-[#0b1a2b]/55 backdrop-blur-md" style={{ animation: 'vf-backdrop .4s ease-out both' }} onClick={() => setShowCelebration(false)} />
                         <div className="relative z-10 w-full max-w-md bg-white rounded-2xl border border-[#e5e7eb] shadow-[0_20px_60px_-15px_rgba(11,26,43,0.35)] px-10 py-12 text-center pointer-events-auto"
                             style={{ animation: 'vf-card .55s cubic-bezier(0.22,1,0.36,1) both' }} onClick={e => e.stopPropagation()}>
+                            {/* Fechar: sempre disponível, volta pra calculadora (independe de ter card no Pipefy). */}
+                            <button
+                                onClick={() => setShowCelebration(false)}
+                                title="Fechar e voltar pra calculadora"
+                                className="absolute top-3.5 right-3.5 p-1.5 text-[#9ca3af] hover:text-[#111827] hover:bg-[#f3f4f6] rounded-lg transition-colors">
+                                <X className="w-4 h-4" strokeWidth={2} />
+                            </button>
                             {/* Selo discreto de conclusão */}
                             <div className="w-12 h-12 mx-auto rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-6">
                                 <Check className="w-6 h-6 text-emerald-600" strokeWidth={2.25} />
