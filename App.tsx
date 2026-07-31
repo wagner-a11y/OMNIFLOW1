@@ -243,6 +243,27 @@ const App: React.FC = () => {
     const [selectedCustomerId, setSelectedCustomerId] = useState('');
     const [baseFreight, setBaseFreight] = useState<string>('0');
     const [tolls, setTolls] = useState<string>('0');
+    // --- Fonte única Qualp (rota simples). Multi-parada segue no Google (Fase 2). ---
+    // Snapshot da última consulta ao Qualp. Só vale para o MESMO tipo de carga e
+    // nº de eixos consultados: mudou depois, o piso está velho e some até recalcular.
+    const [qualpRota, setQualpRota] = useState<{
+        km: number; pedagioCheio: number; pedagioTag: number; piso: number | null;
+        cargoType: string; eixos: number | undefined;
+        resolucao: { nome: string; data: string | null; url: string | null } | null;
+        confirmarPiso: boolean; idTransacao: string | null;
+    } | null>(null);
+    // Falha bloqueante do Qualp: trava o fechamento da cotação de rota simples.
+    const [qualpBloqueio, setQualpBloqueio] = useState<string | null>(null);
+    // Piso da cotação já salva: mantido como está até o operador mandar recalcular.
+    const [pisoSalvo, setPisoSalvo] = useState<number | null>(null);
+    // Antes/depois do recálculo de uma cotação salva, pra ninguém fechar achando
+    // que o número é o antigo.
+    const [recalcDiff, setRecalcDiff] = useState<{
+        kmAntes: number; kmDepois: number; pedAntes: number; pedDepois: number;
+        pisoAntes: number | null; pisoDepois: number | null;
+    } | null>(null);
+    // Pedágio é read-only enquanto vier do Qualp; o operador libera pra sobrescrever.
+    const [pedagioLiberado, setPedagioLiberado] = useState(false);
     const [extraCosts, setExtraCosts] = useState<string>('0');
     const [extraCostsDescription, setExtraCostsDescription] = useState('');
     const [otherCosts, setOtherCosts] = useState<ExtraCostItem[]>([]);
@@ -1151,14 +1172,37 @@ const App: React.FC = () => {
     // Indica se o veículo selecionado possui tabela ANTT (piso mínimo aplicável).
     const hasAntt = vehicleHasANTT(vehicleType);
 
-    // Piso mínimo ANTT (Tabela A) = (km × CCD) + CC, conforme tipo de carga e eixos do veículo.
-    // Retorna null quando não aplicável (veículo sem ANTT, eixos/carga sem coeficiente).
+    // Rota multi-parada: continua no Google e na tabela ANTT local até a Fase 2.
+    const isMultiRota = destinations.length > 0;
+
+    // Piso mínimo ANTT.
+    // - Multi-parada: (km × CCD) + CC da Tabela A local, como sempre foi.
+    // - Rota simples: FONTE ÚNICA — o piso vem do Qualp, não é mais calculado aqui.
+    // Retorna null quando não aplicável; null vira "—" na tela e nunca zero.
     const anttFloor = useMemo(() => {
         if (!hasAntt) return null;
         const axles = vehicleConfigs[vehicleType]?.axles;
         const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
-        return computeANTTFloor(cargoType, axles, dist);
-    }, [hasAntt, vehicleType, cargoType, distanceKm, vehicleConfigs]);
+
+        if (isMultiRota) return computeANTTFloor(cargoType, axles, dist);
+
+        // O snapshot do Qualp só vale pra combinação que foi consultada: trocar o
+        // tipo de carga ou o veículo invalida o piso (cada carga é uma consulta).
+        if (qualpRota && qualpRota.cargoType === cargoType && qualpRota.eixos === axles) {
+            return qualpRota.piso;
+        }
+        // Cotação salva reaberta: mantém o piso que já estava lá até recalcular.
+        return pisoSalvo;
+    }, [hasAntt, vehicleType, cargoType, distanceKm, vehicleConfigs, isMultiRota, qualpRota, pisoSalvo]);
+
+    // Piso da rota simples pendente de consulta: houve troca de carga/veículo depois
+    // do último Qualp, então o número que estava na tela não vale mais.
+    const pisoDesatualizado = !isMultiRota && hasAntt && anttFloor === null && (qualpRota !== null || pisoSalvo !== null);
+
+    // Pedágio governado pelo Qualp (rota simples já consultada): read-only por
+    // padrão. `pedagioSobrescrito` acusa quando o operador mudou o valor na mão.
+    const pedagioDoQualp = !isMultiRota && qualpRota !== null;
+    const pedagioSobrescrito = pedagioDoQualp && Math.abs(num(tolls) - qualpRota!.pedagioCheio) > 0.005;
 
     // Veículos utilitários (Fiorino/Van/HR-VUC): frete base = KM × tarifa fixa, ignorando a tabela ANTT.
     const utilitarioRate = UTILITARIO_KM_RATES[vehicleType];
@@ -1214,31 +1258,75 @@ const App: React.FC = () => {
         return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent };
     }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes]);
 
-    const handleFetchDistance = async (overrideVehicle?: string) => {
+    // Consulta a rota simples no Qualp (fonte única). `capturarDiff` liga o
+    // antes/depois usado ao recalcular uma cotação já salva.
+    const consultarQualp = async (overrideVehicle?: string, capturarDiff = false) => {
         if (!origin || !destination) return;
         // overrideVehicle só é considerado quando for string (chamadas via onBlur/onClick passam um evento).
         const vt = (typeof overrideVehicle === 'string' && overrideVehicle) ? overrideVehicle : vehicleType;
+        const config = vehicleConfigs[vt];
+
+        const kmAntes = parseFloat(distanceKm.replace(',', '.')) || 0;
+        const pedAntes = num(tolls);
+        const pisoAntes = anttFloor;
+
         setLoadingDistance(true);
         try {
-            const config = vehicleConfigs[vt];
-            const result = await estimateDistance(origin, destination, vt, config?.axles);
+            const result = await estimateDistance(origin, destination, vt, config?.axles, cargoType);
+
             if (result.error) {
-                console.warn('Distance estimation failed:', result.error, result.details);
-                const detailStr = result.details?.google ? ` (Google: ${result.details.google})` : '';
-                showFeedback(`Erro no KM: ${result.error}${detailStr}`, 'error');
-                setDistanceKm('0'); // Reset to 0 on error to avoid confusion
+                // Fonte única: sem Qualp não há número confiável. NÃO cai pro Google
+                // e NÃO zera o km — trava o fechamento até a consulta voltar.
+                console.warn('Qualp bloqueou a rota:', result.error);
+                setQualpRota(null);
+                setQualpBloqueio(result.mensagem || result.error);
+                showFeedback(result.mensagem || `Qualp indisponível: ${result.error}`, 'error');
+                return;
+            }
+
+            setQualpBloqueio(null);
+            setDistanceKm(String(result.km));
+            setOrigin(result.originNormalized);
+            setDestination(result.destinationNormalized);
+            setTolls(maskCurrency(result.estimatedTolls));
+            setPedagioLiberado(false);   // volta a ser read-only a cada consulta nova
+            setPisoSalvo(null);          // o piso agora é o do Qualp, não o salvo
+            setQualpRota({
+                km: result.km,
+                pedagioCheio: result.estimatedTolls,
+                pedagioTag: result.tollsWithTag,
+                piso: result.pisoAntt,
+                cargoType,
+                eixos: config?.axles,
+                resolucao: result.resolucaoAntt,
+                confirmarPiso: result.confirmarPisoManualmente,
+                idTransacao: result.idTransacao,
+            });
+
+            if (capturarDiff) {
+                setRecalcDiff({
+                    kmAntes, kmDepois: result.km,
+                    pedAntes, pedDepois: result.estimatedTolls,
+                    pisoAntes, pisoDepois: result.pisoAntt,
+                });
+                showFeedback('Recalculado pelo Qualp — confira o antes/depois.');
             } else {
-                setDistanceKm(result.km.toString());
-                setOrigin(result.originNormalized);
-                setDestination(result.destinationNormalized);
-                setTolls(maskCurrency(result.estimatedTolls));
-                showFeedback("Rota sincronizada!");
+                setRecalcDiff(null);
+                showFeedback('Rota sincronizada pelo Qualp!');
             }
         } catch (err: any) {
             console.error(err);
+            setQualpRota(null);
+            setQualpBloqueio(`Falha na conexão com o Qualp: ${err.message}`);
             showFeedback(`Falha na conexão: ${err.message}`, 'error');
         } finally { setLoadingDistance(false); }
     };
+
+    const handleFetchDistance = (overrideVehicle?: string) => consultarQualp(overrideVehicle, false);
+
+    // Cotação já salva: o número antigo fica como está até o operador pedir. Só
+    // aqui o Qualp é consultado de novo, e o antes/depois aparece na tela.
+    const recalcularPeloQualp = () => consultarQualp(undefined, true);
 
     // Recalcula a rota multi-parada (coleta + destino + destinos extras). A distância TOTAL
     // alimenta o cálculo (distanceKm); o pedágio e a otimização vêm do backend. Não mexe na fórmula.
@@ -1307,6 +1395,13 @@ const App: React.FC = () => {
     const generateId = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
 
     const saveQuote = async (statusArg: QuoteStatus, bypassMarginCheck = false, stayOnForm = false, keepStatus = false) => {
+        // Fonte única: se o Qualp falhou depois do timeout + retry, a cotação de
+        // rota simples NÃO fecha. Sem fallback pro Google — número velho numa
+        // cotação é pior que cotação travada. Multi-parada não é afetada.
+        if (!isMultiRota && qualpBloqueio) {
+            showFeedback('Cotação travada: o Qualp não respondeu. Refaça a consulta da rota antes de salvar.', 'error');
+            return;
+        }
         // Congela o status: "Salvar" (keepStatus) NÃO rebaixa uma cotação já comprometida.
         // Numa edição, preserva o status salvo (Ganha continua Ganha); em cotação nova, usa o
         // status pedido. Só ações explícitas (Fechado/Perdido/Voltar pra Pauta) mudam o status.
@@ -1438,6 +1533,11 @@ const App: React.FC = () => {
         setImplemento(quote.carroceriaTipoOperacao || '');
         setOtherCosts(quote.otherCosts || []);
         setElapsedSeconds(quote.elaborationSeconds || 0); setIsTimerRunning(false);
+        // Cotação salva mantém km/pedágio/piso como foram gravados (podem ser do
+        // Google, de antes da fonte única). Nada é reconsultado na abertura: só o
+        // botão "Recalcular pelo Qualp" troca esses números, e aí mostra o antes/depois.
+        setQualpRota(null); setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false);
+        setPisoSalvo(quote.suggestedFreight > 0 ? quote.suggestedFreight : null);
         setActiveTab('new'); showFeedback("Editando...");
     };
 
@@ -1462,6 +1562,9 @@ const App: React.FC = () => {
         setEditingId(null);                       // cotação NOVA, não edição
         setElapsedSeconds(0); setIsTimerRunning(false);  // cronômetro do zero
         setOpenCostToClient(false);
+        // Duplicada herda os números da origem (podem ser do Google) até consultar o Qualp.
+        setQualpRota(null); setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false);
+        setPisoSalvo(quote.suggestedFreight > 0 ? quote.suggestedFreight : null);
         setActiveTab('new'); showFeedback("Cotação duplicada — ajuste e salve como nova.");
     };
 
@@ -1471,6 +1574,7 @@ const App: React.FC = () => {
         setDisponibilidade("Imediato"); setMerchandiseType(''); setCargoType('Carga geral'); setOtherCosts([]);
         setIcmsManual(false); setPagadorMg(false); loadedIcmsRouteRef.current = null; loadedUtilRef.current = null;   // nova cotação: destrava o automático, zera o pagador MG e as travas de congelamento
         setSolicitante(''); setSolicitantePipefyId(undefined); setImplemento('');
+        setQualpRota(null); setQualpBloqueio(null); setRecalcDiff(null); setPisoSalvo(null); setPedagioLiberado(false);
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
     };
 
@@ -2670,6 +2774,43 @@ Disponibilidade: ${disponibilidade}`;
                                             )}
                                         </div>
 
+                                        {/* Bloqueio do Qualp — mesmo padrão de alerta do Painel TV: barra
+                                            vermelha, impossível de não ver. Enquanto estiver aqui, a cotação
+                                            de rota simples não fecha e não há fallback pro Google. */}
+                                        {!isMultiRota && qualpBloqueio && (
+                                            <div className="col-span-1 md:col-span-2 bg-red-600 text-white px-6 py-3 rounded-xl flex items-center gap-4 shadow-lg animate-pulse">
+                                                <span className="text-2xl shrink-0">⚠️</span>
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-bold uppercase tracking-wide">Cotação travada — Qualp indisponível</p>
+                                                    <p className="text-xs font-medium opacity-90 mt-0.5">{qualpBloqueio}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleFetchDistance()}
+                                                    disabled={loadingDistance}
+                                                    className="shrink-0 px-4 py-2 bg-white/15 hover:bg-white/25 disabled:opacity-50 rounded-lg text-xs font-semibold transition-colors"
+                                                >
+                                                    {loadingDistance ? 'Consultando…' : 'Tentar de novo'}
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Antes/depois do recálculo de uma cotação salva: ninguém fecha
+                                            achando que o número continua sendo o antigo. */}
+                                        {recalcDiff && (
+                                            <div className="col-span-1 md:col-span-2 bg-blue-50 border border-blue-200 text-blue-900 px-6 py-3 rounded-xl flex items-start gap-3">
+                                                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                                                <div className="flex-1">
+                                                    <p className="text-[10px] font-semibold uppercase tracking-wide mb-1">Recalculado pelo Qualp</p>
+                                                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-medium">
+                                                        <span>KM: era {recalcDiff.kmAntes.toLocaleString('pt-BR')} → virou <strong>{recalcDiff.kmDepois.toLocaleString('pt-BR')}</strong></span>
+                                                        <span>Pedágio: era R$ {formatCur(recalcDiff.pedAntes)} → virou <strong>R$ {formatCur(recalcDiff.pedDepois)}</strong></span>
+                                                        <span>Piso ANTT: era {recalcDiff.pisoAntes !== null ? `R$ ${formatCur(recalcDiff.pisoAntes)}` : '—'} → virou <strong>{recalcDiff.pisoDepois !== null ? `R$ ${formatCur(recalcDiff.pisoDepois)}` : '—'}</strong></span>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => setRecalcDiff(null)} className="shrink-0 text-blue-400 hover:text-blue-700 text-lg leading-none">×</button>
+                                            </div>
+                                        )}
+
                                         {/* Alerta de Histórico */}
                                         {historicalAlert}
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
@@ -2713,6 +2854,27 @@ Disponibilidade: ${disponibilidade}`;
                                                 </button>
                                             </div>
                                         </div>
+
+                                        {/* Cotação já salva: os números gravados (podem ser do Google, de antes
+                                            da fonte única) ficam como estão. Só este botão consulta o Qualp de
+                                            novo — e aí o antes/depois aparece no topo. */}
+                                        {editingId && !isMultiRota && !qualpRota && (
+                                            <div className="flex items-center gap-3 px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
+                                                <Info className="w-4 h-4 text-[#6b7280] shrink-0" />
+                                                <span className="text-xs font-normal text-[#6b7280] flex-1">
+                                                    KM, pedágio e piso são os valores salvos desta cotação.
+                                                </span>
+                                                <button
+                                                    onClick={recalcularPeloQualp}
+                                                    disabled={loadingDistance}
+                                                    className="shrink-0 px-4 py-2 bg-white border border-[#e5e7eb] hover:bg-[#f3f4f6] disabled:opacity-50 rounded-lg text-xs font-medium text-[#111827] transition-colors flex items-center gap-2"
+                                                >
+                                                    <RotateCcw className={`w-3 h-3 ${loadingDistance ? 'animate-spin' : ''}`} strokeWidth={1.75} />
+                                                    {loadingDistance ? 'Consultando…' : 'Recalcular pelo Qualp'}
+                                                </button>
+                                            </div>
+                                        )}
+
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                             <div>
                                                 {/* Cliente: base LOCAL (alimenta dashboard/Ramper/PDF/logo). O vínculo com o Pipefy
@@ -2746,8 +2908,50 @@ Disponibilidade: ${disponibilidade}`;
                                                 <input type="text" className="w-full p-4 rounded-xl font-medium text-[#111827] bg-[#f9fafb] focus:bg-white outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all" value={maskCurrency(baseFreight)} onChange={e => { startTimer(); setBaseFreight(maskCurrency(e.target.value)); }} />
                                             </div>
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium text-[#6b7280] uppercase">Pedágio</span></div>
-                                                <input type="text" className="w-full p-4 bg-[#f9fafb] rounded-xl font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none transition-all" value={maskCurrency(tolls)} onChange={e => setTolls(maskCurrency(e.target.value))} />
+                                                {/* Pedágio da rota simples vem do Qualp e é read-only. Qualquer
+                                                    operador pode sobrescrever, mas com aviso na tela — e a mudança
+                                                    entra na auditoria (campo 'tolls' já é diffado no salvar). */}
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-[10px] font-medium text-[#6b7280] uppercase">Pedágio</span>
+                                                    {pedagioDoQualp && (
+                                                        pedagioLiberado ? (
+                                                            <button
+                                                                onClick={() => { setTolls(maskCurrency(qualpRota!.pedagioCheio)); setPedagioLiberado(false); }}
+                                                                className="text-[10px] font-medium text-[#6b7280] hover:text-[#111827] underline"
+                                                            >
+                                                                voltar ao Qualp
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => setPedagioLiberado(true)}
+                                                                className="text-[10px] font-medium text-[#6b7280] hover:text-[#111827] underline"
+                                                            >
+                                                                sobrescrever
+                                                            </button>
+                                                        )
+                                                    )}
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    readOnly={pedagioDoQualp && !pedagioLiberado}
+                                                    title={pedagioDoQualp && !pedagioLiberado ? 'Pedágio do Qualp (tarifa cheia). Use "sobrescrever" para editar.' : undefined}
+                                                    className={`w-full p-4 rounded-xl font-medium border outline-none transition-all ${pedagioDoQualp && !pedagioLiberado
+                                                        ? 'bg-[#f3f4f6] border-[#e5e7eb] text-[#6b7280] cursor-not-allowed'
+                                                        : 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'}`}
+                                                    value={maskCurrency(tolls)}
+                                                    onChange={e => setTolls(maskCurrency(e.target.value))}
+                                                />
+                                                {pedagioSobrescrito && (
+                                                    <p className="text-[10px] font-medium text-amber-700 mt-1 flex items-center gap-1">
+                                                        <AlertTriangle className="w-3 h-3 shrink-0" strokeWidth={1.75} />
+                                                        Sobrescrito — Qualp: R$ {formatCur(qualpRota!.pedagioCheio)}
+                                                    </p>
+                                                )}
+                                                {pedagioDoQualp && !pedagioSobrescrito && qualpRota!.pedagioTag > 0 && (
+                                                    <p className="text-[10px] font-normal text-[#6b7280] mt-1">
+                                                        Tarifa cheia • com tag seria R$ {formatCur(qualpRota!.pedagioTag)}
+                                                    </p>
+                                                )}
                                             </div>
                                             <div className="flex flex-col">
                                                 <div className="flex justify-between mb-2"><span className="text-[10px] font-medium text-[#6b7280] uppercase">Valor Mercadoria</span></div>
@@ -2958,6 +3162,14 @@ Disponibilidade: ${disponibilidade}`;
                                                     >
                                                         <Check className="w-3.5 h-3.5" strokeWidth={1.75} /> Aderir ao Preço Base
                                                     </button>
+                                                ) : pisoDesatualizado ? (
+                                                    <p className="text-[11px] font-normal text-amber-700 text-center">
+                                                        Tipo de carga ou veículo mudou. Recalcule a rota para trazer o piso desta combinação.
+                                                    </p>
+                                                ) : !isMultiRota ? (
+                                                    <p className="text-[11px] font-normal text-[#6b7280] text-center">
+                                                        Consulte a rota para trazer o piso do Qualp.
+                                                    </p>
                                                 ) : (
                                                     <p className="text-[11px] font-normal text-[#6b7280] text-center">
                                                         Sem coeficiente para {vehicleConfigs[vehicleType]?.axles ?? '?'} eixos nesta carga.

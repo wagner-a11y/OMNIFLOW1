@@ -221,9 +221,18 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const distanciaKm = extrairKm(data.distancia);
-  const { pracas, total: pedagioCheio, totalTag: pedagioComTag } = extrairPedagio(data.pedagios, eixos);
   const tabelaFrete = data.tabela_frete;
+
+  // Distância: vem do tabela_frete (437.345), não de data.distancia (437,
+  // arredondado). É a MESMA base que o Qualp usa pra calcular o piso ANTT, então
+  // piso e custo/km ficam sobre o mesmo número. data.distancia fica só como
+  // reserva, caso o tabela_frete venha sem distância.
+  const distanciaTabela = tabelaFrete && typeof tabelaFrete === "object"
+    ? (tabelaFrete as Record<string, unknown>).distancia
+    : null;
+  const distanciaKm = extrairKm(distanciaTabela) ?? extrairKm(data.distancia);
+
+  const { pracas, total: pedagioCheio, totalTag: pedagioComTag } = extrairPedagio(data.pedagios, eixos);
   const pisoAntt = extrairPisoAntt(tabelaFrete, eixos, freightLoad, categoria);
   const resolucaoAntt = extrairResolucaoAntt(tabelaFrete);
 
