@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, CopyPlus, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send, Tv
+    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, CopyPlus, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send, Tv, FlaskConical
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
@@ -11,6 +11,7 @@ import { CarteiraBoard } from './components/CarteiraBoard';
 import { RegistroContatoBoard } from './components/RegistroContatoBoard';
 import { PainelCobrancaBoard } from './components/PainelCobrancaBoard';
 import { NegociacoesBoard } from './components/NegociacoesBoard';
+import { QualpTesteLab } from './components/QualpTesteLab';
 
 // Interruptor do submenu "Ações do Comercial". REVELADO (true) — visível pro time.
 // A trava por papel é mantida: operador vê só "Contato Diário · Registrar";
@@ -23,6 +24,11 @@ const MOSTRAR_ACOES_COMERCIAL = true;
 // transparência: veem todas, editam só as próprias; dono em destaque). O gatilho automático de
 // entrada no "Mandar pro Ramper" fica ativo. Tabelas neg_ e RLS já aplicadas. Voltar a ocultar = false.
 const MOSTRAR_NEGOCIACOES = true;
+
+// Laboratório de teste da API Qualp (pedágio/distância/ANTT). NASCE OCULTO (false):
+// não aparece no menu e a telinha nem monta. É isolado — não toca na calculadora.
+// Reversível: flip pra true (só master vê). Precisa do secret QUALP_ACCESS_TOKEN no Supabase.
+const MOSTRAR_QUALP_TESTE = false;
 
 // Link direto pro card no Pipefy: usa a URL exata salva (pipefyCardUrl) e, no fallback,
 // monta o deep-link universal pelo id (open-cards/<id>). null = carga sem card no Pipefy.
@@ -197,7 +203,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'qualp-teste'>('dashboard');
     const [acoesAbertas, setAcoesAbertas] = useState(true); // submenu "Ações do Comercial" aberto/fechado
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
@@ -2002,6 +2008,8 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'prospeccao', icon: Target, label: 'Meu CRM', adminOnly: true },
                         // Contato Diário migrou pro submenu "Ações do Comercial" (abaixo).
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
+                        // Laboratório Qualp: OCULTO por flag (MOSTRAR_QUALP_TESTE=false); só master. Isolado.
+                        ...(MOSTRAR_QUALP_TESTE ? [{ id: 'qualp-teste', icon: FlaskConical, label: 'Laboratório Qualp', adminOnly: true }] : []),
                         // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
                         // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
                         // { id: 'crm', icon: List, label: 'CRM' },
@@ -2088,6 +2096,7 @@ Disponibilidade: ${disponibilidade}`;
                                         activeTab === 'prospeccao' ? 'Prospecção · Mini CRM' :
                                         activeTab === 'contato-diario' ? 'Contato Diário · Carteira' :
                                         activeTab === 'trash' ? 'Lixeira' :
+                                        activeTab === 'qualp-teste' ? 'Laboratório Qualp' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
@@ -2133,6 +2142,11 @@ Disponibilidade: ${disponibilidade}`;
                     {/* Acompanhamento de Negociações: visível a todos os papéis (transparência de time). */}
                     {activeTab === 'negocios' && (
                         <NegociacoesBoard currentUser={{ id: currentUser.id, name: currentUser.name, role: currentUser.role }} onFeedback={showFeedback} />
+                    )}
+
+                    {/* Laboratório Qualp (oculto por flag; só master). Isolado da calculadora. */}
+                    {activeTab === 'qualp-teste' && MOSTRAR_QUALP_TESTE && currentUser.role === 'master' && (
+                        <QualpTesteLab />
                     )}
 
                     {activeTab === 'dashboard' && (
