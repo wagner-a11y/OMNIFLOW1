@@ -28,7 +28,7 @@ const MOSTRAR_NEGOCIACOES = true;
 // Laboratório de teste da API Qualp (pedágio/distância/ANTT). NASCE OCULTO (false):
 // não aparece no menu e a telinha nem monta. É isolado — não toca na calculadora.
 // Reversível: flip pra true (só master vê). Precisa do secret QUALP_ACCESS_TOKEN no Supabase.
-const MOSTRAR_QUALP_TESTE = false;
+const MOSTRAR_QUALP_TESTE = true;  // TEMP-PREVIEW: reverter p/ false antes do merge
 
 // Link direto pro card no Pipefy: usa a URL exata salva (pipefyCardUrl) e, no fallback,
 // monta o deep-link universal pelo id (open-cards/<id>). null = carga sem card no Pipefy.
