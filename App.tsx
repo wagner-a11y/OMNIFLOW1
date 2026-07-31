@@ -44,6 +44,8 @@ import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor, vehicleHasANTT } from './utils/antt';
+import MunicipioAutocomplete, { useMunicipios } from './components/MunicipioAutocomplete';
+import { normalizar, resolverMunicipio } from './utils/municipios';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
 import { createNegociacaoFromRamper } from './services/negociacoes';
@@ -248,14 +250,22 @@ const App: React.FC = () => {
     // nº de eixos consultados: mudou depois, o piso está velho e some até recalcular.
     const [qualpRota, setQualpRota] = useState<{
         km: number; pedagioCheio: number; pedagioTag: number; piso: number | null;
-        cargoType: string; eixos: number | undefined;
+        // Os quatro campos que definem o resultado. Se qualquer um mudar depois da
+        // busca, o resultado na tela não corresponde mais ao que foi consultado.
+        origem: string; destino: string; cargoType: string; eixos: number | undefined;
         resolucao: { nome: string; data: string | null; url: string | null } | null;
         confirmarPiso: boolean; idTransacao: string | null;
+        // 'qualp' = veio de uma busca agora; 'salvo' = números gravados na cotação
+        // reaberta. Os dois são invalidados pelos mesmos quatro campos — trocar o
+        // veículo numa cotação antiga também deixa o pedágio velho sem valer.
+        fonte: 'qualp' | 'salvo';
     } | null>(null);
+    // Houve busca bem-sucedida e algum campo que suja o resultado mudou depois.
+    // Conta como inválido: a cotação não fecha até buscar de novo.
+    const [rotaDesatualizada, setRotaDesatualizada] = useState(false);
     // Falha bloqueante do Qualp: trava o fechamento da cotação de rota simples.
     const [qualpBloqueio, setQualpBloqueio] = useState<string | null>(null);
     // Piso da cotação já salva: mantido como está até o operador mandar recalcular.
-    const [pisoSalvo, setPisoSalvo] = useState<number | null>(null);
     // Antes/depois do recálculo de uma cotação salva, pra ninguém fechar achando
     // que o número é o antigo.
     const [recalcDiff, setRecalcDiff] = useState<{
@@ -1175,34 +1185,76 @@ const App: React.FC = () => {
     // Rota multi-parada: continua no Google e na tabela ANTT local até a Fase 2.
     const isMultiRota = destinations.length > 0;
 
+    // --- Município travado na lista do IBGE (só rota simples) ---
+    const { lista: municipios } = useMunicipios();
+    const origemMun = useMemo(() => resolverMunicipio(municipios, origin), [municipios, origin]);
+    const destinoMun = useMemo(() => resolverMunicipio(municipios, destination), [municipios, destination]);
+    // Rota simples só anda com origem E destino escolhidos da lista. É o que
+    // impede consultar/salvar com texto que não é município.
+    const municipiosOk = isMultiRota || (!!origemMun && !!destinoMun);
+
+    // Promove o que já está gravado para o formato canônico: cotação antiga tem
+    // "SÃO PAULO / SP", "blumenau-sc", "itajai / sc" — tudo resolve pro mesmo
+    // município e vira "São Paulo, SP". O que não resolve (bairro, texto solto)
+    // fica como está e o campo acusa, exigindo escolha.
+    useEffect(() => {
+        if (!municipios.length || isMultiRota) return;
+        if (origemMun && origin !== origemMun.rotulo) setOrigin(origemMun.rotulo);
+        if (destinoMun && destination !== destinoMun.rotulo) setDestination(destinoMun.rotulo);
+    }, [municipios, isMultiRota, origemMun, destinoMun, origin, destination]);
+
+    const eixosAtuais = vehicleConfigs[vehicleType]?.axles;
+
+    // O resultado na tela corresponde ao que foi de fato consultado? Basta um dos
+    // quatro campos que sujam (origem, destino, eixos, tipo de carga) mudar para
+    // deixar de corresponder. Cliente, solicitante, ref, implemento e urgência não
+    // entram aqui de propósito — não alteram rota nem pedágio nem piso.
+    // Origem/destino comparados por MUNICÍPIO: a promoção de formato feita pelo
+    // autocomplete ("SÃO PAULO / SP" -> "São Paulo, SP") não pode ser lida como
+    // troca de rota e invalidar um resultado bom.
+    const snapshotValido = !!qualpRota
+        && normalizar(qualpRota.origem) === normalizar(origin)
+        && normalizar(qualpRota.destino) === normalizar(destination)
+        && qualpRota.cargoType === cargoType
+        && qualpRota.eixos === eixosAtuais;
+
     // Piso mínimo ANTT.
     // - Multi-parada: (km × CCD) + CC da Tabela A local, como sempre foi.
     // - Rota simples: FONTE ÚNICA — o piso vem do Qualp, não é mais calculado aqui.
     // Retorna null quando não aplicável; null vira "—" na tela e nunca zero.
     const anttFloor = useMemo(() => {
         if (!hasAntt) return null;
-        const axles = vehicleConfigs[vehicleType]?.axles;
         const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
-
-        if (isMultiRota) return computeANTTFloor(cargoType, axles, dist);
-
-        // O snapshot do Qualp só vale pra combinação que foi consultada: trocar o
-        // tipo de carga ou o veículo invalida o piso (cada carga é uma consulta).
-        if (qualpRota && qualpRota.cargoType === cargoType && qualpRota.eixos === axles) {
-            return qualpRota.piso;
-        }
+        if (isMultiRota) return computeANTTFloor(cargoType, eixosAtuais, dist);
+        if (snapshotValido) return qualpRota!.piso;
         // Cotação salva reaberta: mantém o piso que já estava lá até recalcular.
-        return pisoSalvo;
-    }, [hasAntt, vehicleType, cargoType, distanceKm, vehicleConfigs, isMultiRota, qualpRota, pisoSalvo]);
+        // Sem snapshot valido nao ha piso: invalidado vira "—", nunca numero velho.
+        return null;
+    }, [hasAntt, cargoType, distanceKm, eixosAtuais, isMultiRota, snapshotValido, qualpRota]);
 
-    // Piso da rota simples pendente de consulta: houve troca de carga/veículo depois
-    // do último Qualp, então o número que estava na tela não vale mais.
-    const pisoDesatualizado = !isMultiRota && hasAntt && anttFloor === null && (qualpRota !== null || pisoSalvo !== null);
-
-    // Pedágio governado pelo Qualp (rota simples já consultada): read-only por
-    // padrão. `pedagioSobrescrito` acusa quando o operador mudou o valor na mão.
-    const pedagioDoQualp = !isMultiRota && qualpRota !== null;
+    // Pedágio read-only só quando o número veio de uma busca agora. Cotação antiga
+    // reaberta mantém o pedágio editável, como sempre foi.
+    const pedagioDoQualp = !isMultiRota && snapshotValido && qualpRota!.fonte === 'qualp';
     const pedagioSobrescrito = pedagioDoQualp && Math.abs(num(tolls) - qualpRota!.pedagioCheio) > 0.005;
+
+    // Cotação salva reaberta: números gravados, ainda correspondendo aos campos.
+    const temNumerosSalvos = snapshotValido && qualpRota!.fonte === 'salvo';
+
+    // Rota simples só fecha com resultado válido — de busca agora ou os números
+    // salvos ainda coerentes. "Desatualizado" NÃO conta como válido.
+    const resultadoRotaOk = isMultiRota || (snapshotValido && !rotaDesatualizada);
+
+    // Sujou depois de uma busca boa: limpa o que veio do Qualp da tela para ninguém
+    // ler número que não corresponde mais aos campos, e marca para nova busca.
+    useEffect(() => {
+        if (isMultiRota || !qualpRota || snapshotValido) return;
+        setQualpRota(null);
+        setRotaDesatualizada(true);
+        setDistanceKm('0');
+        setTolls('0');
+        setPedagioLiberado(false);
+        setRecalcDiff(null);
+    }, [isMultiRota, qualpRota, snapshotValido]);
 
     // Veículos utilitários (Fiorino/Van/HR-VUC): frete base = KM × tarifa fixa, ignorando a tabela ANTT.
     const utilitarioRate = UTILITARIO_KM_RATES[vehicleType];
@@ -1260,9 +1312,20 @@ const App: React.FC = () => {
 
     // Consulta a rota simples no Qualp (fonte única). `capturarDiff` liga o
     // antes/depois usado ao recalcular uma cotação já salva.
+    // Só é chamada pelo botão "Buscar rota" (e pelo "Recalcular" de cotação salva).
+    // Nada mais dispara consulta: preencher campo não gasta crédito.
     const consultarQualp = async (overrideVehicle?: string, capturarDiff = false) => {
-        if (!origin || !destination) return;
-        // overrideVehicle só é considerado quando for string (chamadas via onBlur/onClick passam um evento).
+        const org = origin, dst = destination;
+        if (!org || !dst) return;
+        if (loadingDistance) return;   // trava contra clique repetido em cima da mesma busca
+
+        // Entrada travada: sem município escolhido da lista, não consulta. Evita
+        // mandar texto solto que o Qualp resolveria por aproximação.
+        if (!municipiosOk) {
+            showFeedback('Escolha origem e destino na lista de municípios.', 'info');
+            return;
+        }
+        // overrideVehicle só é considerado quando for string (o onClick passa um evento).
         const vt = (typeof overrideVehicle === 'string' && overrideVehicle) ? overrideVehicle : vehicleType;
         const config = vehicleConfigs[vt];
 
@@ -1272,7 +1335,7 @@ const App: React.FC = () => {
 
         setLoadingDistance(true);
         try {
-            const result = await estimateDistance(origin, destination, vt, config?.axles, cargoType);
+            const result = await estimateDistance(org, dst, vt, config?.axles, cargoType);
 
             if (result.error) {
                 // Fonte única: sem Qualp não há número confiável. NÃO cai pro Google
@@ -1286,22 +1349,31 @@ const App: React.FC = () => {
 
             setQualpBloqueio(null);
             setDistanceKm(String(result.km));
-            setOrigin(result.originNormalized);
-            setDestination(result.destinationNormalized);
+            // O Qualp devolve o endereço em caixa baixa e sem acento ("sao paulo, sp").
+            // Como o município já veio escolhido da lista, mantemos o texto canônico
+            // do IBGE na tela; só aceitamos a versão do Qualp quando não há município
+            // resolvido (multi-parada).
+            if (!origemMun) setOrigin(result.originNormalized);
+            if (!destinoMun) setDestination(result.destinationNormalized);
             setTolls(maskCurrency(result.estimatedTolls));
             setPedagioLiberado(false);   // volta a ser read-only a cada consulta nova
-            setPisoSalvo(null);          // o piso agora é o do Qualp, não o salvo
             setQualpRota({
                 km: result.km,
                 pedagioCheio: result.estimatedTolls,
                 pedagioTag: result.tollsWithTag,
                 piso: result.pisoAntt,
+                // Guarda a combinação exata consultada: é contra ela que a tela
+                // decide se o resultado ainda vale ou virou "desatualizado".
+                origem: org,
+                destino: dst,
                 cargoType,
                 eixos: config?.axles,
                 resolucao: result.resolucaoAntt,
                 confirmarPiso: result.confirmarPisoManualmente,
                 idTransacao: result.idTransacao,
+                fonte: 'qualp',
             });
+            setRotaDesatualizada(false);
 
             if (capturarDiff) {
                 setRecalcDiff({
@@ -1400,6 +1472,22 @@ const App: React.FC = () => {
         // cotação é pior que cotação travada. Multi-parada não é afetada.
         if (!isMultiRota && qualpBloqueio) {
             showFeedback('Cotação travada: o Qualp não respondeu. Refaça a consulta da rota antes de salvar.', 'error');
+            return;
+        }
+        // Rota simples só salva com município escolhido da lista do IBGE.
+        if (!municipiosOk) {
+            showFeedback('Escolha origem e destino na lista de municípios antes de salvar.', 'error');
+            return;
+        }
+        // O botão "Buscar rota" não é brecha: sem resultado do Qualp válido, ou com
+        // resultado marcado desatualizado, a cotação de rota simples não fecha.
+        if (!resultadoRotaOk) {
+            showFeedback(
+                rotaDesatualizada
+                    ? 'Resultado desatualizado: clique em "Buscar rota" de novo antes de salvar.'
+                    : 'Clique em "Buscar rota" para trazer distância, pedágio e piso antes de salvar.',
+                'error',
+            );
             return;
         }
         // Congela o status: "Salvar" (keepStatus) NÃO rebaixa uma cotação já comprometida.
@@ -1536,8 +1624,16 @@ const App: React.FC = () => {
         // Cotação salva mantém km/pedágio/piso como foram gravados (podem ser do
         // Google, de antes da fonte única). Nada é reconsultado na abertura: só o
         // botão "Recalcular pelo Qualp" troca esses números, e aí mostra o antes/depois.
-        setQualpRota(null); setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false);
-        setPisoSalvo(quote.suggestedFreight > 0 ? quote.suggestedFreight : null);
+        // Os valores entram como snapshot de fonte 'salvo', preso à combinação em que
+        // foram gravados — assim trocar veículo/carga/rota também os invalida.
+        setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
+        setQualpRota({
+            km: quote.distanceKm, pedagioCheio: quote.tolls, pedagioTag: 0,
+            piso: quote.suggestedFreight > 0 ? quote.suggestedFreight : null,
+            origem: quote.origin, destino: quote.destination,
+            cargoType, eixos: vehicleConfigs[quote.vehicleType]?.axles,
+            resolucao: null, confirmarPiso: false, idTransacao: null, fonte: 'salvo',
+        });
         setActiveTab('new'); showFeedback("Editando...");
     };
 
@@ -1562,9 +1658,16 @@ const App: React.FC = () => {
         setEditingId(null);                       // cotação NOVA, não edição
         setElapsedSeconds(0); setIsTimerRunning(false);  // cronômetro do zero
         setOpenCostToClient(false);
-        // Duplicada herda os números da origem (podem ser do Google) até consultar o Qualp.
-        setQualpRota(null); setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false);
-        setPisoSalvo(quote.suggestedFreight > 0 ? quote.suggestedFreight : null);
+        // Duplicada herda os números da origem (podem ser do Google) como snapshot
+        // 'salvo', preso à mesma combinação — mudar rota/veículo/carga invalida.
+        setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
+        setQualpRota({
+            km: quote.distanceKm, pedagioCheio: quote.tolls, pedagioTag: 0,
+            piso: quote.suggestedFreight > 0 ? quote.suggestedFreight : null,
+            origem: quote.origin, destino: quote.destination,
+            cargoType, eixos: vehicleConfigs[quote.vehicleType]?.axles,
+            resolucao: null, confirmarPiso: false, idTransacao: null, fonte: 'salvo',
+        });
         setActiveTab('new'); showFeedback("Cotação duplicada — ajuste e salve como nova.");
     };
 
@@ -1574,7 +1677,7 @@ const App: React.FC = () => {
         setDisponibilidade("Imediato"); setMerchandiseType(''); setCargoType('Carga geral'); setOtherCosts([]);
         setIcmsManual(false); setPagadorMg(false); loadedIcmsRouteRef.current = null; loadedUtilRef.current = null;   // nova cotação: destrava o automático, zera o pagador MG e as travas de congelamento
         setSolicitante(''); setSolicitantePipefyId(undefined); setImplemento('');
-        setQualpRota(null); setQualpBloqueio(null); setRecalcDiff(null); setPisoSalvo(null); setPedagioLiberado(false);
+        setQualpRota(null); setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
     };
 
@@ -2728,11 +2831,35 @@ Disponibilidade: ${disponibilidade}`;
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                                            {/* Rota simples: município travado na lista do IBGE. Multi-parada
+                                                segue com texto livre até a Fase 2. */}
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={origin} onChange={e => { startTimer(); setOrigin(e.target.value); }} onBlur={() => { if (destinations.length === 0) handleFetchDistance(); }} placeholder="Origem / Coleta (Cidade, UF)" />
+                                                {isMultiRota ? (
+                                                    <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={origin} onChange={e => { startTimer(); setOrigin(e.target.value); }} placeholder="Origem / Coleta (Cidade, UF)" />
+                                                ) : (
+                                                    <MunicipioAutocomplete
+                                                        valor={origin}
+                                                        lista={municipios}
+                                                        resolvido={origemMun}
+                                                        placeholder="Origem / Coleta (Cidade, UF)"
+                                                        // Escolher município NÃO consulta: quem dispara é o botão "Buscar rota".
+                                                        onSelecionar={m => { startTimer(); setOrigin(m.rotulo); }}
+                                                    />
+                                                )}
                                             </div>
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={destination} onChange={e => { startTimer(); setDestination(e.target.value); }} onBlur={() => { if (destinations.length === 0) handleFetchDistance(); }} placeholder={destinations.length ? 'Destino 1 (Cidade, UF)' : 'Destino (Cidade, UF)'} />
+                                                {isMultiRota ? (
+                                                    <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={destination} onChange={e => { startTimer(); setDestination(e.target.value); }} placeholder="Destino 1 (Cidade, UF)" />
+                                                ) : (
+                                                    <MunicipioAutocomplete
+                                                        valor={destination}
+                                                        lista={municipios}
+                                                        resolvido={destinoMun}
+                                                        placeholder="Destino (Cidade, UF)"
+                                                        // Escolher município NÃO consulta: quem dispara é o botão "Buscar rota".
+                                                        onSelecionar={m => { startTimer(); setDestination(m.rotulo); }}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
 
@@ -2817,14 +2944,10 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" /><input type="text" className="w-full pl-10 pr-4 py-4 bg-blue-50/50 rounded-lg font-medium border-2 border-blue-100 focus:border-blue-300 outline-none" value={clientReference} onChange={e => setClientReference(e.target.value)} placeholder="Ref Cliente" /></div>
                                             <div className="relative md:col-span-2">
                                                 <Truck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                                                <select className="w-full pl-10 pr-4 py-4 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all appearance-none" value={vehicleType} onChange={e => {
-                                                    const v = e.target.value;
-                                                    setVehicleType(v);
-                                                    // O pedágio depende dos eixos: se já há rota definida, recalcula com o novo veículo.
-                                                    if (origin && destination && (parseFloat(distanceKm.replace(',', '.')) || 0) > 0 && !loadingDistance) {
-                                                        handleFetchDistance(v);
-                                                    }
-                                                }}>
+                                                {/* Trocar o veículo muda o nº de eixos, que muda pedágio e piso — mas
+                                                    NÃO consulta sozinho. O resultado na tela é invalidado e o operador
+                                                    decide quando buscar de novo. */}
+                                                <select className="w-full pl-10 pr-4 py-4 bg-[#f9fafb] rounded-lg font-medium outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all appearance-none" value={vehicleType} onChange={e => setVehicleType(e.target.value)}>
                                                     {Object.keys(vehicleConfigs).map(v => <option key={v} value={v}>{v}</option>)}
                                                 </select>
                                                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
@@ -2844,33 +2967,65 @@ Disponibilidade: ${disponibilidade}`;
                                                     placeholder="KM"
                                                     disabled={loadingDistance}
                                                 />
-                                                <button
-                                                    onClick={handleFetchDistance}
-                                                    disabled={loadingDistance}
-                                                    className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white rounded-xl shadow-sm transition-all border border-[#e5e7eb] ${loadingDistance ? 'opacity-50 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-50'}`}
-                                                    title="Recalcular Distância"
-                                                >
-                                                    <RotateCcw className={`w-3 h-3 ${loadingDistance ? 'animate-spin' : ''}`} />
-                                                </button>
+                                                {/* Na rota simples o único gatilho é o botão "Buscar rota" abaixo —
+                                                    dois controles pra mesma coisa só confundiriam. */}
+                                                {isMultiRota && (
+                                                    <button
+                                                        onClick={handleFetchDistance}
+                                                        disabled={loadingDistance}
+                                                        className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white rounded-xl shadow-sm transition-all border border-[#e5e7eb] ${loadingDistance ? 'opacity-50 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-50'}`}
+                                                        title="Recalcular Distância"
+                                                    >
+                                                        <RotateCcw className={`w-3 h-3 ${loadingDistance ? 'animate-spin' : ''}`} />
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
 
-                                        {/* Cotação já salva: os números gravados (podem ser do Google, de antes
-                                            da fonte única) ficam como estão. Só este botão consulta o Qualp de
-                                            novo — e aí o antes/depois aparece no topo. */}
-                                        {editingId && !isMultiRota && !qualpRota && (
-                                            <div className="flex items-center gap-3 px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
-                                                <Info className="w-4 h-4 text-[#6b7280] shrink-0" />
-                                                <span className="text-xs font-normal text-[#6b7280] flex-1">
-                                                    KM, pedágio e piso são os valores salvos desta cotação.
-                                                </span>
+                                        {/* Buscar rota — único gatilho da consulta ao Qualp na rota simples.
+                                            Nada consulta sozinho: preencher campo não gasta crédito. */}
+                                        {!isMultiRota && (
+                                            <div className={`flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border ${rotaDesatualizada
+                                                ? 'bg-amber-50 border-amber-300'
+                                                : 'bg-[#f9fafb] border-[#e5e7eb]'}`}>
+                                                {rotaDesatualizada ? (
+                                                    <>
+                                                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" strokeWidth={1.75} />
+                                                        <span className="text-xs font-medium text-amber-800 flex-1 min-w-[12rem]">
+                                                            Desatualizado — rota, eixos ou tipo de carga mudaram. Busque de novo.
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Info className="w-4 h-4 text-[#6b7280] shrink-0" strokeWidth={1.75} />
+                                                        <span className="text-xs font-normal text-[#6b7280] flex-1 min-w-[12rem]">
+                                                            {snapshotValido
+                                                                ? `Distância, pedágio e piso do Qualp${qualpRota?.idTransacao ? ` · consulta ${qualpRota.idTransacao}` : ''}.`
+                                                                : temNumerosSalvos
+                                                                    ? 'KM, pedágio e piso são os valores salvos desta cotação.'
+                                                                    : !municipiosOk
+                                                                        ? 'Escolha origem e destino na lista para liberar a busca.'
+                                                                        : 'Pronto para buscar distância, pedágio e piso ANTT.'}
+                                                        </span>
+                                                    </>
+                                                )}
                                                 <button
-                                                    onClick={recalcularPeloQualp}
-                                                    disabled={loadingDistance}
-                                                    className="shrink-0 px-4 py-2 bg-white border border-[#e5e7eb] hover:bg-[#f3f4f6] disabled:opacity-50 rounded-lg text-xs font-medium text-[#111827] transition-colors flex items-center gap-2"
+                                                    type="button"
+                                                    onClick={() => (temNumerosSalvos ? recalcularPeloQualp() : handleFetchDistance())}
+                                                    // Só habilita com município escolhido dos dois lados. E fica travado
+                                                    // durante a consulta, pra clique repetido não disparar uma segunda
+                                                    // chamada em cima da primeira (cada uma é crédito).
+                                                    disabled={!municipiosOk || loadingDistance}
+                                                    className={`shrink-0 px-5 py-2.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 ${!municipiosOk || loadingDistance
+                                                        ? 'bg-[#f3f4f6] text-[#9ca3af] border border-[#e5e7eb] cursor-not-allowed'
+                                                        : rotaDesatualizada
+                                                            ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                                            : 'bg-[#1d6fb8] hover:bg-[#175a94] text-white'}`}
                                                 >
-                                                    <RotateCcw className={`w-3 h-3 ${loadingDistance ? 'animate-spin' : ''}`} strokeWidth={1.75} />
-                                                    {loadingDistance ? 'Consultando…' : 'Recalcular pelo Qualp'}
+                                                    {loadingDistance
+                                                        ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.75} /> Consultando…</>
+                                                        : <><Search className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                                            {temNumerosSalvos ? 'Recalcular pelo Qualp' : (snapshotValido || rotaDesatualizada) ? 'Buscar de novo' : 'Buscar rota'}</>}
                                                 </button>
                                             </div>
                                         )}
@@ -3162,13 +3317,13 @@ Disponibilidade: ${disponibilidade}`;
                                                     >
                                                         <Check className="w-3.5 h-3.5" strokeWidth={1.75} /> Aderir ao Preço Base
                                                     </button>
-                                                ) : pisoDesatualizado ? (
+                                                ) : rotaDesatualizada ? (
                                                     <p className="text-[11px] font-normal text-amber-700 text-center">
-                                                        Tipo de carga ou veículo mudou. Recalcule a rota para trazer o piso desta combinação.
+                                                        Desatualizado — clique em “Buscar rota” de novo.
                                                     </p>
                                                 ) : !isMultiRota ? (
                                                     <p className="text-[11px] font-normal text-[#6b7280] text-center">
-                                                        Consulte a rota para trazer o piso do Qualp.
+                                                        Clique em “Buscar rota” para trazer o piso do Qualp.
                                                     </p>
                                                 ) : (
                                                     <p className="text-[11px] font-normal text-[#6b7280] text-center">

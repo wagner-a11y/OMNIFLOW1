@@ -2,6 +2,7 @@
 // Ledger imutável no banco (cotacao_alteracao): RLS só master lê; trigger barra update/delete.
 import { supabase } from './supabase';
 import { FreightCalculation } from '../types';
+import { normalizar } from '../utils/municipios';
 
 export interface Mudanca { campo: string; label: string; de: unknown; para: unknown; }
 export interface AlteracaoCotacao {
@@ -16,6 +17,10 @@ const totalCustos = (q: FreightCalculation) => (q.extraCosts || 0) + (q.otherCos
 // Compara números tolerando 2 casas (evita ruído de ponto flutuante).
 const difN = (a: number, b: number) => Math.round((a || 0) * 100) !== Math.round((b || 0) * 100);
 const difS = (a: unknown, b: unknown) => String(a ?? '').trim() !== String(b ?? '').trim();
+// Mesmo município escrito de outro jeito: "SÃO PAULO / SP", "sao paulo-sp" e
+// "São Paulo, SP" são iguais aqui. Serve para a promoção de formato do
+// autocomplete não virar alteração de rota no log.
+const mesmoMunicipio = (a?: string, b?: string) => normalizar(a || '') === normalizar(b || '');
 
 // Diff dos 14 campos auditados (business). PURO. clienteAntes/Depois já resolvidos (nome).
 export function buildQuoteChanges(
@@ -34,7 +39,11 @@ export function buildQuoteChanges(
     if (difN(before.profitMargin, after.profitMargin)) add('profitMargin', 'Margem (%)', before.profitMargin, after.profitMargin);
     if (difN(before.icmsPercent, after.icmsPercent)) add('icmsPercent', 'ICMS (%)', before.icmsPercent, after.icmsPercent);
     if ((before.icmsManual ?? false) !== (after.icmsManual ?? false)) add('icmsManual', 'ICMS manual', before.icmsManual ? 'sim' : 'não', after.icmsManual ? 'sim' : 'não');
-    if (difS(before.origin, after.origin) || difS(before.destination, after.destination)) add('rota', 'Rota', rota(before), rota(after));
+    // Rota: compara MUNICÍPIO, não string. A padronização de formato feita pelo
+    // autocomplete ("SÃO PAULO / SP" -> "São Paulo, SP") é o mesmo lugar e não é
+    // alteração — auditar isso encheria o log de ruído no dia da virada. Só troca
+    // real de cidade entra.
+    if (!mesmoMunicipio(before.origin, after.origin) || !mesmoMunicipio(before.destination, after.destination)) add('rota', 'Rota', rota(before), rota(after));
     if (difS(before.customerId, after.customerId)) add('customerId', 'Cliente', clienteAntes, clienteDepois);
     if (difS(before.vehicleType, after.vehicleType)) add('vehicleType', 'Veículo', before.vehicleType, after.vehicleType);
     if (difN(before.goodsValue, after.goodsValue)) add('goodsValue', 'Valor da carga', before.goodsValue, after.goodsValue);
