@@ -10,6 +10,7 @@ export interface QualpResultado {
     elapsedMs?: number;
     distanciaKm?: number | null;
     pedagioTotal?: number | null;
+    pedagioTag?: number | null;
     pracas?: QualpPraca[];
     pisoAntt?: unknown;
     resolucaoAntt?: unknown;
@@ -29,5 +30,21 @@ export async function consultarQualp(params: { origem: string; destino: string; 
         return data as QualpResultado;
     } catch (e) {
         return { ok: false, error: (e as Error).message };
+    }
+}
+
+// Coluna "calculadora atual": o que o app dá HOJE pra mesma rota (calculate-route/Google, escalado
+// por eixo). Só leitura, não altera nada. Usado no laboratório pra comparar lado a lado com o Qualp.
+export interface CalcAtual { km: number | null; pedagio: number | null; error?: string; }
+export async function calcularAtual(origem: string, destino: string, eixos: number): Promise<CalcAtual> {
+    try {
+        const { data, error } = await supabase.functions.invoke('calculate-route', {
+            body: { origin: origem, destination: destino, vehicleType: 'Truck', axles: eixos || 6 },
+        });
+        if (error) return { km: null, pedagio: null, error: error.message };
+        if ((data as any)?.error) return { km: null, pedagio: null, error: (data as any).error };
+        return { km: (data as any)?.km ?? null, pedagio: (data as any)?.estimatedTolls ?? null };
+    } catch (e) {
+        return { km: null, pedagio: null, error: (e as Error).message };
     }
 }

@@ -72,6 +72,7 @@ function extrairValor(o: Record<string, unknown>): number | null {
 function normalizarPracas(pedagios: unknown, axis: number): {
   lista: Array<{ nome: string; uf: string | null; valor: number | null; rodovia: string | null; km: string | null; concessionaria: string | null; tarifaTag: number | null }>;
   total: number | null;
+  totalTag: number | null;
 } {
   let arr: unknown = pedagios;
   if (pedagios && typeof pedagios === 'object' && !Array.isArray(pedagios)) {
@@ -99,8 +100,10 @@ function normalizarPracas(pedagios: unknown, axis: number): {
     }
   }
   const soma = lista.reduce((s, p) => s + (p.valor || 0), 0);
+  const somaTag = lista.reduce((s, p) => s + (p.tarifaTag || 0), 0);
   const total = soma > 0 ? Math.round(soma * 100) / 100 : null;
-  return { lista, total };
+  const totalTag = somaTag > 0 ? Math.round(somaTag * 100) / 100 : null;
+  return { lista, total, totalTag };
 }
 
 Deno.serve(async (req: Request) => {
@@ -176,7 +179,7 @@ Deno.serve(async (req: Request) => {
 
     // Extração defensiva (nomes prováveis) + raw sempre presente pra conferência.
     const distanciaKm = extrairKm(data?.distancia ?? data?.distance ?? data?.distancia_total);
-    const { lista: pracas, total: pedagioTotal } = normalizarPracas(data?.pedagios ?? data?.tolls ?? data?.pedagio, axis);
+    const { lista: pracas, total: pedagioTotal, totalTag: pedagioTag } = normalizarPracas(data?.pedagios ?? data?.tolls ?? data?.pedagio, axis);
     const pisoAntt = data?.tabela_frete ?? data?.freight_table ?? data?.tabelaFrete ?? null;
     const consumo = data?.consumo_combustivel ?? data?.fuel_consumption ?? null;
 
@@ -185,7 +188,8 @@ Deno.serve(async (req: Request) => {
       elapsedMs,
       // Números normalizados (foco: distância e pedágio):
       distanciaKm,
-      pedagioTotal,
+      pedagioTotal,   // pedágio cheio (soma das tarifas por eixo)
+      pedagioTag,     // pedágio com desconto tag (soma das tarifa_tag)
       pracas,
       // Secundário (comparação ANTT):
       pisoAntt,
