@@ -44,6 +44,8 @@ import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor, vehicleHasANTT } from './utils/antt';
+import MunicipioAutocomplete, { useMunicipios } from './components/MunicipioAutocomplete';
+import { resolverMunicipio } from './utils/municipios';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
 import { createNegociacaoFromRamper } from './services/negociacoes';
@@ -1175,6 +1177,24 @@ const App: React.FC = () => {
     // Rota multi-parada: continua no Google e na tabela ANTT local até a Fase 2.
     const isMultiRota = destinations.length > 0;
 
+    // --- Município travado na lista do IBGE (só rota simples) ---
+    const { lista: municipios } = useMunicipios();
+    const origemMun = useMemo(() => resolverMunicipio(municipios, origin), [municipios, origin]);
+    const destinoMun = useMemo(() => resolverMunicipio(municipios, destination), [municipios, destination]);
+    // Rota simples só anda com origem E destino escolhidos da lista. É o que
+    // impede consultar/salvar com texto que não é município.
+    const municipiosOk = isMultiRota || (!!origemMun && !!destinoMun);
+
+    // Promove o que já está gravado para o formato canônico: cotação antiga tem
+    // "SÃO PAULO / SP", "blumenau-sc", "itajai / sc" — tudo resolve pro mesmo
+    // município e vira "São Paulo, SP". O que não resolve (bairro, texto solto)
+    // fica como está e o campo acusa, exigindo escolha.
+    useEffect(() => {
+        if (!municipios.length || isMultiRota) return;
+        if (origemMun && origin !== origemMun.rotulo) setOrigin(origemMun.rotulo);
+        if (destinoMun && destination !== destinoMun.rotulo) setDestination(destinoMun.rotulo);
+    }, [municipios, isMultiRota, origemMun, destinoMun, origin, destination]);
+
     // Piso mínimo ANTT.
     // - Multi-parada: (km × CCD) + CC da Tabela A local, como sempre foi.
     // - Rota simples: FONTE ÚNICA — o piso vem do Qualp, não é mais calculado aqui.
@@ -1260,8 +1280,23 @@ const App: React.FC = () => {
 
     // Consulta a rota simples no Qualp (fonte única). `capturarDiff` liga o
     // antes/depois usado ao recalcular uma cotação já salva.
-    const consultarQualp = async (overrideVehicle?: string, capturarDiff = false) => {
-        if (!origin || !destination) return;
+    // `over` permite consultar já com o município recém-escolhido, sem depender do
+    // setState ter propagado (o autocomplete entrega o objeto na hora da escolha).
+    const consultarQualp = async (
+        overrideVehicle?: string,
+        capturarDiff = false,
+        over?: { origem?: string; destino?: string },
+    ) => {
+        const org = over?.origem ?? origin;
+        const dst = over?.destino ?? destination;
+        if (!org || !dst) return;
+
+        // Entrada travada: sem município escolhido da lista, não consulta. Evita
+        // mandar texto solto que o Qualp resolveria por aproximação.
+        if (!isMultiRota && (!resolverMunicipio(municipios, org) || !resolverMunicipio(municipios, dst))) {
+            showFeedback('Escolha origem e destino na lista de municípios.', 'info');
+            return;
+        }
         // overrideVehicle só é considerado quando for string (chamadas via onBlur/onClick passam um evento).
         const vt = (typeof overrideVehicle === 'string' && overrideVehicle) ? overrideVehicle : vehicleType;
         const config = vehicleConfigs[vt];
@@ -1272,7 +1307,7 @@ const App: React.FC = () => {
 
         setLoadingDistance(true);
         try {
-            const result = await estimateDistance(origin, destination, vt, config?.axles, cargoType);
+            const result = await estimateDistance(org, dst, vt, config?.axles, cargoType);
 
             if (result.error) {
                 // Fonte única: sem Qualp não há número confiável. NÃO cai pro Google
@@ -1286,8 +1321,12 @@ const App: React.FC = () => {
 
             setQualpBloqueio(null);
             setDistanceKm(String(result.km));
-            setOrigin(result.originNormalized);
-            setDestination(result.destinationNormalized);
+            // O Qualp devolve o endereço em caixa baixa e sem acento ("sao paulo, sp").
+            // Como o município já veio escolhido da lista, mantemos o texto canônico
+            // do IBGE na tela; só aceitamos a versão do Qualp quando não há município
+            // resolvido (multi-parada).
+            if (!origemMun) setOrigin(result.originNormalized);
+            if (!destinoMun) setDestination(result.destinationNormalized);
             setTolls(maskCurrency(result.estimatedTolls));
             setPedagioLiberado(false);   // volta a ser read-only a cada consulta nova
             setPisoSalvo(null);          // o piso agora é o do Qualp, não o salvo
@@ -1400,6 +1439,11 @@ const App: React.FC = () => {
         // cotação é pior que cotação travada. Multi-parada não é afetada.
         if (!isMultiRota && qualpBloqueio) {
             showFeedback('Cotação travada: o Qualp não respondeu. Refaça a consulta da rota antes de salvar.', 'error');
+            return;
+        }
+        // Rota simples só salva com município escolhido da lista do IBGE.
+        if (!municipiosOk) {
+            showFeedback('Escolha origem e destino na lista de municípios antes de salvar.', 'error');
             return;
         }
         // Congela o status: "Salvar" (keepStatus) NÃO rebaixa uma cotação já comprometida.
@@ -2728,11 +2772,43 @@ Disponibilidade: ${disponibilidade}`;
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                                            {/* Rota simples: município travado na lista do IBGE. Multi-parada
+                                                segue com texto livre até a Fase 2. */}
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={origin} onChange={e => { startTimer(); setOrigin(e.target.value); }} onBlur={() => { if (destinations.length === 0) handleFetchDistance(); }} placeholder="Origem / Coleta (Cidade, UF)" />
+                                                {isMultiRota ? (
+                                                    <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={origin} onChange={e => { startTimer(); setOrigin(e.target.value); }} placeholder="Origem / Coleta (Cidade, UF)" />
+                                                ) : (
+                                                    <MunicipioAutocomplete
+                                                        valor={origin}
+                                                        lista={municipios}
+                                                        resolvido={origemMun}
+                                                        placeholder="Origem / Coleta (Cidade, UF)"
+                                                        onSelecionar={m => {
+                                                            startTimer();
+                                                            setOrigin(m.rotulo);
+                                                            // Só consulta quando o outro lado já é município válido.
+                                                            if (destinoMun) consultarQualp(undefined, false, { origem: m.rotulo });
+                                                        }}
+                                                    />
+                                                )}
                                             </div>
                                             <div className="lg:col-span-3">
-                                                <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={destination} onChange={e => { startTimer(); setDestination(e.target.value); }} onBlur={() => { if (destinations.length === 0) handleFetchDistance(); }} placeholder={destinations.length ? 'Destino 1 (Cidade, UF)' : 'Destino (Cidade, UF)'} />
+                                                {isMultiRota ? (
+                                                    <input type="text" className="w-full px-6 py-4 bg-[#f9fafb] rounded-lg font-medium border border-[#e5e7eb] focus:border-[#1d6fb8] outline-none" value={destination} onChange={e => { startTimer(); setDestination(e.target.value); }} placeholder="Destino 1 (Cidade, UF)" />
+                                                ) : (
+                                                    <MunicipioAutocomplete
+                                                        valor={destination}
+                                                        lista={municipios}
+                                                        resolvido={destinoMun}
+                                                        placeholder="Destino (Cidade, UF)"
+                                                        onSelecionar={m => {
+                                                            startTimer();
+                                                            setDestination(m.rotulo);
+                                                            // Só consulta quando o outro lado já é município válido.
+                                                            if (origemMun) consultarQualp(undefined, false, { destino: m.rotulo });
+                                                        }}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
 
