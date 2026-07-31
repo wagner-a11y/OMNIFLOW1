@@ -28,6 +28,12 @@ export const ANTT_CARGO_TYPES = [
 
 export type ANTTCargoType = typeof ANTT_CARGO_TYPES[number];
 
+// Único tipo em que a fonte do piso (Qualp) diverge da Tabela A local: com
+// axis=5 o Qualp devolve o coeficiente de 4 eixos, ~8% abaixo. Decisão: aceitar
+// o Qualp e pedir conferência manual só aqui — o operador já pode sobrescrever
+// o preço base. Nenhum outro tipo tem cerca de sanidade.
+export const CARGA_CONFERIR_PISO: ANTTCargoType = 'Carga granel pressurizada';
+
 interface CargoCoefficients {
     ccd: (number | null)[]; // por coluna de eixos (ANTT_AXLE_COLUMNS)
     cc: (number | null)[];

@@ -43,7 +43,7 @@ const nextProposalNumber = (hist: { proposalNumber?: string }[]): string => {
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
-import { ANTT_CARGO_TYPES, computeANTTFloor, vehicleHasANTT } from './utils/antt';
+import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor, vehicleHasANTT } from './utils/antt';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
 import { createNegociacaoFromRamper } from './services/negociacoes';
@@ -2939,6 +2939,15 @@ Disponibilidade: ${disponibilidade}`;
                                                 <p className="text-2xl font-medium text-[#111827] text-center">
                                                     {anttFloor !== null ? `R$ ${formatCur(anttFloor)}` : '—'}
                                                 </p>
+                                                {/* Granel pressurizada é o único tipo em que a fonte do piso (Qualp)
+                                                    diverge da Tabela A local. Aviso discreto: o operador confere e,
+                                                    se precisar, sobrescreve o preço base como já faz hoje. */}
+                                                {cargoType === CARGA_CONFERIR_PISO && anttFloor !== null && (
+                                                    <p className="text-[11px] font-normal text-amber-700 text-center flex items-center justify-center gap-1.5">
+                                                        <AlertTriangle className="w-3 h-3 shrink-0" strokeWidth={1.75} />
+                                                        Confirmar piso manualmente
+                                                    </p>
+                                                )}
                                                 {anttFloor !== null ? (
                                                     <button
                                                         onClick={() => {
