@@ -12,6 +12,7 @@ export const QualpTesteLab: React.FC = () => {
     const [origem, setOrigem] = useState('');
     const [destino, setDestino] = useState('');
     const [eixos, setEixos] = useState('6');
+    const [categoria, setCategoria] = useState('A'); // Tabela ANTT — 'A' é a que a calculadora usa
     const [fuel, setFuel] = useState(false);
     const [loading, setLoading] = useState(false);
     const [res, setRes] = useState<QualpResultado | null>(null);
@@ -20,7 +21,7 @@ export const QualpTesteLab: React.FC = () => {
     const consultar = async () => {
         if (!origem.trim() || !destino.trim()) return;
         setLoading(true); setRes(null); setRawOpen(false);
-        const r = await consultarQualp({ origem: origem.trim(), destino: destino.trim(), eixos: Number(eixos) || 0, fuel });
+        const r = await consultarQualp({ origem: origem.trim(), destino: destino.trim(), eixos: Number(eixos) || 0, fuel, categoria });
         setRes(r);
         setLoading(false);
     };
@@ -54,13 +55,22 @@ export const QualpTesteLab: React.FC = () => {
                         <input type="number" min={0} max={15} value={eixos} onChange={e => setEixos(e.target.value)}
                             className="mt-1 w-full px-3 py-2.5 rounded-lg border border-[#e5e7eb] text-sm focus:outline-none focus:ring-2 focus:ring-[#1d6fb8]/30 focus:border-[#1d6fb8]" />
                     </div>
-                    <div className="flex items-end">
-                        <label className="flex items-center gap-2 text-sm text-[#374151] cursor-pointer select-none pb-2.5">
-                            <input type="checkbox" checked={fuel} onChange={e => setFuel(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db]" />
-                            Pedir consumo de combustível
-                        </label>
+                    <div>
+                        <label className="text-[11px] font-medium text-[#6b7280] uppercase tracking-wide">Tabela ANTT (categoria)</label>
+                        <select value={categoria} onChange={e => setCategoria(e.target.value)}
+                            className="mt-1 w-full px-3 py-2.5 rounded-lg border border-[#e5e7eb] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1d6fb8]/30 focus:border-[#1d6fb8]">
+                            <option value="A">A — carga geral (a que a calculadora usa)</option>
+                            <option value="B">B — granel sólido</option>
+                            <option value="C">C — granel líquido</option>
+                            <option value="D">D — frigorificada / perigosa</option>
+                            <option value="all">all — todas (padrão do Qualp)</option>
+                        </select>
                     </div>
                 </div>
+                <label className="mt-4 flex items-center gap-2 text-sm text-[#374151] cursor-pointer select-none">
+                    <input type="checkbox" checked={fuel} onChange={e => setFuel(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db]" />
+                    Pedir consumo de combustível
+                </label>
                 <button onClick={consultar} disabled={loading || !origem.trim() || !destino.trim()}
                     className="mt-5 w-full py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm hover:bg-[#1a5f9e] transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                     {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Consultando Qualp...</> : <><RouteIcon className="w-4 h-4" strokeWidth={1.75} /> Consultar Qualp</>}

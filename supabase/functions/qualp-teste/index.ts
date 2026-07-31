@@ -84,29 +84,32 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { origem, destino, eixos = 6, fuel = false } = await req.json();
+    const { origem, destino, eixos = 6, fuel = false, categoria = 'A' } = await req.json();
     if (!origem || !destino) {
       return json({ ok: false, error: 'origem e destino são obrigatórios' }, 400);
     }
     const axis = Math.max(0, Math.min(15, Number(eixos) || 0));
+    // Categoria da tabela ANTT: A (a que a calculadora usa), B, C, D ou all.
+    const cat = ['A', 'B', 'C', 'D', 'all'].includes(String(categoria)) ? String(categoria) : 'A';
 
-    // Corpo exato confirmado pela doc oficial (OpenAPI v4).
+    // Corpo conforme OpenAPI v4: "show" é IRMÃO de "config" (nível de cima), NÃO dentro dele.
     const body = {
       locations: [String(origem), String(destino)],
       config: {
         route: { type_route: 'efficient', calculate_return: false },
         vehicle: { type: 'truck', axis },
-        show: {
-          tolls: true,
-          freight_table: true,
-          fuel_consumption: !!fuel,
-          polyline: false,
-          simplified_polyline: false,
-          maneuvers: 'false',
-          static_image: false,
-          private_places: false,
-        },
-        freight_table: { category: 'all', axis },
+        // Afina o piso ANTT: categoria (Tabela A/B/C/D) + eixos. Só afeta a comparação do ANTT.
+        freight_table: { category: cat, axis },
+      },
+      show: {
+        tolls: true,
+        freight_table: true,
+        fuel_consumption: !!fuel,
+        polyline: false,
+        simplified_polyline: false,
+        maneuvers: 'false',
+        static_image: false,
+        private_places: false,
       },
     };
 

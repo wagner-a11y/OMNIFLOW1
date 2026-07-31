@@ -19,7 +19,7 @@ export interface QualpResultado {
     hint?: string;
 }
 
-export async function consultarQualp(params: { origem: string; destino: string; eixos: number; fuel?: boolean }): Promise<QualpResultado> {
+export async function consultarQualp(params: { origem: string; destino: string; eixos: number; fuel?: boolean; categoria?: string }): Promise<QualpResultado> {
     try {
         const { data, error } = await supabase.functions.invoke('qualp-teste', { body: params });
         if (error) {
