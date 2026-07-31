@@ -8,11 +8,23 @@ import { consultarQualp, QualpResultado } from '../services/qualpTeste';
 const brl = (n: number | null | undefined) =>
     (n == null ? '—' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
+// Bateria de rotas conhecidas (corredores comuns) p/ testar o pedágio na mão. Editável.
+// Cada uma preenche origem/destino/eixos com um clique — a consulta continua manual (1 clique = 1 consulta).
+const ROTAS_CONHECIDAS: Array<{ label: string; origem: string; destino: string; eixos: string }> = [
+    { label: 'São Paulo → Rio de Janeiro', origem: 'São Paulo, SP', destino: 'Rio de Janeiro, RJ', eixos: '5' },
+    { label: 'São Paulo → Curitiba', origem: 'São Paulo, SP', destino: 'Curitiba, PR', eixos: '5' },
+    { label: 'São Paulo → Belo Horizonte', origem: 'São Paulo, SP', destino: 'Belo Horizonte, MG', eixos: '5' },
+    { label: 'São Paulo → Uberlândia', origem: 'São Paulo, SP', destino: 'Uberlândia, MG', eixos: '5' },
+    { label: 'Santos → São Paulo', origem: 'Santos, SP', destino: 'São Paulo, SP', eixos: '5' },
+    { label: 'Rio de Janeiro → Belo Horizonte', origem: 'Rio de Janeiro, RJ', destino: 'Belo Horizonte, MG', eixos: '5' },
+];
+
 export const QualpTesteLab: React.FC = () => {
     const [origem, setOrigem] = useState('');
     const [destino, setDestino] = useState('');
     const [eixos, setEixos] = useState('6');
     const [categoria, setCategoria] = useState('A'); // Tabela ANTT — 'A' é a que a calculadora usa
+    const [compararAntt, setCompararAntt] = useState(false); // ISOLADO por padrão: só pedágio/distância
     const [fuel, setFuel] = useState(false);
     const [loading, setLoading] = useState(false);
     const [res, setRes] = useState<QualpResultado | null>(null);
@@ -21,7 +33,7 @@ export const QualpTesteLab: React.FC = () => {
     const consultar = async () => {
         if (!origem.trim() || !destino.trim()) return;
         setLoading(true); setRes(null); setRawOpen(false);
-        const r = await consultarQualp({ origem: origem.trim(), destino: destino.trim(), eixos: Number(eixos) || 0, fuel, categoria });
+        const r = await consultarQualp({ origem: origem.trim(), destino: destino.trim(), eixos: Number(eixos) || 0, fuel, categoria, freightLoad: 'geral', antt: compararAntt });
         setRes(r);
         setLoading(false);
     };
@@ -34,6 +46,19 @@ export const QualpTesteLab: React.FC = () => {
                 <div>
                     <p className="text-sm font-medium text-amber-900">Laboratório de teste — API Qualp</p>
                     <p className="text-xs text-amber-700 mt-0.5">Isolado e só leitura: não altera a calculadora, a fórmula nem grava nada. Compare os números na mão com a cotação da mesma rota. Consultas gratuitas são limitadas — use com parcimônia.</p>
+                </div>
+            </div>
+
+            {/* Bateria de rotas conhecidas — 1 clique preenche a rota (a consulta segue manual). */}
+            <div className="mb-4">
+                <p className="text-[11px] font-medium text-[#6b7280] uppercase tracking-wide mb-2">Rotas conhecidas (bateria de pedágio)</p>
+                <div className="flex flex-wrap gap-2">
+                    {ROTAS_CONHECIDAS.map((r, i) => (
+                        <button key={i} onClick={() => { setOrigem(r.origem); setDestino(r.destino); setEixos(r.eixos); setRes(null); }}
+                            className="px-3 py-1.5 rounded-full border border-[#e5e7eb] bg-white text-[12px] font-medium text-[#374151] hover:border-[#1d6fb8] hover:text-[#1d6fb8] transition-colors">
+                            {r.label} · {r.eixos}e
+                        </button>
+                    ))}
                 </div>
             </div>
 
@@ -68,6 +93,10 @@ export const QualpTesteLab: React.FC = () => {
                     </div>
                 </div>
                 <label className="mt-4 flex items-center gap-2 text-sm text-[#374151] cursor-pointer select-none">
+                    <input type="checkbox" checked={compararAntt} onChange={e => setCompararAntt(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db]" />
+                    Comparar também o piso ANTT <span className="text-[11px] text-[#9ca3af]">(usa a categoria acima + carga geral; senão só pedágio/distância)</span>
+                </label>
+                <label className="mt-2 flex items-center gap-2 text-sm text-[#374151] cursor-pointer select-none">
                     <input type="checkbox" checked={fuel} onChange={e => setFuel(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db]" />
                     Pedir consumo de combustível
                 </label>
@@ -112,9 +141,17 @@ export const QualpTesteLab: React.FC = () => {
                                     <div className="px-5 py-3 border-b border-[#f3f4f6] text-[11px] font-medium text-[#6b7280] uppercase tracking-wide">Praças de pedágio</div>
                                     <div className="divide-y divide-[#f3f4f6]">
                                         {res.pracas.map((p, i) => (
-                                            <div key={i} className="px-5 py-2.5 flex items-center justify-between text-sm">
-                                                <span className="text-[#374151] truncate pr-3">{p.nome}{p.uf ? <span className="text-[#9ca3af]"> · {p.uf}</span> : null}</span>
-                                                <span className="font-medium text-[#111827] tabular-nums shrink-0">R$ {brl(p.valor)}</span>
+                                            <div key={i} className="px-5 py-2.5 flex items-center justify-between text-sm gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-[#374151] truncate">{p.nome}{p.uf ? <span className="text-[#9ca3af]"> · {p.uf}</span> : null}</p>
+                                                    <p className="text-[11px] text-[#9ca3af] truncate">
+                                                        {[p.rodovia, p.km ? `km ${p.km}` : null, p.concessionaria].filter(Boolean).join(' · ')}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    <p className="font-medium text-[#111827] tabular-nums">R$ {brl(p.valor)}</p>
+                                                    {p.tarifaTag != null && <p className="text-[11px] text-[#9ca3af] tabular-nums">tag R$ {brl(p.tarifaTag)}</p>}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>

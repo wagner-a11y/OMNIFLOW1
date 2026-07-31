@@ -22,13 +22,16 @@ const json = (body: unknown, status = 200) =>
 // --- Extratores defensivos: a resposta do Qualp pode aninhar de formas diferentes,
 //     então tentamos os nomes prováveis e SEMPRE devolvemos o raw pra conferência. ---
 
-// Distância -> km numérico. Aceita número, string ("123 km"/"123,4"), ou { value, text }.
+// Distância -> km numérico. Qualp devolve { texto: "437 km", valor: 437 } (PT).
+// Aceita número, string, ou objeto com valor/texto (PT) ou value/text (EN).
 function extrairKm(distancia: unknown): number | null {
   if (distancia == null) return null;
-  if (typeof distancia === 'number') return distancia > 10000 ? Math.round(distancia / 1000) : distancia; // heurística m->km
+  if (typeof distancia === 'number') return distancia; // Qualp já manda em km
   if (typeof distancia === 'object') {
     const o = distancia as Record<string, unknown>;
-    if (typeof o.value === 'number') return o.value > 10000 ? Math.round(o.value / 1000) : o.value;
+    if (typeof o.valor === 'number') return o.valor;
+    if (typeof o.value === 'number') return o.value;
+    if (typeof o.texto === 'string') return extrairKm(o.texto);
     if (typeof o.text === 'string') return extrairKm(o.text);
   }
   if (typeof distancia === 'string') {
@@ -36,6 +39,20 @@ function extrairKm(distancia: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+// Tarifa de UMA praça pro nº de eixos pedido. Qualp: tarifa: { "5": 22.5 } (chaveado por eixo).
+function tarifaPorEixo(o: Record<string, unknown>, axis: number): number | null {
+  const t = o.tarifa;
+  if (t && typeof t === 'object') {
+    const m = t as Record<string, unknown>;
+    const v = m[String(axis)] ?? m[axis as unknown as string];
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') { const n = parseFloat(v.replace(',', '.')); if (Number.isFinite(n)) return n; }
+    const first = Object.values(m).find(x => typeof x === 'number'); // fallback: 1º valor numérico
+    if (typeof first === 'number') return first;
+  }
+  return extrairValor(o); // fallback p/ formatos onde a tarifa é número direto
 }
 
 // Um valor monetário a partir de nomes prováveis (valor/tarifa/preco/price/total...).
@@ -51,28 +68,38 @@ function extrairValor(o: Record<string, unknown>): number | null {
   return null;
 }
 
-// Normaliza a lista de praças de pedágio a partir de várias formas possíveis.
-function normalizarPracas(pedagios: unknown): { lista: Array<{ nome: string; uf: string | null; valor: number | null }>; total: number | null } {
-  // Formas aceitas: array direto; { pedagios: [...] }; { lista: [...] }; { total, ... }.
+// Normaliza a lista de praças de pedágio pro nº de eixos pedido.
+function normalizarPracas(pedagios: unknown, axis: number): {
+  lista: Array<{ nome: string; uf: string | null; valor: number | null; rodovia: string | null; km: string | null; concessionaria: string | null; tarifaTag: number | null }>;
+  total: number | null;
+} {
   let arr: unknown = pedagios;
-  let totalDeclarado: number | null = null;
   if (pedagios && typeof pedagios === 'object' && !Array.isArray(pedagios)) {
     const o = pedagios as Record<string, unknown>;
-    totalDeclarado = extrairValor(o);
     arr = o.pedagios ?? o.lista ?? o.pracas ?? o.items ?? o.data ?? [];
   }
-  const lista: Array<{ nome: string; uf: string | null; valor: number | null }> = [];
+  const lista: Array<{ nome: string; uf: string | null; valor: number | null; rodovia: string | null; km: string | null; concessionaria: string | null; tarifaTag: number | null }> = [];
   if (Array.isArray(arr)) {
     for (const item of arr) {
       if (!item || typeof item !== 'object') continue;
       const o = item as Record<string, unknown>;
       const nome = String(o.nome ?? o.name ?? o.praca ?? o.concessionaria ?? o.rodovia ?? o.local ?? '—');
       const uf = (o.uf ?? o.estado ?? o.state ?? null) as string | null;
-      lista.push({ nome, uf: uf ? String(uf) : null, valor: extrairValor(o) });
+      const tag = o.tarifa_tag;
+      const tarifaTag = (tag && typeof tag === 'object') ? (Number((tag as Record<string, unknown>)[String(axis)]) || null) : null;
+      lista.push({
+        nome,
+        uf: uf ? String(uf) : null,
+        valor: tarifaPorEixo(o, axis),
+        rodovia: o.rodovia ? String(o.rodovia) : null,
+        km: o.km != null ? String(o.km) : null,
+        concessionaria: o.concessionaria ? String(o.concessionaria) : null,
+        tarifaTag,
+      });
     }
   }
-  const somaLista = lista.reduce((s, p) => s + (p.valor || 0), 0);
-  const total = totalDeclarado ?? (somaLista > 0 ? Math.round(somaLista * 100) / 100 : null);
+  const soma = lista.reduce((s, p) => s + (p.valor || 0), 0);
+  const total = soma > 0 ? Math.round(soma * 100) / 100 : null;
   return { lista, total };
 }
 
@@ -84,13 +111,18 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { origem, destino, eixos = 6, fuel = false, categoria = 'A' } = await req.json();
+    const { origem, destino, eixos = 6, fuel = false, categoria = 'A', freightLoad = 'geral', antt = false } = await req.json();
     if (!origem || !destino) {
       return json({ ok: false, error: 'origem e destino são obrigatórios' }, 400);
     }
     const axis = Math.max(0, Math.min(15, Number(eixos) || 0));
-    // Categoria da tabela ANTT: A (a que a calculadora usa), B, C, D ou all.
+    // Categoria da tabela ANTT (Tabela A/B/C/D ou all). A é a que a calculadora usa.
     const cat = ['A', 'B', 'C', 'D', 'all'].includes(String(categoria)) ? String(categoria) : 'A';
+    // Tipo de carga conforme enum oficial do Qualp (freight_load). 'geral' = carga geral.
+    const LOADS = ['all', 'granel_solido', 'granel_liquido', 'frigorificada', 'conteineirizada', 'geral', 'neogranel', 'perigosa_granel_solido', 'perigosa_granel_liquido', 'perigosa_frigorificada', 'perigosa_conteineirizada', 'perigosa_geral', 'granel_pressurizada'];
+    const load = LOADS.includes(String(freightLoad)) ? String(freightLoad) : 'geral';
+    // ANTT fica ISOLADO por padrão (antt=false -> não pede a tabela). O pedágio/distância não dependem disso.
+    const mostrarAntt = !!antt;
 
     // Corpo conforme OpenAPI v4: "show" é IRMÃO de "config" (nível de cima), NÃO dentro dele.
     const body = {
@@ -98,12 +130,12 @@ Deno.serve(async (req: Request) => {
       config: {
         route: { type_route: 'efficient', calculate_return: false },
         vehicle: { type: 'truck', axis },
-        // Afina o piso ANTT: categoria (Tabela A/B/C/D) + eixos. Só afeta a comparação do ANTT.
-        freight_table: { category: cat, axis },
+        // Tabela ANTT: category + freight_load + axis (axis é STRING no schema do Qualp). Só afeta o ANTT.
+        freight_table: { category: cat, freight_load: load, axis: String(axis) },
       },
       show: {
         tolls: true,
-        freight_table: true,
+        freight_table: mostrarAntt,
         fuel_consumption: !!fuel,
         polyline: false,
         simplified_polyline: false,
@@ -144,7 +176,7 @@ Deno.serve(async (req: Request) => {
 
     // Extração defensiva (nomes prováveis) + raw sempre presente pra conferência.
     const distanciaKm = extrairKm(data?.distancia ?? data?.distance ?? data?.distancia_total);
-    const { lista: pracas, total: pedagioTotal } = normalizarPracas(data?.pedagios ?? data?.tolls ?? data?.pedagio);
+    const { lista: pracas, total: pedagioTotal } = normalizarPracas(data?.pedagios ?? data?.tolls ?? data?.pedagio, axis);
     const pisoAntt = data?.tabela_frete ?? data?.freight_table ?? data?.tabelaFrete ?? null;
     const consumo = data?.consumo_combustivel ?? data?.fuel_consumption ?? null;
 
