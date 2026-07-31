@@ -1,42 +1,98 @@
 // Triggering fresh deploy to verify KM sync
 import { supabase } from './supabase';
 
-export const estimateDistance = async (origin: string, destination: string, vehicleType: string, axles?: number) => {
-    console.log('--- CALCULATOR: estimateDistance started ---', { origin, destination, vehicleType, axles });
+export interface PracaPedagio {
+    nome: string; uf: string | null; rodovia: string | null; km: string | null;
+    concessionaria: string | null; tarifa: number | null; tarifaTag: number | null;
+}
+
+export interface RotaSimples {
+    km: number;
+    originNormalized: string;
+    destinationNormalized: string;
+    estimatedTolls: number;       // tarifa CHEIA — é esta que entra no preço
+    tollsWithTag: number;         // tarifa com tag — só snapshot, não entra no preço
+    pracas: PracaPedagio[];
+    pisoAntt: number | null;      // null = sem piso p/ a combinação; nunca zero
+    resolucaoAntt: { nome: string; data: string | null; url: string | null } | null;
+    confirmarPisoManualmente: boolean;
+    idTransacao: string | null;
+    latenciaMs: number;
+    error?: undefined;
+}
+
+export interface FalhaRota {
+    error: string;
+    mensagem: string;
+    bloqueante: true;
+}
+
+/**
+ * Rota SIMPLES — fonte única: distância, pedágio e piso ANTT saem todos de uma
+ * chamada à Edge Function qualp-rota (Qualp /rotas/v4). O Google saiu daqui.
+ *
+ * Falha é BLOQUEANTE e não tem fallback: sem resposta do Qualp não existe
+ * número confiável, e cotação com número estimado é pior que cotação travada.
+ * A rota MULTI-PARADA (estimateMultiRoute) segue no Google até a Fase 2.
+ */
+export const estimateDistance = async (
+    origin: string,
+    destination: string,
+    vehicleType: string,
+    axles?: number,
+    cargoType?: string,
+): Promise<RotaSimples | FalhaRota> => {
+    console.log('--- CALCULATOR: estimateDistance (qualp-rota) ---', { origin, destination, vehicleType, axles, cargoType });
     try {
-        const { data, error } = await supabase.functions.invoke('calculate-route', {
-            body: { origin, destination, vehicleType, axles: axles || 6 },
+        const { data, error } = await supabase.functions.invoke('qualp-rota', {
+            body: {
+                origem: origin,
+                destino: destination,
+                eixos: axles || 6,
+                tipoCarga: cargoType || 'Carga geral',
+            },
         });
 
+        // invoke só expõe "non-2xx status code"; a qualp-rota responde 200 com
+        // ok:false justamente pra o motivo real chegar até aqui.
         if (error) {
-            console.error('--- CALCULATOR ERROR: Supabase Function Invoke (calculate-route) ---', error);
+            console.error('--- CALCULATOR ERROR: invoke(qualp-rota) ---', error);
             return {
-                km: 0,
-                originNormalized: origin,
-                destinationNormalized: destination,
-                estimatedTolls: 0,
-                error: error.message || 'Erro na comunicação com a Edge Function'
+                error: 'QUALP_INVOCACAO',
+                mensagem: 'Não foi possível falar com a integração do Qualp. A cotação não pode ser fechada sem pedágio e piso confiáveis.',
+                bloqueante: true,
             };
         }
 
-        console.log('--- CALCULATOR RESULT ---', data);
-
-        if (data?.error) {
-            console.warn('--- CALCULATOR WARNING: Function returned internal error ---', data.error);
+        if (!data?.ok) {
+            console.warn('--- CALCULATOR: qualp-rota bloqueou ---', data?.error);
             return {
-                km: 0,
-                originNormalized: origin,
-                destinationNormalized: destination,
-                estimatedTolls: 0,
-                error: data.error,
-                details: data.details
+                error: data?.error || 'QUALP_SEM_RESPOSTA',
+                mensagem: data?.mensagem || 'O Qualp não respondeu. A cotação não pode ser fechada com número estimado.',
+                bloqueante: true,
             };
         }
 
-        return data;
+        return {
+            km: data.distanciaKm,
+            originNormalized: data.origemNormalizada || origin,
+            destinationNormalized: data.destinoNormalizada || destination,
+            estimatedTolls: data.pedagio?.cheio ?? 0,
+            tollsWithTag: data.pedagio?.comTag ?? 0,
+            pracas: Array.isArray(data.pedagio?.pracas) ? data.pedagio.pracas : [],
+            pisoAntt: data.pisoAntt ?? null,
+            resolucaoAntt: data.resolucaoAntt ?? null,
+            confirmarPisoManualmente: !!data.confirmarPisoManualmente,
+            idTransacao: data.idTransacao ?? null,
+            latenciaMs: data.latenciaMs ?? 0,
+        };
     } catch (error: any) {
         console.error('--- CALCULATOR CRITICAL ERROR: catch block ---', error);
-        return { km: 0, originNormalized: origin, destinationNormalized: destination, estimatedTolls: 0, error: error.message };
+        return {
+            error: 'QUALP_REDE',
+            mensagem: `Falha de rede ao consultar o Qualp: ${error.message}. A cotação não pode ser fechada.`,
+            bloqueante: true,
+        };
     }
 };
 
