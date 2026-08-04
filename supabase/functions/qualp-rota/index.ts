@@ -186,7 +186,13 @@ Deno.serve(async (req: Request) => {
   const body = {
     locations: [origem, destino],
     config: {
-      route: { type_route: "efficient", calculate_return: false },
+      // avoid_locations: false É OBRIGATÓRIO ir explícito, mesmo desligado e mesmo
+      // a doc declarando `default: false`. Com o campo AUSENTE, o validador do
+      // Qualp trata como se o recurso estivesse sendo pedido e recusa a rota
+      // inteira com 422 PermissionDeniedException quando o plano não o inclui —
+      // foi o que derrubou a operação em 04/08/2026, ao migrar para o Bronze 1000.
+      // Comprovado: mesmo corpo sem o campo = 422; com o campo = 200. NÃO REMOVER.
+      route: { type_route: "efficient", calculate_return: false, avoid_locations: false },
       vehicle: { type: "truck", axis: eixos },
       // axis é STRING no schema do freight_table (diferente do vehicle.axis).
       freight_table: { category: categoria, freight_load: freightLoad, axis: String(eixos) },
