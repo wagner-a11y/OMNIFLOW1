@@ -30,8 +30,12 @@ const MOSTRAR_NEGOCIACOES = true;
 //   true  = LIGADO   (Qualp fora: cotação de rota simples fecha sem ele)
 //   false = DESLIGADO (normal: Qualp é fonte única e bloqueia quando falha)
 //
-// Ligado em 04/08/2026: o Qualp passou a recusar toda rota com
-// 422 PermissionDeniedException por restrição de plano do lado deles.
+// Ligado em 04/08/2026, quando o Qualp passou a recusar toda rota com 422
+// PermissionDeniedException, e DESLIGADO no mesmo dia após a correção: faltava
+// enviar config.route.avoid_locations: false explícito na qualp-rota. Produção
+// reconfirmada (437,345 km / R$ 328,50 / piso R$ 3.573,14) antes de desligar.
+// As cotações fechadas naquela janela seguem marcadas com
+// origem_dados = 'contingencia' — de propósito, para auditoria.
 //
 // O que muda enquanto está LIGADO, e SÓ na rota simples:
 //   - a falha do Qualp deixa de impedir o fechamento da cotação;
@@ -46,7 +50,7 @@ const MOSTRAR_NEGOCIACOES = true;
 // ============================================================================
 // Anotado como boolean de propósito: sem isso o TS trata como literal `true` e
 // pode reclamar de código "inalcançável" na hora de virar para false.
-const MODO_CONTINGENCIA: boolean = true;
+const MODO_CONTINGENCIA: boolean = false;
 
 // Link direto pro card no Pipefy: usa a URL exata salva (pipefyCardUrl) e, no fallback,
 // monta o deep-link universal pelo id (open-cards/<id>). null = carga sem card no Pipefy.
