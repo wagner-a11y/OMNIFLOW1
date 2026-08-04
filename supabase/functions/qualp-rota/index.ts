@@ -191,15 +191,18 @@ Deno.serve(async (req: Request) => {
       // axis é STRING no schema do freight_table (diferente do vehicle.axis).
       freight_table: { category: categoria, freight_load: freightLoad, axis: String(eixos) },
     },
+    // Só o que o plano Bronze 1000 inclui. NÃO mandar chave de recurso fora do
+    // plano, nem desligada: em 04/08/2026 o Qualp passou a recusar a rota inteira
+    // com 422 PermissionDeniedException citando avoid_locations, e o que havia no
+    // corpo eram private_places (Gold), maneuvers e static_image (Silver/Gold) —
+    // os três enviados com o próprio default, ou seja, pedindo nada. Todos os
+    // recursos fora do plano ficam de fora daqui; o default do Qualp já é desligado.
     show: {
-      tolls: true,
-      freight_table: true,
+      tolls: true,           // Pedágios — incluso no plano
+      freight_table: true,   // Tabela de Frete ANTT — incluso no plano
       fuel_consumption: false,
       polyline: false,
       simplified_polyline: false,
-      maneuvers: "false",
-      static_image: false,
-      private_places: false,
     },
   };
 
