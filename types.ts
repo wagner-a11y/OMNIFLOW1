@@ -105,6 +105,9 @@ export interface FreightCalculation {
     realProfit?: number;
     realMarginPercent?: number;
     elaborationSeconds?: number; // Tempo de elaboração da cotação em segundos (cronômetro)
+    // Procedência dos números: 'contingencia' = fechada com o Qualp fora (pedágio
+    // digitado à mão + piso da Tabela A local). Vazio = fluxo normal pelo Qualp.
+    origemDados?: 'contingencia';
     isEdited?: boolean;
     createdBy?: string;       // autor da CRIAÇÃO (gravado uma vez, nunca sobrescrito)
     createdByName?: string;

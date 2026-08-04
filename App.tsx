@@ -24,6 +24,30 @@ const MOSTRAR_ACOES_COMERCIAL = true;
 // entrada no "Mandar pro Ramper" fica ativo. Tabelas neg_ e RLS já aplicadas. Voltar a ocultar = false.
 const MOSTRAR_NEGOCIACOES = true;
 
+// ============================================================================
+// MODO CONTINGÊNCIA — chave de emergência. Uma linha liga, uma linha desliga.
+//
+//   true  = LIGADO   (Qualp fora: cotação de rota simples fecha sem ele)
+//   false = DESLIGADO (normal: Qualp é fonte única e bloqueia quando falha)
+//
+// Ligado em 04/08/2026: o Qualp passou a recusar toda rota com
+// 422 PermissionDeniedException por restrição de plano do lado deles.
+//
+// O que muda enquanto está LIGADO, e SÓ na rota simples:
+//   - a falha do Qualp deixa de impedir o fechamento da cotação;
+//   - o piso ANTT volta a sair da Tabela A local (utils/antt.ts), não do Qualp;
+//   - o pedágio fica liberado para digitação manual;
+//   - banner AMARELO na tela (o vermelho de bloqueio continua sendo outra coisa);
+//   - a cotação é gravada com origem_dados = 'contingencia', para auditoria.
+//
+// Para DESLIGAR quando o Qualp normalizar: trocar para false, commitar e subir.
+// Nada mais precisa ser desfeito — a qualp-rota não foi tocada e volta a ser a
+// fonte no mesmo instante. As cotações marcadas ficam marcadas, de propósito.
+// ============================================================================
+// Anotado como boolean de propósito: sem isso o TS trata como literal `true` e
+// pode reclamar de código "inalcançável" na hora de virar para false.
+const MODO_CONTINGENCIA: boolean = true;
+
 // Link direto pro card no Pipefy: usa a URL exata salva (pipefyCardUrl) e, no fallback,
 // monta o deep-link universal pelo id (open-cards/<id>). null = carga sem card no Pipefy.
 const pipefyCardLink = (q?: { pipefyCardUrl?: string; pipefyCardId?: string }): string | null =>
@@ -1226,28 +1250,42 @@ const App: React.FC = () => {
         if (!hasAntt) return null;
         const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
         if (isMultiRota) return computeANTTFloor(cargoType, eixosAtuais, dist);
+        // Contingência: o piso volta a sair da Tabela A local, como era antes do
+        // Qualp. Nunca fica em branco — cotação sem piso é pior que piso local.
+        if (MODO_CONTINGENCIA && !(snapshotValido && qualpRota!.fonte === 'qualp')) {
+            return computeANTTFloor(cargoType, eixosAtuais, dist);
+        }
         if (snapshotValido) return qualpRota!.piso;
-        // Cotação salva reaberta: mantém o piso que já estava lá até recalcular.
         // Sem snapshot valido nao ha piso: invalidado vira "—", nunca numero velho.
         return null;
     }, [hasAntt, cargoType, distanceKm, eixosAtuais, isMultiRota, snapshotValido, qualpRota]);
 
     // Pedágio read-only só quando o número veio de uma busca agora. Cotação antiga
     // reaberta mantém o pedágio editável, como sempre foi.
-    const pedagioDoQualp = !isMultiRota && snapshotValido && qualpRota!.fonte === 'qualp';
+    // Em contingência o pedágio é digitado à mão: nunca read-only.
+    const pedagioDoQualp = !MODO_CONTINGENCIA && !isMultiRota && snapshotValido && qualpRota!.fonte === 'qualp';
     const pedagioSobrescrito = pedagioDoQualp && Math.abs(num(tolls) - qualpRota!.pedagioCheio) > 0.005;
 
     // Cotação salva reaberta: números gravados, ainda correspondendo aos campos.
     const temNumerosSalvos = snapshotValido && qualpRota!.fonte === 'salvo';
 
+    // Esta cotação de rota simples está fechando SEM o Qualp? É o que vai virar a
+    // marca origem_dados='contingencia' no registro. Se o Qualp voltar e a busca
+    // der certo antes de desligarem a flag, a cotação NÃO é marcada.
+    const fechandoEmContingencia = MODO_CONTINGENCIA && !isMultiRota
+        && !(snapshotValido && qualpRota!.fonte === 'qualp');
+
     // Rota simples só fecha com resultado válido — de busca agora ou os números
     // salvos ainda coerentes. "Desatualizado" NÃO conta como válido.
-    const resultadoRotaOk = isMultiRota || (snapshotValido && !rotaDesatualizada);
+    // Em contingência esse portão fica aberto: é o ponto da chave de emergência.
+    const resultadoRotaOk = isMultiRota || MODO_CONTINGENCIA || (snapshotValido && !rotaDesatualizada);
 
     // Sujou depois de uma busca boa: limpa o que veio do Qualp da tela para ninguém
     // ler número que não corresponde mais aos campos, e marca para nova busca.
+    // Em contingência não roda: os números são digitados à mão e apagá-los seria
+    // destruir o trabalho do operador.
     useEffect(() => {
-        if (isMultiRota || !qualpRota || snapshotValido) return;
+        if (MODO_CONTINGENCIA || isMultiRota || !qualpRota || snapshotValido) return;
         setQualpRota(null);
         setRotaDesatualizada(true);
         setDistanceKm('0');
@@ -1470,7 +1508,9 @@ const App: React.FC = () => {
         // Fonte única: se o Qualp falhou depois do timeout + retry, a cotação de
         // rota simples NÃO fecha. Sem fallback pro Google — número velho numa
         // cotação é pior que cotação travada. Multi-parada não é afetada.
-        if (!isMultiRota && qualpBloqueio) {
+        // Em contingência este portão fica aberto: a falha do Qualp deixa de
+        // impedir o fechamento (a cotação sai marcada como 'contingencia').
+        if (!MODO_CONTINGENCIA && !isMultiRota && qualpBloqueio) {
             showFeedback('Cotação travada: o Qualp não respondeu. Refaça a consulta da rota antes de salvar.', 'error');
             return;
         }
@@ -1532,6 +1572,10 @@ const App: React.FC = () => {
             createdByName: editingId ? existingQuote?.createdByName : currentUser?.name,
             realProfit: calcData.realProfitAmount, realMarginPercent: calcData.realMarginPercent,
             elaborationSeconds: elapsedSeconds,
+            // Marca de auditoria: esta cotação fechou sem o Qualp (pedágio manual,
+            // piso da tabela local). Preserva a marca de uma cotação que já era de
+            // contingência, mesmo que agora esteja sendo reeditada com o Qualp de pé.
+            origemDados: fechandoEmContingencia ? 'contingencia' : existingQuote?.origemDados,
             otherCosts
         };
 
@@ -2901,10 +2945,26 @@ Disponibilidade: ${disponibilidade}`;
                                             )}
                                         </div>
 
+                                        {/* Contingência — amarelo, deliberadamente diferente do vermelho:
+                                            aqui a cotação FECHA, só que sem o Qualp. O operador precisa
+                                            saber que os números não vieram da fonte única. */}
+                                        {fechandoEmContingencia && (
+                                            <div className="col-span-1 md:col-span-2 bg-amber-50 border border-amber-300 text-amber-900 px-6 py-3 rounded-xl flex items-start gap-3">
+                                                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-semibold">Modo contingência — Qualp indisponível</p>
+                                                    <p className="text-xs font-medium opacity-90 mt-0.5">
+                                                        Pedágio manual, piso pela tabela local. Confira os valores.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Bloqueio do Qualp — mesmo padrão de alerta do Painel TV: barra
                                             vermelha, impossível de não ver. Enquanto estiver aqui, a cotação
-                                            de rota simples não fecha e não há fallback pro Google. */}
-                                        {!isMultiRota && qualpBloqueio && (
+                                            de rota simples não fecha e não há fallback pro Google.
+                                            Em contingência não aparece: quem manda é o banner amarelo. */}
+                                        {!MODO_CONTINGENCIA && !isMultiRota && qualpBloqueio && (
                                             <div className="col-span-1 md:col-span-2 bg-red-600 text-white px-6 py-3 rounded-xl flex items-center gap-4 shadow-lg animate-pulse">
                                                 <span className="text-2xl shrink-0">⚠️</span>
                                                 <div className="flex-1">
