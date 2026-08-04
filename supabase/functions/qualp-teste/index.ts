@@ -143,6 +143,34 @@ Deno.serve(async (req: Request) => {
       }, 200);
     }
 
+    // --- Passthrough de corpo cru ({"bodyRaw": {...}}) ----------------------
+    // Envia para /rotas/v4 EXATAMENTE o objeto recebido, sem montar nada por
+    // cima. Serve para mapear qual corpo o plano aceita durante o incidente de
+    // 04/08/2026: cada variação volta 422 (não consome consulta) ou 200.
+    // Só no laboratório — a função de produção nunca aceita corpo de fora.
+    if (corpoReq?.bodyRaw) {
+      const t0 = Date.now();
+      const res = await fetch(`${QUALP_BASE}/rotas/v4`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Access-Token': QUALP_ACCESS_TOKEN,
+        },
+        body: JSON.stringify(corpoReq.bodyRaw),
+      });
+      const texto = await res.text();
+      let corpo: unknown = texto;
+      try { corpo = JSON.parse(texto); } catch { /* mantém texto cru */ }
+      return json({
+        ok: res.ok,
+        status: res.status,
+        elapsedMs: Date.now() - t0,
+        enviado: corpoReq.bodyRaw,
+        corpo,
+      }, 200);
+    }
+
     const { origem, destino, eixos = 6, fuel = false, categoria = 'A', freightLoad = 'geral', antt = false } = corpoReq;
     if (!origem || !destino) {
       return json({ ok: false, error: 'origem e destino são obrigatórios' }, 400);
