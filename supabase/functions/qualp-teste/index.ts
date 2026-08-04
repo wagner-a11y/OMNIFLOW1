@@ -114,7 +114,36 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { origem, destino, eixos = 6, fuel = false, categoria = 'A', freightLoad = 'geral', antt = false } = await req.json();
+    const corpoReq = await req.json();
+
+    // --- Modo diagnóstico ({"diag":true}) -----------------------------------
+    // Lê a configuração da CONTA no Qualp (locais a evitar, exceções de rota).
+    // São endpoints de leitura de cadastro, não de rota: não gastam consulta.
+    // Existe para investigar o 422 PermissionDeniedException de 04/08/2026.
+    if (corpoReq?.diag) {
+      const ler = async (caminho: string) => {
+        try {
+          const r = await fetch(`${QUALP_BASE}${caminho}`, {
+            headers: { 'Accept': 'application/json', 'Access-Token': QUALP_ACCESS_TOKEN },
+          });
+          const t = await r.text();
+          let corpo: unknown = t;
+          try { corpo = JSON.parse(t); } catch { /* mantém texto */ }
+          return { caminho, status: r.status, corpo };
+        } catch (e) {
+          return { caminho, status: null, corpo: (e as Error).message };
+        }
+      };
+      return json({
+        ok: true,
+        diag: await Promise.all([
+          ler('/avoid-location/v1'),
+          ler('/router-exceptions/v1'),
+        ]),
+      }, 200);
+    }
+
+    const { origem, destino, eixos = 6, fuel = false, categoria = 'A', freightLoad = 'geral', antt = false } = corpoReq;
     if (!origem || !destino) {
       return json({ ok: false, error: 'origem e destino são obrigatórios' }, 400);
     }
@@ -136,15 +165,15 @@ Deno.serve(async (req: Request) => {
         // Tabela ANTT: category + freight_load + axis (axis é STRING no schema do Qualp). Só afeta o ANTT.
         freight_table: { category: cat, freight_load: load, axis: String(axis) },
       },
+      // Só o que o plano Bronze 1000 inclui. private_places (Gold), maneuvers e
+      // static_image (Silver/Gold) saíram: iam com o próprio default (desligado),
+      // não pediam nada e viravam superfície de acoplamento com o plano.
       show: {
         tolls: true,
         freight_table: mostrarAntt,
         fuel_consumption: !!fuel,
         polyline: false,
         simplified_polyline: false,
-        maneuvers: 'false',
-        static_image: false,
-        private_places: false,
       },
     };
 
