@@ -188,7 +188,10 @@ Deno.serve(async (req: Request) => {
     const body = {
       locations: [String(origem), String(destino)],
       config: {
-        route: { type_route: 'efficient', calculate_return: false },
+        // avoid_locations: false explícito é OBRIGATÓRIO, igual na qualp-rota:
+        // ausente, o Qualp recusa a rota com 422 PermissionDeniedException quando
+        // o plano não inclui o recurso (incidente de 04/08/2026). NÃO REMOVER.
+        route: { type_route: 'efficient', calculate_return: false, avoid_locations: false },
         vehicle: { type: 'truck', axis },
         // Tabela ANTT: category + freight_load + axis (axis é STRING no schema do Qualp). Só afeta o ANTT.
         freight_table: { category: cat, freight_load: load, axis: String(axis) },
