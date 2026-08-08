@@ -46,6 +46,24 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+/**
+ * Origem e destino são o mesmo município? Compara sem acento, caixa ou
+ * pontuação: "São Paulo, SP", "sao paulo-sp" e "SAO PAULO / SP" são iguais.
+ * A rota simples manda o texto canônico do IBGE dos dois lados, então a
+ * comparação é exata na prática; a normalização cobre o resto.
+ */
+function mesmoMunicipio(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    (s || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  const na = norm(a);
+  return !!na && na === norm(b);
+}
+
 // Sempre HTTP 200: supabase.functions.invoke só expõe "non-2xx status code" e
 // engole o corpo, e aqui o MOTIVO da falha precisa chegar na tela.
 const json = (body: unknown) =>
@@ -180,6 +198,25 @@ Deno.serve(async (req: Request) => {
     }
   } catch {
     return json({ ok: false, bloqueante: true, error: "CORPO_INVALIDO", mensagem: "Requisição malformada." });
+  }
+
+  // Frete urbano: origem e destino no MESMO município. Detectado ANTES de chamar
+  // o Qualp, por três razões: (1) não gasta consulta paga para uma resposta que
+  // já conhecemos; (2) não gera linha de falha no qualp_health — isto é
+  // comportamento esperado, não incidente; (3) não é bloqueante, porque a
+  // distância zero é a resposta CORRETA aqui, e o operador vai preencher à mão.
+  // Antes desta guarda o caso caía em QUALP_SEM_DISTANCIA e a tela dizia "Qualp
+  // indisponível", o que era mentira: o Qualp respondia normalmente.
+  if (mesmoMunicipio(origem, destino)) {
+    return json({
+      ok: false,
+      bloqueante: false,          // <- não trava o fechamento da cotação
+      urbano: true,
+      error: "FRETE_URBANO",
+      mensagem: "Frete dentro do mesmo município ainda não é cotado automaticamente. Preencha distância, pedágio e piso manualmente.",
+      origemNormalizada: origem,
+      destinoNormalizada: destino,
+    });
   }
 
   // Corpo conforme OpenAPI v4: "show" é IRMÃO de "config", não filho.
