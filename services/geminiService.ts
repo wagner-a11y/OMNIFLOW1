@@ -24,7 +24,13 @@ export interface RotaSimples {
 export interface FalhaRota {
     error: string;
     mensagem: string;
-    bloqueante: true;
+    /**
+     * false SÓ no frete urbano (origem == destino): não é falha do Qualp, é caso
+     * ainda não coberto. A cotação pode fechar com os números preenchidos à mão.
+     */
+    bloqueante: boolean;
+    /** true quando origem e destino são o mesmo município. */
+    urbano?: boolean;
 }
 
 /**
@@ -65,6 +71,16 @@ export const estimateDistance = async (
         }
 
         if (!data?.ok) {
+            // Frete urbano não é falha: a função devolve bloqueante:false e a tela
+            // orienta o preenchimento manual em vez de acusar "Qualp indisponível".
+            if (data?.urbano) {
+                return {
+                    error: data.error || 'FRETE_URBANO',
+                    mensagem: data.mensagem || 'Frete dentro do mesmo município ainda não é cotado automaticamente. Preencha distância, pedágio e piso manualmente.',
+                    bloqueante: false,
+                    urbano: true,
+                };
+            }
             console.warn('--- CALCULATOR: qualp-rota bloqueou ---', data?.error);
             return {
                 error: data?.error || 'QUALP_SEM_RESPOSTA',
