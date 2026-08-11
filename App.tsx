@@ -1267,15 +1267,21 @@ const App: React.FC = () => {
     const anttFloor = useMemo(() => {
         if (!hasAntt) return null;
         const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
+        // O Qualp calcula o piso sobre a distância ARREDONDADA ao inteiro
+        // (4.244,669 -> 4.245). Os dois pontos que calculam o piso localmente
+        // usam o mesmo arredondamento, para a mesma rota mostrar o mesmo piso
+        // venha ele do Qualp ou daqui. Só a ENTRADA do cálculo é arredondada:
+        // distanceKm continua fracionário no que é salvo e no custo por km.
+        const distPiso = Math.round(dist);
         if (isMultiRota) return computeANTTFloor(cargoType, eixosAtuais, dist);
         // Frete urbano: o Qualp não é consultado, então o piso sai da Tabela A
         // local sobre a distância que o operador digitar. É referência, não
         // imposição — o Preço Base continua livre.
-        if (rotaUrbana) return computeANTTFloor(cargoType, eixosAtuais, dist);
+        if (rotaUrbana) return computeANTTFloor(cargoType, eixosAtuais, distPiso);
         // Contingência: o piso volta a sair da Tabela A local, como era antes do
         // Qualp. Nunca fica em branco — cotação sem piso é pior que piso local.
         if (MODO_CONTINGENCIA && !(snapshotValido && qualpRota!.fonte === 'qualp')) {
-            return computeANTTFloor(cargoType, eixosAtuais, dist);
+            return computeANTTFloor(cargoType, eixosAtuais, distPiso);
         }
         if (snapshotValido) return qualpRota!.piso;
         // Sem snapshot valido nao ha piso: invalidado vira "—", nunca numero velho.
