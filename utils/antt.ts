@@ -1,9 +1,27 @@
-// Tabela A — Pisos Mínimos de Frete (ANTT / Portaria SUROC nº 4/2026)
+// Tabela A — Pisos Mínimos de Frete (ANTT / Resolução nº 6.084/2026)
 // Coeficientes por número de eixos. Índice das colunas: [2, 3, 4, 5, 6, 7, 9] eixos.
 // Piso mínimo = (distância em km × CCD) + CC
 //
 // CCD = Coeficiente de Custo de Deslocamento (por km)
 // CC  = Coeficiente de Custo de Carga e Descarga (fixo)
+//
+// PROCEDÊNCIA: estes coeficientes NÃO foram transcritos do texto da resolução.
+// Foram EXTRAÍDOS da API do Qualp em 11/08/2026, resolvendo o sistema linear de
+// cada célula a partir de duas rotas de distância bem distinta:
+//   São Paulo → Rio de Janeiro (437 km) e Porto Alegre → Fortaleza (4.245 km)
+//   CCD = (piso₂ − piso₁) / (km₂ − km₁)      CC = piso₁ − km₁ × CCD
+// Provados numa TERCEIRA distância independente (São Paulo → Salvador, 1.984 km):
+// as 84 células reproduzem o piso do Qualp com desvio máximo de R$ 0,01, que é o
+// arredondamento do CCD em 4 casas. Uma transcrição anterior, feita do texto,
+// divergia em 71 das 78 células com valor — por isso a derivação.
+//
+// ATENÇÃO ao km: o Qualp calcula o piso sobre a distância ARREDONDADA ao inteiro
+// (4.244,669 km → 4.245), não sobre a fracionária. Quem comparar piso local com
+// piso do Qualp precisa usar o mesmo inteiro, senão a diferença aparece no CCD.
+//
+// Célula sem valor na resolução (null) NÃO é zero: computeANTTFloor devolve null
+// e a tela mostra "—". Combinação carga/eixo que a ANTT não tarifa não tem piso,
+// e piso zero liberaria cotação abaixo do mínimo legal.
 
 import { VehicleType } from '../types';
 
@@ -41,52 +59,58 @@ interface CargoCoefficients {
 
 export const ANTT_TABLE_A: Record<ANTTCargoType, CargoCoefficients> = {
     'Granel sólido': {
-        ccd: [4.0338, 5.1660, 5.8464, 6.7381, 7.4408, 8.0855, 9.2662],
-        cc: [444.84, 533.36, 576.59, 642.10, 656.76, 792.30, 877.83],
+        ccd: [4.0144, 5.1355, 5.8118, 6.6983, 7.3841, 8.0516, 9.2231],
+        cc: [460.59, 552.24, 597.00, 664.83, 680.01, 820.34, 908.90],
     },
     'Granel líquido': {
-        ccd: [4.1052, 5.2583, 5.9955, 6.9002, 7.6080, 8.2192, 9.4199],
-        cc: [455.84, 550.10, 600.27, 669.38, 685.45, 811.76, 902.80],
+        ccd: [4.0884, 5.2311, 5.9661, 6.8661, 7.5572, 8.1900, 9.3822],
+        cc: [471.98, 569.57, 621.53, 693.09, 709.72, 840.50, 934.76],
     },
     'Frigorificada ou aquecida': {
-        ccd: [4.7442, 6.0679, 6.9216, 7.9337, 8.7563, 9.6471, 10.9629],
-        cc: [502.29, 601.96, 663.16, 732.07, 745.94, 949.16, 1030.58],
+        ccd: [4.7095, 6.0159, 6.8646, 7.8666, 8.6661, 9.5884, 10.8870],
+        cc: [520.07, 623.27, 686.63, 757.97, 772.36, 982.76, 1067.06],
     },
     'Conteinerizada': {
-        ccd: [null, 5.1397, 5.7767, 6.6765, 7.3776, 8.0832, 9.1859],
-        cc: [null, 526.13, 557.42, 625.16, 639.38, 791.67, 855.76],
+        // 2 eixos não é tarifado nesta categoria.
+        ccd: [null, 5.1082, 5.7396, 6.6345, 7.3186, 8.0492, 9.1399],
+        cc: [null, 544.75, 577.16, 647.29, 662.01, 819.69, 886.05],
     },
     'Carga geral': {
-        ccd: [4.0031, 5.1295, 5.8178, 6.7126, 7.4124, 8.1252, 9.2466],
-        cc: [436.39, 523.33, 568.72, 635.08, 648.95, 803.22, 872.44],
+        ccd: [3.9826, 5.0977, 5.7822, 6.6718, 7.3547, 8.0927, 9.2027],
+        cc: [451.84, 541.85, 588.86, 657.56, 671.93, 831.66, 903.32],
     },
     'Neogranel': {
-        ccd: [3.6028, 5.1281, 5.8441, 6.7126, 7.4124, 8.1252, 9.2466],
-        cc: [436.39, 522.93, 575.96, 635.08, 648.95, 803.22, 872.44],
+        // De 5 eixos em diante a 6.084 iguala Neogranel a Carga geral — a
+        // derivação reproduziu os mesmos coeficientes, célula a célula.
+        ccd: [3.6023, 5.0962, 5.8094, 6.6718, 7.3547, 8.0927, 9.2027],
+        cc: [451.85, 541.44, 596.35, 657.56, 671.93, 831.66, 903.32],
     },
     'Perigosa (granel sólido)': {
-        ccd: [4.7775, 5.9193, 6.6352, 7.5269, 8.2296, 8.8919, 10.0803],
-        cc: [587.98, 679.12, 727.28, 792.80, 807.45, 947.84, 1035.49],
+        ccd: [4.7845, 5.9154, 6.6285, 7.5150, 8.2008, 8.8866, 10.0660],
+        cc: [608.79, 703.16, 753.03, 820.86, 836.04, 981.38, 1072.15],
     },
     'Perigosa (granel líquido)': {
-        ccd: [4.8611, 6.0237, 6.7649, 7.6697, 8.3775, 9.0063, 10.2147],
-        cc: [610.96, 707.85, 762.95, 832.06, 848.13, 979.29, 1072.44],
+        ccd: [4.8710, 6.0236, 6.7628, 7.6628, 8.3539, 9.0049, 10.2051],
+        cc: [632.58, 732.90, 789.96, 861.51, 878.15, 1013.95, 1110.41],
     },
     'Perigosa (frigorificada ou aquecida)': {
-        ccd: [5.3315, 6.6676, 7.5371, 8.5492, 9.3718, 10.2855, 11.6113],
-        cc: [609.31, 712.41, 780.02, 848.93, 862.80, 1072.32, 1156.49],
+        ccd: [5.3176, 6.6369, 7.5020, 8.5039, 9.3034, 10.2495, 11.5584],
+        cc: [630.88, 737.64, 807.63, 878.97, 893.36, 1110.28, 1197.43],
     },
     'Perigosa (conteinerizada)': {
-        ccd: [null, 5.5109, 6.1835, 7.0832, 7.7843, 8.5076, 9.6180],
-        cc: [null, 623.38, 659.60, 727.35, 741.56, 898.70, 964.90],
+        // 2 eixos não é tarifado nesta categoria.
+        ccd: [null, 5.4926, 6.1608, 7.0556, 7.7398, 8.4886, 9.5873],
+        cc: [null, 645.45, 682.95, 753.10, 767.81, 930.51, 999.06],
     },
     'Perigosa (carga geral)': {
-        ccd: [4.3647, 5.5008, 6.2246, 7.1193, 7.8191, 8.5496, 9.6787],
-        cc: [531.01, 620.58, 670.91, 737.27, 751.14, 910.26, 981.58],
+        ccd: [4.3571, 5.4821, 6.2033, 7.0930, 7.7758, 8.5321, 9.6501],
+        cc: [549.81, 642.55, 694.66, 763.36, 777.72, 942.48, 1016.33],
     },
     'Carga granel pressurizada': {
-        ccd: [null, null, 7.0646, 7.8089, null, null, 9.7697],
-        cc: [null, null, 731.90, 757.99, null, null, 1016.29],
+        // Só 5, 6 e 9 eixos são tarifados na 6.084. A tabela anterior
+        // (SUROC 4/2026) trazia 4, 5 e 9 — o 4 saiu e o 6 entrou.
+        ccd: [null, null, null, 7.0364, 7.7652, null, 9.7444],
+        cc: [null, null, null, 757.81, 784.82, null, 1052.26],
     },
 };
 

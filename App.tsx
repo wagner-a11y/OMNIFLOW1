@@ -286,6 +286,9 @@ const App: React.FC = () => {
     const [qualpVoltou, setQualpVoltou] = useState(false);
     const emergenciaLigada = emergencia.ligada;
     const ehMaster = currentUser?.role === 'master';
+    // Frete urbano (origem == destino): mensagem de orientação, não de erro.
+    // Enquanto está preenchido, distância/pedágio/piso são manuais e a cotação fecha.
+    const [freteUrbano, setFreteUrbano] = useState<string | null>(null);
     // Piso da cotação já salva: mantido como está até o operador mandar recalcular.
     // Antes/depois do recálculo de uma cotação salva, pra ninguém fechar achando
     // que o número é o antigo.
@@ -1287,6 +1290,17 @@ const App: React.FC = () => {
         && qualpRota.cargoType === cargoType
         && qualpRota.eixos === eixosAtuais;
 
+    // Frete urbano: mesmo município nos dois campos. Reconhecido na tela também
+    // (não só pela resposta da função), para o estado se manter coerente enquanto
+    // o operador digita — e para o aviso sumir sozinho ao trocar a rota.
+    const rotaUrbana = !isMultiRota && !!origin.trim()
+        && normalizar(origin) === normalizar(destination);
+
+    // Deixou de ser urbana (trocou origem ou destino): o aviso sai da tela sozinho.
+    useEffect(() => {
+        if (!rotaUrbana && freteUrbano) setFreteUrbano(null);
+    }, [rotaUrbana, freteUrbano]);
+
     // Piso mínimo ANTT.
     // - Multi-parada: (km × CCD) + CC da Tabela A local, como sempre foi.
     // - Rota simples: FONTE ÚNICA — o piso vem do Qualp, não é mais calculado aqui.
@@ -1294,16 +1308,26 @@ const App: React.FC = () => {
     const anttFloor = useMemo(() => {
         if (!hasAntt) return null;
         const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
+        // O Qualp calcula o piso sobre a distância ARREDONDADA ao inteiro
+        // (4.244,669 -> 4.245). Os dois pontos que calculam o piso localmente
+        // usam o mesmo arredondamento, para a mesma rota mostrar o mesmo piso
+        // venha ele do Qualp ou daqui. Só a ENTRADA do cálculo é arredondada:
+        // distanceKm continua fracionário no que é salvo e no custo por km.
+        const distPiso = Math.round(dist);
         if (isMultiRota) return computeANTTFloor(cargoType, eixosAtuais, dist);
+        // Frete urbano: o Qualp não é consultado, então o piso sai da Tabela A
+        // local sobre a distância que o operador digitar. É referência, não
+        // imposição — o Preço Base continua livre.
+        if (rotaUrbana) return computeANTTFloor(cargoType, eixosAtuais, distPiso);
         // Contingência: o piso volta a sair da Tabela A local, como era antes do
         // Qualp. Nunca fica em branco — cotação sem piso é pior que piso local.
         if (emergenciaLigada && !(snapshotValido && qualpRota!.fonte === 'qualp')) {
-            return computeANTTFloor(cargoType, eixosAtuais, dist);
+            return computeANTTFloor(cargoType, eixosAtuais, distPiso);
         }
         if (snapshotValido) return qualpRota!.piso;
         // Sem snapshot valido nao ha piso: invalidado vira "—", nunca numero velho.
         return null;
-    }, [hasAntt, cargoType, distanceKm, eixosAtuais, isMultiRota, snapshotValido, qualpRota]);
+    }, [hasAntt, cargoType, distanceKm, eixosAtuais, isMultiRota, rotaUrbana, snapshotValido, qualpRota]);
 
     // Pedágio read-only só quando o número veio de uma busca agora. Cotação antiga
     // reaberta mantém o pedágio editável, como sempre foi.
@@ -1323,21 +1347,25 @@ const App: React.FC = () => {
     // Rota simples só fecha com resultado válido — de busca agora ou os números
     // salvos ainda coerentes. "Desatualizado" NÃO conta como válido.
     // Em contingência esse portão fica aberto: é o ponto da chave de emergência.
-    const resultadoRotaOk = isMultiRota || emergenciaLigada || (snapshotValido && !rotaDesatualizada);
+    // Frete urbano entra como exceção pontual: o Qualp não é consultado, os
+    // números são manuais e a cotação FECHA — senão o aviso "preencha à mão"
+    // viraria parede. O resto da rota simples segue bloqueante normal.
+    // A emergência abre o mesmo portão, mas para toda a rota simples.
+    const resultadoRotaOk = isMultiRota || emergenciaLigada || rotaUrbana || (snapshotValido && !rotaDesatualizada);
 
     // Sujou depois de uma busca boa: limpa o que veio do Qualp da tela para ninguém
     // ler número que não corresponde mais aos campos, e marca para nova busca.
     // Em contingência não roda: os números são digitados à mão e apagá-los seria
     // destruir o trabalho do operador.
     useEffect(() => {
-        if (emergenciaLigada || isMultiRota || !qualpRota || snapshotValido) return;
+        if (emergenciaLigada || isMultiRota || rotaUrbana || !qualpRota || snapshotValido) return;
         setQualpRota(null);
         setRotaDesatualizada(true);
         setDistanceKm('0');
         setTolls('0');
         setPedagioLiberado(false);
         setRecalcDiff(null);
-    }, [isMultiRota, qualpRota, snapshotValido]);
+    }, [emergenciaLigada, isMultiRota, rotaUrbana, qualpRota, snapshotValido]);
 
     // Veículos utilitários (Fiorino/Van/HR-VUC): frete base = KM × tarifa fixa, ignorando a tabela ANTT.
     const utilitarioRate = UTILITARIO_KM_RATES[vehicleType];
@@ -1421,10 +1449,23 @@ const App: React.FC = () => {
             const result = await estimateDistance(org, dst, vt, config?.axles, cargoType);
 
             if (result.error) {
+                // Frete urbano (origem == destino): NÃO é falha do Qualp. Ele nem
+                // chegou a ser consultado — distância zero é a resposta correta e o
+                // caso ainda não tem cálculo automático. Orienta o preenchimento
+                // manual em vez de acusar indisponibilidade, e deixa a cotação fechar.
+                if (result.urbano) {
+                    setQualpRota(null);
+                    setQualpBloqueio(null);
+                    setRotaDesatualizada(false);
+                    setFreteUrbano(result.mensagem);
+                    showFeedback(result.mensagem, 'info');
+                    return;
+                }
                 // Fonte única: sem Qualp não há número confiável. NÃO cai pro Google
                 // e NÃO zera o km — trava o fechamento até a consulta voltar.
                 console.warn('Qualp bloqueou a rota:', result.error);
                 setQualpRota(null);
+                setFreteUrbano(null);
                 setQualpBloqueio(result.mensagem || result.error);
                 showFeedback(result.mensagem || `Qualp indisponível: ${result.error}`, 'error');
                 return;
@@ -3048,6 +3089,22 @@ Disponibilidade: ${disponibilidade}`;
                                             </div>
                                         )}
 
+                                        {/* Frete urbano — AZUL, tom de orientação. Não é falha: o Qualp nem
+                                            foi consultado, porque distância zero é a resposta certa para o
+                                            mesmo município. A cotação fecha normalmente com os números à mão. */}
+                                        {rotaUrbana && freteUrbano && (
+                                            <div className="col-span-1 md:col-span-2 bg-blue-50 border border-blue-200 text-blue-900 px-6 py-3 rounded-xl flex items-start gap-3">
+                                                <Info className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" strokeWidth={1.75} />
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-semibold">Frete dentro do mesmo município</p>
+                                                    <p className="text-xs font-medium opacity-90 mt-0.5">
+                                                        Ainda não é cotado automaticamente. Preencha distância e pedágio à mão —
+                                                        o piso ANTT é calculado pela tabela local sobre a distância que você informar.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Bloqueio do Qualp — mesmo padrão de alerta do Painel TV: barra
                                             vermelha, impossível de não ver. Enquanto estiver aqui, a cotação
                                             de rota simples não fecha e não há fallback pro Google.
@@ -3147,13 +3204,15 @@ Disponibilidade: ${disponibilidade}`;
                                                     <>
                                                         <Info className="w-4 h-4 text-[#6b7280] shrink-0" strokeWidth={1.75} />
                                                         <span className="text-xs font-normal text-[#6b7280] flex-1 min-w-[12rem]">
-                                                            {snapshotValido
-                                                                ? `Distância, pedágio e piso do Qualp${qualpRota?.idTransacao ? ` · consulta ${qualpRota.idTransacao}` : ''}.`
-                                                                : temNumerosSalvos
-                                                                    ? 'KM, pedágio e piso são os valores salvos desta cotação.'
-                                                                    : !municipiosOk
-                                                                        ? 'Escolha origem e destino na lista para liberar a busca.'
-                                                                        : 'Pronto para buscar distância, pedágio e piso ANTT.'}
+                                                            {rotaUrbana
+                                                                ? 'Mesmo município: preencha distância e pedágio à mão. Não há consulta ao Qualp.'
+                                                                : snapshotValido
+                                                                    ? `Distância, pedágio e piso do Qualp${qualpRota?.idTransacao ? ` · consulta ${qualpRota.idTransacao}` : ''}.`
+                                                                    : temNumerosSalvos
+                                                                        ? 'KM, pedágio e piso são os valores salvos desta cotação.'
+                                                                        : !municipiosOk
+                                                                            ? 'Escolha origem e destino na lista para liberar a busca.'
+                                                                            : 'Pronto para buscar distância, pedágio e piso ANTT.'}
                                                         </span>
                                                     </>
                                                 )}
@@ -3163,8 +3222,9 @@ Disponibilidade: ${disponibilidade}`;
                                                     // Só habilita com município escolhido dos dois lados. E fica travado
                                                     // durante a consulta, pra clique repetido não disparar uma segunda
                                                     // chamada em cima da primeira (cada uma é crédito).
-                                                    disabled={!municipiosOk || loadingDistance}
-                                                    className={`shrink-0 px-5 py-2.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 ${!municipiosOk || loadingDistance
+                                                    // Urbano não tem o que buscar: o Qualp não é consultado.
+                                                    disabled={!municipiosOk || loadingDistance || rotaUrbana}
+                                                    className={`shrink-0 px-5 py-2.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 ${!municipiosOk || loadingDistance || rotaUrbana
                                                         ? 'bg-[#f3f4f6] text-[#9ca3af] border border-[#e5e7eb] cursor-not-allowed'
                                                         : rotaDesatualizada
                                                             ? 'bg-amber-600 hover:bg-amber-700 text-white'
