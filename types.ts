@@ -108,6 +108,10 @@ export interface FreightCalculation {
     // Procedência dos números: 'contingencia' = fechada com o Qualp fora (pedágio
     // digitado à mão + piso da Tabela A local). Vazio = fluxo normal pelo Qualp.
     origemDados?: 'contingencia';
+    // Como o preço foi formado: 'tabelado' = frete já fechado por contrato, com o
+    // valor final digitado e a engine resolvida ao contrário para achar o
+    // motorista. Vazio = modo Calcular (custos -> valor final).
+    tipoPrecificacao?: 'tabelado';
     isEdited?: boolean;
     createdBy?: string;       // autor da CRIAÇÃO (gravado uma vez, nunca sobrescrito)
     createdByName?: string;
