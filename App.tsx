@@ -25,32 +25,15 @@ const MOSTRAR_ACOES_COMERCIAL = true;
 const MOSTRAR_NEGOCIACOES = true;
 
 // ============================================================================
-// MODO CONTINGÊNCIA — chave de emergência. Uma linha liga, uma linha desliga.
+// CHAVE DE EMERGÊNCIA DO QUALP — estado vem do banco (emergencia_config), não
+// mais de constante em código. Só o master liga/desliga, e a trava é de
+// SERVIDOR: a policy de UPDATE exige public.is_master().
 //
-//   true  = LIGADO   (Qualp fora: cotação de rota simples fecha sem ele)
-//   false = DESLIGADO (normal: Qualp é fonte única e bloqueia quando falha)
-//
-// Ligado em 04/08/2026, quando o Qualp passou a recusar toda rota com 422
-// PermissionDeniedException, e DESLIGADO no mesmo dia após a correção: faltava
-// enviar config.route.avoid_locations: false explícito na qualp-rota. Produção
-// reconfirmada (437,345 km / R$ 328,50 / piso R$ 3.573,14) antes de desligar.
-// As cotações fechadas naquela janela seguem marcadas com
-// origem_dados = 'contingencia' — de propósito, para auditoria.
-//
-// O que muda enquanto está LIGADO, e SÓ na rota simples:
-//   - a falha do Qualp deixa de impedir o fechamento da cotação;
-//   - o piso ANTT volta a sair da Tabela A local (utils/antt.ts), não do Qualp;
-//   - o pedágio fica liberado para digitação manual;
-//   - banner AMARELO na tela (o vermelho de bloqueio continua sendo outra coisa);
-//   - a cotação é gravada com origem_dados = 'contingencia', para auditoria.
-//
-// Para DESLIGAR quando o Qualp normalizar: trocar para false, commitar e subir.
-// Nada mais precisa ser desfeito — a qualp-rota não foi tocada e volta a ser a
-// fonte no mesmo instante. As cotações marcadas ficam marcadas, de propósito.
+// Nasceu do incidente de 04/08/2026, em que ligar e desligar exigia deploy.
+// Comportamento quando LIGADA (só rota simples), idêntico ao que rodou naquele
+// dia: bloqueio do Qualp desligado, piso pela Tabela A local, pedágio manual,
+// banner amarelo persistente e cotação marcada origem_dados='contingencia'.
 // ============================================================================
-// Anotado como boolean de propósito: sem isso o TS trata como literal `true` e
-// pode reclamar de código "inalcançável" na hora de virar para false.
-const MODO_CONTINGENCIA: boolean = false;
 
 // Link direto pro card no Pipefy: usa a URL exata salva (pipefyCardUrl) e, no fallback,
 // monta o deep-link universal pelo id (open-cards/<id>). null = carga sem card no Pipefy.
@@ -74,6 +57,7 @@ import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor, vehicleHasANTT } from './utils/antt';
 import MunicipioAutocomplete, { useMunicipios } from './components/MunicipioAutocomplete';
 import { normalizar, resolverMunicipio } from './utils/municipios';
+import { definirEmergencia, lerEmergencia, EstadoEmergencia } from './services/emergencia';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
 import { createNegociacaoFromRamper } from './services/negociacoes';
@@ -293,6 +277,15 @@ const App: React.FC = () => {
     const [rotaDesatualizada, setRotaDesatualizada] = useState(false);
     // Falha bloqueante do Qualp: trava o fechamento da cotação de rota simples.
     const [qualpBloqueio, setQualpBloqueio] = useState<string | null>(null);
+    // --- Chave de emergência (estado no banco, só master altera) ---
+    const [emergencia, setEmergencia] = useState<EstadoEmergencia>({ ligada: false, alteradoPorNome: null, alteradoEm: null });
+    const [showEmergenciaModal, setShowEmergenciaModal] = useState(false);
+    const [salvandoEmergencia, setSalvandoEmergencia] = useState(false);
+    // Sonda de recuperação: vira true quando o Qualp volta a responder com a
+    // chave ligada. Só avisa — quem decide desligar é o master.
+    const [qualpVoltou, setQualpVoltou] = useState(false);
+    const emergenciaLigada = emergencia.ligada;
+    const ehMaster = currentUser?.role === 'master';
     // Frete urbano (origem == destino): mensagem de orientação, não de erro.
     // Enquanto está preenchido, distância/pedágio/piso são manuais e a cotação fecha.
     const [freteUrbano, setFreteUrbano] = useState<string | null>(null);
@@ -1213,6 +1206,54 @@ const App: React.FC = () => {
     // Indica se o veículo selecionado possui tabela ANTT (piso mínimo aplicável).
     const hasAntt = vehicleHasANTT(vehicleType);
 
+    // Estado da chave de emergência: lido na entrada e revisitado a cada minuto,
+    // para que quem já está com a tela aberta veja o master ligar ou desligar sem
+    // precisar recarregar.
+    useEffect(() => {
+        if (!currentUser) return;
+        let vivo = true;
+        const puxar = () => { lerEmergencia().then(e => { if (vivo) setEmergencia(e); }); };
+        puxar();
+        const t = setInterval(puxar, 60_000);
+        return () => { vivo = false; clearInterval(t); };
+    }, [currentUser]);
+
+    // Sonda de recuperação: enquanto a chave está ligada, testa o Qualp de tempos
+    // em tempos e avisa quando ele voltar. SÓ no master — se cada operador
+    // sondasse, seriam N chamadas simultâneas. Enquanto o Qualp está fora a sonda
+    // é gratuita (falha não consome consulta); ela custa exatamente uma consulta,
+    // no instante em que ele volta, que é justamente quando queremos saber.
+    useEffect(() => {
+        if (!emergenciaLigada || !ehMaster || qualpVoltou) return;
+        let vivo = true;
+        const sondar = async () => {
+            const r = await estimateDistance('São Paulo, SP', 'Rio de Janeiro, RJ', 'Truck', 5, 'Carga geral');
+            if (vivo && !r.error) setQualpVoltou(true);
+        };
+        const t = setInterval(sondar, 5 * 60_000);
+        return () => { vivo = false; clearInterval(t); };
+    }, [emergenciaLigada, ehMaster, qualpVoltou]);
+
+    // Liga/desliga. A recusa por não ser master vem do servidor (0 linhas na RLS),
+    // não de checagem de tela.
+    const alternarEmergencia = async (ligar: boolean) => {
+        setSalvandoEmergencia(true);
+        try {
+            const r = await definirEmergencia(ligar, { id: currentUser?.id, name: currentUser?.name });
+            if (!r.ok) { showFeedback(r.erro || 'Não foi possível alterar a chave.', 'error'); return; }
+            setEmergencia(await lerEmergencia());
+            setQualpVoltou(false);
+            showFeedback(
+                (ligar ? 'Modo emergência LIGADO.' : 'Modo emergência desligado — Qualp voltou a ser fonte única.')
+                + (r.avisoLog ? ` ${r.avisoLog}` : ''),
+                r.avisoLog ? 'error' : 'success',
+            );
+        } finally {
+            setSalvandoEmergencia(false);
+            setShowEmergenciaModal(false);
+        }
+    };
+
     // Rota multi-parada: continua no Google e na tabela ANTT local até a Fase 2.
     const isMultiRota = destinations.length > 0;
 
@@ -1280,7 +1321,7 @@ const App: React.FC = () => {
         if (rotaUrbana) return computeANTTFloor(cargoType, eixosAtuais, distPiso);
         // Contingência: o piso volta a sair da Tabela A local, como era antes do
         // Qualp. Nunca fica em branco — cotação sem piso é pior que piso local.
-        if (MODO_CONTINGENCIA && !(snapshotValido && qualpRota!.fonte === 'qualp')) {
+        if (emergenciaLigada && !(snapshotValido && qualpRota!.fonte === 'qualp')) {
             return computeANTTFloor(cargoType, eixosAtuais, distPiso);
         }
         if (snapshotValido) return qualpRota!.piso;
@@ -1291,7 +1332,7 @@ const App: React.FC = () => {
     // Pedágio read-only só quando o número veio de uma busca agora. Cotação antiga
     // reaberta mantém o pedágio editável, como sempre foi.
     // Em contingência o pedágio é digitado à mão: nunca read-only.
-    const pedagioDoQualp = !MODO_CONTINGENCIA && !isMultiRota && snapshotValido && qualpRota!.fonte === 'qualp';
+    const pedagioDoQualp = !emergenciaLigada && !isMultiRota && snapshotValido && qualpRota!.fonte === 'qualp';
     const pedagioSobrescrito = pedagioDoQualp && Math.abs(num(tolls) - qualpRota!.pedagioCheio) > 0.005;
 
     // Cotação salva reaberta: números gravados, ainda correspondendo aos campos.
@@ -1300,7 +1341,7 @@ const App: React.FC = () => {
     // Esta cotação de rota simples está fechando SEM o Qualp? É o que vai virar a
     // marca origem_dados='contingencia' no registro. Se o Qualp voltar e a busca
     // der certo antes de desligarem a flag, a cotação NÃO é marcada.
-    const fechandoEmContingencia = MODO_CONTINGENCIA && !isMultiRota
+    const fechandoEmContingencia = emergenciaLigada && !isMultiRota
         && !(snapshotValido && qualpRota!.fonte === 'qualp');
 
     // Rota simples só fecha com resultado válido — de busca agora ou os números
@@ -1309,21 +1350,22 @@ const App: React.FC = () => {
     // Frete urbano entra como exceção pontual: o Qualp não é consultado, os
     // números são manuais e a cotação FECHA — senão o aviso "preencha à mão"
     // viraria parede. O resto da rota simples segue bloqueante normal.
-    const resultadoRotaOk = isMultiRota || MODO_CONTINGENCIA || rotaUrbana || (snapshotValido && !rotaDesatualizada);
+    // A emergência abre o mesmo portão, mas para toda a rota simples.
+    const resultadoRotaOk = isMultiRota || emergenciaLigada || rotaUrbana || (snapshotValido && !rotaDesatualizada);
 
     // Sujou depois de uma busca boa: limpa o que veio do Qualp da tela para ninguém
     // ler número que não corresponde mais aos campos, e marca para nova busca.
     // Em contingência não roda: os números são digitados à mão e apagá-los seria
     // destruir o trabalho do operador.
     useEffect(() => {
-        if (MODO_CONTINGENCIA || isMultiRota || rotaUrbana || !qualpRota || snapshotValido) return;
+        if (emergenciaLigada || isMultiRota || rotaUrbana || !qualpRota || snapshotValido) return;
         setQualpRota(null);
         setRotaDesatualizada(true);
         setDistanceKm('0');
         setTolls('0');
         setPedagioLiberado(false);
         setRecalcDiff(null);
-    }, [isMultiRota, rotaUrbana, qualpRota, snapshotValido]);
+    }, [emergenciaLigada, isMultiRota, rotaUrbana, qualpRota, snapshotValido]);
 
     // Veículos utilitários (Fiorino/Van/HR-VUC): frete base = KM × tarifa fixa, ignorando a tabela ANTT.
     const utilitarioRate = UTILITARIO_KM_RATES[vehicleType];
@@ -1554,7 +1596,7 @@ const App: React.FC = () => {
         // cotação é pior que cotação travada. Multi-parada não é afetada.
         // Em contingência este portão fica aberto: a falha do Qualp deixa de
         // impedir o fechamento (a cotação sai marcada como 'contingencia').
-        if (!MODO_CONTINGENCIA && !isMultiRota && qualpBloqueio) {
+        if (!emergenciaLigada && !isMultiRota && qualpBloqueio) {
             showFeedback('Cotação travada: o Qualp não respondeu. Refaça a consulta da rota antes de salvar.', 'error');
             return;
         }
@@ -2355,6 +2397,26 @@ Disponibilidade: ${disponibilidade}`;
                     )}
                 </nav>
                 <div className="p-3 mt-auto space-y-1 border-t border-[#e5e7eb]">
+                    {/* Chave de emergência: só master. Fica aqui por ser lugar fixo e de
+                        um clique — é para usar com o Qualp fora do ar. O modal de
+                        confirmação protege contra acionamento acidental, e a RLS
+                        protege contra quem não é master chamar a API direto. */}
+                    {currentUser.role === 'master' && (
+                        <button
+                            onClick={() => setShowEmergenciaModal(true)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${emergenciaLigada
+                                ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                                : 'text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827]'}`}
+                        >
+                            <AlertTriangle className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                            <span className="font-medium text-sm flex-1 text-left">
+                                {emergenciaLigada ? 'Emergência LIGADA' : 'Modo emergência'}
+                            </span>
+                            {emergenciaLigada && (
+                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                            )}
+                        </button>
+                    )}
                     {currentUser.role === 'master' && (
                         <button onClick={() => setShowConfigModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
                             <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} />
@@ -2996,10 +3058,33 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="col-span-1 md:col-span-2 bg-amber-50 border border-amber-300 text-amber-900 px-6 py-3 rounded-xl flex items-start gap-3">
                                                 <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
                                                 <div className="flex-1">
-                                                    <p className="text-sm font-semibold">Modo contingência — Qualp indisponível</p>
-                                                    <p className="text-xs font-medium opacity-90 mt-0.5">
-                                                        Pedágio manual, piso pela tabela local. Confira os valores.
+                                                    <p className="text-sm font-semibold">
+                                                        Modo emergência ligado — Qualp desativado, piso pela tabela local, pedágio manual.
                                                     </p>
+                                                    <p className="text-xs font-medium opacity-90 mt-0.5">
+                                                        Confira os valores antes de fechar. Esta cotação fica marcada para auditoria.
+                                                        {emergencia.alteradoPorNome ? ` Acionado por ${emergencia.alteradoPorNome}.` : ''}
+                                                    </p>
+                                                    {qualpVoltou && ehMaster && (
+                                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                            <span className="text-xs font-semibold text-emerald-800">
+                                                                O Qualp voltou a responder. Deseja desligar o modo emergência?
+                                                            </span>
+                                                            <button
+                                                                onClick={() => alternarEmergencia(false)}
+                                                                disabled={salvandoEmergencia}
+                                                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-[11px] font-semibold transition-colors"
+                                                            >
+                                                                Desligar agora
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setQualpVoltou(false)}
+                                                                className="px-3 py-1.5 text-[11px] font-medium text-amber-800 underline"
+                                                            >
+                                                                agora não
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -3024,7 +3109,7 @@ Disponibilidade: ${disponibilidade}`;
                                             vermelha, impossível de não ver. Enquanto estiver aqui, a cotação
                                             de rota simples não fecha e não há fallback pro Google.
                                             Em contingência não aparece: quem manda é o banner amarelo. */}
-                                        {!MODO_CONTINGENCIA && !isMultiRota && qualpBloqueio && (
+                                        {!emergenciaLigada && !isMultiRota && qualpBloqueio && (
                                             <div className="col-span-1 md:col-span-2 bg-red-600 text-white px-6 py-3 rounded-xl flex items-center gap-4 shadow-lg animate-pulse">
                                                 <span className="text-2xl shrink-0">⚠️</span>
                                                 <div className="flex-1">
@@ -4071,6 +4156,65 @@ Disponibilidade: ${disponibilidade}`;
                                     Prosseguir Assim
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Confirmação da chave de emergência — acionar sem confirmar é fácil
+                demais para uma chave que permite cotar sem piso e pedágio do Qualp. */}
+            {showEmergenciaModal && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-lg overflow-hidden">
+                        <div className={`px-8 py-5 flex items-center gap-3 ${emergenciaLigada ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                            <AlertTriangle className={`w-6 h-6 ${emergenciaLigada ? 'text-emerald-600' : 'text-amber-600'}`} strokeWidth={1.75} />
+                            <h3 className="text-lg font-semibold text-[#111827]">
+                                {emergenciaLigada ? 'Desligar o modo emergência?' : 'Ligar o modo emergência?'}
+                            </h3>
+                        </div>
+                        <div className="px-8 py-6 space-y-3">
+                            {emergenciaLigada ? (
+                                <>
+                                    <p className="text-sm text-[#374151]">
+                                        O Qualp volta a ser fonte única: distância, pedágio e piso ANTT passam a vir dele,
+                                        e a cotação de rota simples volta a travar se ele falhar.
+                                    </p>
+                                    <p className="text-xs text-[#6b7280]">
+                                        Confirme que o Qualp está respondendo antes de desligar.
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-sm font-medium text-[#111827]">
+                                        Isso vai permitir cotar sem o piso e o pedágio do Qualp. Tem certeza?
+                                    </p>
+                                    <ul className="text-xs text-[#6b7280] space-y-1 list-disc pl-4">
+                                        <li>O piso ANTT passa a vir da tabela local, não do Qualp.</li>
+                                        <li>O pedágio fica manual — o operador digita a estimativa.</li>
+                                        <li>Toda cotação fechada assim fica marcada para auditoria.</li>
+                                        <li>Vale para todos os usuários, na hora.</li>
+                                    </ul>
+                                </>
+                            )}
+                            <p className="text-[11px] text-[#6b7280] pt-1">
+                                Este acionamento fica registrado no seu nome, com data e hora.
+                            </p>
+                        </div>
+                        <div className="px-8 py-5 bg-[#f9fafb] flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowEmergenciaModal(false)}
+                                disabled={salvandoEmergencia}
+                                className="px-5 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] hover:bg-white transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => alternarEmergencia(!emergenciaLigada)}
+                                disabled={salvandoEmergencia}
+                                className={`px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-50 ${emergenciaLigada ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'}`}
+                            >
+                                {salvandoEmergencia ? 'Aplicando…' : emergenciaLigada ? 'Sim, desligar' : 'Sim, ligar emergência'}
+                            </button>
                         </div>
                     </div>
                 </div>
