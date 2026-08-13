@@ -289,6 +289,13 @@ const App: React.FC = () => {
     // Frete urbano (origem == destino): mensagem de orientação, não de erro.
     // Enquanto está preenchido, distância/pedágio/piso são manuais e a cotação fecha.
     const [freteUrbano, setFreteUrbano] = useState<string | null>(null);
+    // --- Modo TABELADO: frete já fechado por contrato, lançado ao contrário ---
+    // Não consulta o Qualp em momento nenhum (zero crédito). O operador informa o
+    // valor final e a margem pretendida; a engine devolve quanto sobra pro motorista.
+    const [modoTabelado, setModoTabelado] = useState(false);
+    const [valorFinalTabelado, setValorFinalTabelado] = useState<string>('0');
+    // ICMS do tabelado é manual: não usa a regra automática por estado.
+    const [temIcmsTabelado, setTemIcmsTabelado] = useState(false);
     // Piso da cotação já salva: mantido como está até o operador mandar recalcular.
     // Antes/depois do recálculo de uma cotação salva, pra ninguém fechar achando
     // que o número é o antigo.
@@ -646,8 +653,11 @@ const App: React.FC = () => {
     // - Ajuste manual (icmsManual) nunca é sobrescrito pelo automático.
     // - Cotação salva recém-aberta: enquanto a rota (origem|destino|pagadorMg) não mudar, preserva o
     //   ICMS salvo (não recalcula o passado). Ao mudar origem/destino, recalcula pela rota nova.
+    // - Modo tabelado: o ICMS é declarado à mão (checkbox + alíquota), então a
+    //   regra automática por estado NÃO roda — senão sobrescreveria o que o
+    //   operador digitou toda vez que a rota mudasse.
     useEffect(() => {
-        if (icmsManual) return;
+        if (icmsManual || modoTabelado) return;
         const routeKey = `${origin}|${destination}|${pagadorMg}`;
         if (loadedIcmsRouteRef.current !== null && loadedIcmsRouteRef.current === routeKey) return; // rota da cotação salva inalterada
         loadedIcmsRouteRef.current = null; // a partir daqui é edição do usuário: recalcula normalmente
@@ -657,7 +667,7 @@ const App: React.FC = () => {
             const rate = getIcmsRate(orgUF, dstUF, fedTaxes.icmsRates, orgUF === 'MG' && pagadorMg);
             setIcmsPercent(rate.toString());
         }
-    }, [origin, destination, fedTaxes.icmsRates, pagadorMg, icmsManual]);
+    }, [origin, destination, fedTaxes.icmsRates, pagadorMg, icmsManual, modoTabelado]);
 
     // Login via Supabase Auth (e-mail + senha). A sessão e o papel são definidos pelo onAuthStateChange.
     const handleLogin = async (e?: React.FormEvent | React.MouseEvent) => {
@@ -1314,6 +1324,10 @@ const App: React.FC = () => {
         // venha ele do Qualp ou daqui. Só a ENTRADA do cálculo é arredondada:
         // distanceKm continua fracionário no que é salvo e no custo por km.
         const distPiso = Math.round(dist);
+        // Modo tabelado: o piso é INFORMATIVO, calculado sobre a distância que o
+        // operador digitar. Sem distância digitada não mostra piso — com dist=0 o
+        // cálculo devolveria só o CC (a parcela fixa), o que seria enganoso.
+        if (modoTabelado) return dist > 0 ? computeANTTFloor(cargoType, eixosAtuais, distPiso) : null;
         if (isMultiRota) return computeANTTFloor(cargoType, eixosAtuais, dist);
         // Frete urbano: o Qualp não é consultado, então o piso sai da Tabela A
         // local sobre a distância que o operador digitar. É referência, não
@@ -1327,7 +1341,7 @@ const App: React.FC = () => {
         if (snapshotValido) return qualpRota!.piso;
         // Sem snapshot valido nao ha piso: invalidado vira "—", nunca numero velho.
         return null;
-    }, [hasAntt, cargoType, distanceKm, eixosAtuais, isMultiRota, rotaUrbana, snapshotValido, qualpRota]);
+    }, [hasAntt, cargoType, distanceKm, eixosAtuais, isMultiRota, rotaUrbana, modoTabelado, emergenciaLigada, snapshotValido, qualpRota]);
 
     // Pedágio read-only só quando o número veio de uma busca agora. Cotação antiga
     // reaberta mantém o pedágio editável, como sempre foi.
@@ -1351,21 +1365,22 @@ const App: React.FC = () => {
     // números são manuais e a cotação FECHA — senão o aviso "preencha à mão"
     // viraria parede. O resto da rota simples segue bloqueante normal.
     // A emergência abre o mesmo portão, mas para toda a rota simples.
-    const resultadoRotaOk = isMultiRota || emergenciaLigada || rotaUrbana || (snapshotValido && !rotaDesatualizada);
+    // Tabelado tambem: nao consulta o Qualp, entao nao ha resultado dele a exigir.
+    const resultadoRotaOk = isMultiRota || emergenciaLigada || rotaUrbana || modoTabelado || (snapshotValido && !rotaDesatualizada);
 
     // Sujou depois de uma busca boa: limpa o que veio do Qualp da tela para ninguém
     // ler número que não corresponde mais aos campos, e marca para nova busca.
     // Em contingência não roda: os números são digitados à mão e apagá-los seria
     // destruir o trabalho do operador.
     useEffect(() => {
-        if (emergenciaLigada || isMultiRota || rotaUrbana || !qualpRota || snapshotValido) return;
+        if (emergenciaLigada || isMultiRota || rotaUrbana || modoTabelado || !qualpRota || snapshotValido) return;
         setQualpRota(null);
         setRotaDesatualizada(true);
         setDistanceKm('0');
         setTolls('0');
         setPedagioLiberado(false);
         setRecalcDiff(null);
-    }, [emergenciaLigada, isMultiRota, rotaUrbana, qualpRota, snapshotValido]);
+    }, [emergenciaLigada, isMultiRota, rotaUrbana, modoTabelado, qualpRota, snapshotValido]);
 
     // Veículos utilitários (Fiorino/Van/HR-VUC): frete base = KM × tarifa fixa, ignorando a tabela ANTT.
     const utilitarioRate = UTILITARIO_KM_RATES[vehicleType];
@@ -1410,16 +1425,35 @@ const App: React.FC = () => {
         const totalOtherCosts = otherCosts.reduce((acc, curr) => acc + curr.value, 0);
         const totalEc = ec + totalOtherCosts;
 
-        const directCostsSelling = bf + t + totalEc + adValoremSelling;
-        const priceWithMargin = marginDivisor > 0 ? directCostsSelling / marginDivisor : directCostsSelling;
-        const finalFreight = icmsDivisor > 0 ? priceWithMargin / icmsDivisor : priceWithMargin;
+        // ---- MODO TABELADO: a MESMA equação, resolvida para a outra ponta ----
+        // Ida (Calcular):  final = (motorista + t + ec + adV) / [(1-margem)(1-ICMS)]
+        // Volta (Tabelado): motorista = final × (1-ICMS) × (1-margem) − t − ec − adV
+        // Os divisores da ida viram multiplicadores. Não é conta paralela: é a
+        // mesma equação isolando o outro termo, então o mesmo frete dá o mesmo
+        // número nos dois modos (ida e volta fecham em R$ 0,00).
+        // Os federais NÃO entram aqui porque não entram no gross-up da ida —
+        // eles aparecem na margem REAL, calculada logo abaixo, igual no Calcular.
+        const valorFinalDigitado = num(valorFinalTabelado);
+        const priceWithMarginTab = valorFinalDigitado * icmsDivisor;
+        const motoristaTabelado = (priceWithMarginTab * marginDivisor) - t - totalEc - adValoremSelling;
+
+        // No tabelado o preço é dado e o motorista é derivado; no Calcular é o
+        // contrário. Daqui para baixo a conta de impostos/lucro é a MESMA nos dois.
+        const bfEfetivo = modoTabelado ? motoristaTabelado : bf;
+        const directCostsSelling = bfEfetivo + t + totalEc + adValoremSelling;
+        const priceWithMargin = modoTabelado
+            ? priceWithMarginTab
+            : (marginDivisor > 0 ? directCostsSelling / marginDivisor : directCostsSelling);
+        const finalFreight = modoTabelado
+            ? valorFinalDigitado
+            : (icmsDivisor > 0 ? priceWithMargin / icmsDivisor : priceWithMargin);
         const icmsAmount = finalFreight * (icmsP / 100);
         const fedTaxesAmount = finalFreight * (totalFedTaxPercent / 100);
-        const realDirectCosts = bf + t + totalEc + adValoremCost;
+        const realDirectCosts = bfEfetivo + t + totalEc + adValoremCost;
         const realProfitAmount = finalFreight - icmsAmount - fedTaxesAmount - realDirectCosts;
         const realMarginPercent = finalFreight > 0 ? (realProfitAmount / finalFreight) * 100 : 0;
-        return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent };
-    }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes]);
+        return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, motoristaTabelado };
+    }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes, modoTabelado, valorFinalTabelado]);
 
     // Consulta a rota simples no Qualp (fonte única). `capturarDiff` liga o
     // antes/depois usado ao recalcular uma cotação já salva.
@@ -1648,7 +1682,11 @@ const App: React.FC = () => {
             clientReference, origin, destination, destinations: destinations.map(d => (d || '').trim()).filter(Boolean), distanceKm: parseFloat(distanceKm.replace(',', '.')) || 0, vehicleType: vehicleType as VehicleType, merchandiseType, weight: parseFloat(weight.replace(',', '.')) || 0,
             customerId: selectedCustomerId, suggestedFreight: suggestedFreightANTT, solicitante, solicitantePipefyId,
             carroceriaTipoOperacao: implemento || undefined,   // Implemento da calculadora -> flui pra carga fechada/card
-            baseFreight: num(baseFreight),
+            // Tabelado: baseFreight recebe o MOTORISTA derivado da engine invertida,
+            // e totalFreight (abaixo, via calcData.finalFreight) é o valor final
+            // digitado sem transformação — é o que o Ramper manda como `value` e o
+            // Pipefy como `receita`. No modo Calcular nada muda.
+            baseFreight: modoTabelado ? calcData.motoristaTabelado : num(baseFreight),
             tolls: num(tolls), extraCosts: num(extraCosts), extraCostsDescription, goodsValue: num(goodsValue), insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0, adValorem: calcData.adValoremSelling, profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0, icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
             icmsManual, pagadorMg,
             pisPercent: fedTaxes.pis, cofinsPercent: fedTaxes.cofins, csllPercent: fedTaxes.csll, irpjPercent: fedTaxes.irpj,
@@ -1662,6 +1700,9 @@ const App: React.FC = () => {
             // piso da tabela local). Preserva a marca de uma cotação que já era de
             // contingência, mesmo que agora esteja sendo reeditada com o Qualp de pé.
             origemDados: fechandoEmContingencia ? 'contingencia' : existingQuote?.origemDados,
+            // Marca de controle: preço veio de tabela/contrato. Preserva a marca de
+            // uma cotação que já era tabelada, mesmo reeditada no modo Calcular.
+            tipoPrecificacao: modoTabelado ? 'tabelado' : existingQuote?.tipoPrecificacao,
             otherCosts
         };
 
@@ -1757,6 +1798,11 @@ const App: React.FC = () => {
         // Os valores entram como snapshot de fonte 'salvo', preso à combinação em que
         // foram gravados — assim trocar veículo/carga/rota também os invalida.
         setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
+        // Cotação tabelada reabre no modo tabelado, com o valor final que foi gravado.
+        const eraTabelada = quote.tipoPrecificacao === 'tabelado';
+        setModoTabelado(eraTabelada);
+        setValorFinalTabelado(eraTabelada ? maskCurrency(quote.totalFreight) : '0');
+        setTemIcmsTabelado(eraTabelada && (quote.icmsPercent || 0) > 0);
         setQualpRota({
             km: quote.distanceKm, pedagioCheio: quote.tolls, pedagioTag: 0,
             piso: quote.suggestedFreight > 0 ? quote.suggestedFreight : null,
@@ -1791,6 +1837,11 @@ const App: React.FC = () => {
         // Duplicada herda os números da origem (podem ser do Google) como snapshot
         // 'salvo', preso à mesma combinação — mudar rota/veículo/carga invalida.
         setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
+        // Cotação tabelada reabre no modo tabelado, com o valor final que foi gravado.
+        const eraTabelada = quote.tipoPrecificacao === 'tabelado';
+        setModoTabelado(eraTabelada);
+        setValorFinalTabelado(eraTabelada ? maskCurrency(quote.totalFreight) : '0');
+        setTemIcmsTabelado(eraTabelada && (quote.icmsPercent || 0) > 0);
         setQualpRota({
             km: quote.distanceKm, pedagioCheio: quote.tolls, pedagioTag: 0,
             piso: quote.suggestedFreight > 0 ? quote.suggestedFreight : null,
@@ -1808,6 +1859,7 @@ const App: React.FC = () => {
         setIcmsManual(false); setPagadorMg(false); loadedIcmsRouteRef.current = null; loadedUtilRef.current = null;   // nova cotação: destrava o automático, zera o pagador MG e as travas de congelamento
         setSolicitante(''); setSolicitantePipefyId(undefined); setImplemento('');
         setQualpRota(null); setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
+        setModoTabelado(false); setValorFinalTabelado('0'); setTemIcmsTabelado(false);
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
     };
 
@@ -3265,10 +3317,141 @@ Disponibilidade: ${disponibilidade}`;
                                         </div>
                                     </div>
                                     <div className="bg-white p-8 rounded-xl shadow-sm border hover:shadow-sm transition-all relative">
+                                        {/* Toggle Calcular / Tabelado. "Calcular" é o fluxo de sempre
+                                            (custos → valor final). "Tabelado" é o reverso, para frete já
+                                            fechado por contrato: valor final → quanto sobra pro motorista.
+                                            O tabelado não consulta o Qualp em momento nenhum. */}
+                                        <div className="flex items-center gap-1 p-1 bg-[#f3f4f6] rounded-xl w-fit mb-6">
+                                            {([false, true] as const).map(tab => (
+                                                <button
+                                                    key={String(tab)}
+                                                    type="button"
+                                                    onClick={() => setModoTabelado(tab)}
+                                                    className={`px-5 py-2 rounded-lg text-xs font-semibold transition-colors ${modoTabelado === tab
+                                                        ? 'bg-white text-[#111827] shadow-sm'
+                                                        : 'text-[#6b7280] hover:text-[#111827]'}`}
+                                                >
+                                                    {tab ? 'Tabelado' : 'Calcular'}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {modoTabelado && (
+                                            <div className="mb-6 space-y-4">
+                                                <div className="px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+                                                    <Info className="w-4 h-4 shrink-0 mt-0.5 text-blue-600" strokeWidth={1.75} />
+                                                    <p className="text-xs font-medium text-blue-900">
+                                                        Frete já fechado: informe o valor final e a margem pretendida.
+                                                        O sistema calcula quanto sobra para o motorista. Não consulta o Qualp.
+                                                    </p>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-medium uppercase text-blue-600 mb-2">Valor final do frete</span>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full p-4 rounded-xl font-medium text-[#111827] bg-[#f9fafb] focus:bg-white outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all"
+                                                            value={maskCurrency(valorFinalTabelado)}
+                                                            onChange={e => { startTimer(); setValorFinalTabelado(maskCurrency(e.target.value)); }}
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-medium uppercase text-[#6b7280] mb-2">Distância (km) — opcional</span>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full p-4 rounded-xl font-medium bg-[#f9fafb] outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all"
+                                                            value={distanceKm}
+                                                            onChange={e => setDistanceKm(e.target.value)}
+                                                            placeholder="só para o piso ANTT"
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-medium uppercase text-[#6b7280] mb-2">ICMS</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <label className="flex items-center gap-2 px-3 py-4 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl cursor-pointer shrink-0">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={temIcmsTabelado}
+                                                                    onChange={e => {
+                                                                        setTemIcmsTabelado(e.target.checked);
+                                                                        // Desmarcar zera a alíquota: sem ICMS, sem desconto.
+                                                                        if (!e.target.checked) setIcmsPercent('0');
+                                                                        else if (num(icmsPercent) === 0) setIcmsPercent('12');
+                                                                    }}
+                                                                    className="w-4 h-4 accent-[#1d6fb8]"
+                                                                />
+                                                                <span className="text-xs font-medium text-[#111827]">Tem ICMS</span>
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                disabled={!temIcmsTabelado}
+                                                                className={`w-full p-4 rounded-xl font-medium outline-none border transition-all ${temIcmsTabelado
+                                                                    ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
+                                                                    : 'bg-[#f3f4f6] border-[#e5e7eb] text-[#9ca3af] cursor-not-allowed'}`}
+                                                                value={icmsPercent}
+                                                                onChange={e => setIcmsPercent(e.target.value)}
+                                                                placeholder="%"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Resultado: o motorista e as duas margens lado a lado. */}
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div className="p-5 bg-[#111827] rounded-xl">
+                                                        <p className="text-[10px] font-medium uppercase text-white/60 mb-1">Sobra pro motorista</p>
+                                                        <p className="text-2xl font-semibold text-white">R$ {formatCur(calcData.motoristaTabelado)}</p>
+                                                        <p className="text-[10px] font-normal text-white/50 mt-1">teto do frete do motorista</p>
+                                                    </div>
+                                                    <div className="p-5 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
+                                                        <p className="text-[10px] font-medium uppercase text-[#6b7280] mb-1">Margem pretendida</p>
+                                                        <p className="text-2xl font-semibold text-[#111827]">{(parseFloat(profitMargin.replace(',', '.')) || 0).toFixed(2)}%</p>
+                                                    </div>
+                                                    <div className="p-5 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
+                                                        <p className="text-[10px] font-medium uppercase text-[#6b7280] mb-1">Margem real</p>
+                                                        <p className={`text-2xl font-semibold ${calcData.realMarginPercent < marginThreshold ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                            {calcData.realMarginPercent.toFixed(2)}%
+                                                        </p>
+                                                        <p className="text-[10px] font-normal text-[#6b7280] mt-1">já com federais e ad valorem</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Piso ANTT informativo: só aparece com distância digitada.
+                                                    Não bloqueia — o operador vê e decide. */}
+                                                {anttFloor !== null && (
+                                                    <div className="px-4 py-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl flex flex-wrap items-center gap-x-6 gap-y-1">
+                                                        <span className="text-[10px] font-medium uppercase text-[#6b7280]">Piso ANTT (referência)</span>
+                                                        <span className="text-sm font-semibold text-[#111827]">R$ {formatCur(anttFloor)}</span>
+                                                        <span className="text-[11px] font-normal text-[#6b7280]">
+                                                            {cargoType} · {eixosAtuais ?? '?'} eixos · {Math.round(parseFloat(distanceKm.replace(',', '.')) || 0)} km · Resolução 6.084
+                                                        </span>
+                                                        {calcData.motoristaTabelado < anttFloor && (
+                                                            <span className="text-[11px] font-semibold text-amber-700 flex items-center gap-1">
+                                                                <AlertTriangle className="w-3 h-3" strokeWidth={1.75} />
+                                                                motorista abaixo do piso
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                                             <div className="flex flex-col">
-                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium uppercase text-blue-600">Preço Base</span></div>
-                                                <input type="text" className="w-full p-4 rounded-xl font-medium text-[#111827] bg-[#f9fafb] focus:bg-white outline-none border border-[#e5e7eb] focus:border-[#1d6fb8] transition-all" value={maskCurrency(baseFreight)} onChange={e => { startTimer(); setBaseFreight(maskCurrency(e.target.value)); }} />
+                                                <div className="flex justify-between mb-2"><span className="text-[10px] font-medium uppercase text-blue-600">{modoTabelado ? 'Preço Base (motorista)' : 'Preço Base'}</span></div>
+                                                {/* No tabelado o Preço Base é RESULTADO (o motorista derivado),
+                                                    não entrada: quem manda é o valor final. Fica read-only para
+                                                    não dar a impressão de que digitar aqui muda a conta. */}
+                                                <input
+                                                    type="text"
+                                                    readOnly={modoTabelado}
+                                                    title={modoTabelado ? 'Calculado a partir do valor final e da margem pretendida.' : undefined}
+                                                    className={`w-full p-4 rounded-xl font-medium outline-none border transition-all ${modoTabelado
+                                                        ? 'bg-[#f3f4f6] border-[#e5e7eb] text-[#6b7280] cursor-not-allowed'
+                                                        : 'text-[#111827] bg-[#f9fafb] focus:bg-white border-[#e5e7eb] focus:border-[#1d6fb8]'}`}
+                                                    value={modoTabelado ? maskCurrency(calcData.motoristaTabelado) : maskCurrency(baseFreight)}
+                                                    onChange={e => { startTimer(); setBaseFreight(maskCurrency(e.target.value)); }}
+                                                />
                                             </div>
                                             <div className="flex flex-col">
                                                 {/* Pedágio da rota simples vem do Qualp e é read-only. Qualquer
