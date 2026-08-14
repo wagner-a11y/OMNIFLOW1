@@ -361,6 +361,9 @@ const App: React.FC = () => {
     const lastAuditRef = useRef<{ sig: string; at: number } | null>(null);
     // Última cotação salva: fonte da verdade pro card do Ramper (data de criação + valores gravados).
     const [lastSavedQuote, setLastSavedQuote] = useState<FreightCalculation | null>(null);
+    // Já mandou esta cotação pro Ramper nesta sessão? Só muda o rótulo do botão
+    // (e exige confirmação extra), pra reenvio ser escolha e não acidente.
+    const [enviadoRamper, setEnviadoRamper] = useState(false);
     // Modal do histórico de auditoria (só master): cotação alvo + registros carregados.
     const [auditQuote, setAuditQuote] = useState<FreightCalculation | null>(null);
     const [auditLog, setAuditLog] = useState<AlteracaoCotacao[] | null>(null);
@@ -1624,7 +1627,10 @@ const App: React.FC = () => {
 
     const generateId = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
 
-    const saveQuote = async (statusArg: QuoteStatus, bypassMarginCheck = false, stayOnForm = false, keepStatus = false) => {
+    // Devolve a cotação salva (ou null quando não salvou: guard, gate de margem,
+    // erro, ou o caminho 'won' que só abre o modal). Aditivo — os chamadores
+    // antigos ignoram o retorno; os botões novos encadeiam a integração nele.
+    const saveQuote = async (statusArg: QuoteStatus, bypassMarginCheck = false, stayOnForm = false, keepStatus = false): Promise<FreightCalculation | null> => {
         // Fonte única: se o Qualp falhou depois do timeout + retry, a cotação de
         // rota simples NÃO fecha. Sem fallback pro Google — número velho numa
         // cotação é pior que cotação travada. Multi-parada não é afetada.
@@ -1632,12 +1638,12 @@ const App: React.FC = () => {
         // impedir o fechamento (a cotação sai marcada como 'contingencia').
         if (!emergenciaLigada && !isMultiRota && qualpBloqueio) {
             showFeedback('Cotação travada: o Qualp não respondeu. Refaça a consulta da rota antes de salvar.', 'error');
-            return;
+            return null;
         }
         // Rota simples só salva com município escolhido da lista do IBGE.
         if (!municipiosOk) {
             showFeedback('Escolha origem e destino na lista de municípios antes de salvar.', 'error');
-            return;
+            return null;
         }
         // O botão "Buscar rota" não é brecha: sem resultado do Qualp válido, ou com
         // resultado marcado desatualizado, a cotação de rota simples não fecha.
@@ -1648,7 +1654,7 @@ const App: React.FC = () => {
                     : 'Clique em "Buscar rota" para trazer distância, pedágio e piso antes de salvar.',
                 'error',
             );
-            return;
+            return null;
         }
         // Congela o status: "Salvar" (keepStatus) NÃO rebaixa uma cotação já comprometida.
         // Numa edição, preserva o status salvo (Ganha continua Ganha); em cotação nova, usa o
@@ -1663,13 +1669,13 @@ const App: React.FC = () => {
             setPendingSaveStatus(status);
             setPendingStayOnForm(stayOnForm);
             setShowMarginModal(true);
-            return;
+            return null;
         }
 
         // Camada 1 — guard de reentrância SÍNCRONO: pega o clique repetido antes do re-render
         // (o setSavingQuote/disabled só vale no próximo render; o ref já corta agora). Só aqui,
         // depois do gate de margem, pra não travar a confirmação do modal.
-        if (savingQuoteRef.current) return;
+        if (savingQuoteRef.current) return null;
 
         setIsTimerRunning(false);
         const wasCreating = !editingId;   // decide create x update por valor capturado (editingId muda de forma assíncrona)
@@ -1708,10 +1714,11 @@ const App: React.FC = () => {
 
         if (status === 'won') {
             openWonModal(data);   // abre modal (não grava aqui); não segura o guard
-            return;
+            return null;
         }
 
         // Ativa a trava (ref síncrono + estado que desabilita o botão).
+        let salva: FreightCalculation | null = null;
         savingQuoteRef.current = true;
         setSavingQuote(true);
         // Camada 2 — editingId SÍNCRONO: se é criação, já entra em modo edição do id gerado, pra que
@@ -1737,6 +1744,7 @@ const App: React.FC = () => {
                     }
                     setHistory(prev => prev.map(h => h.id === editingId ? data : h));
                     setLastSavedQuote(data);
+                    salva = data;
                     if (stayOnForm) {
                         showFeedback("Cotação enviada e sinalizada no CRM.");
                     } else {
@@ -1755,6 +1763,7 @@ const App: React.FC = () => {
                     const savedId = result.data?.id || quoteId;
                     setHistory(prev => prev.some(h => h.id === savedId) ? prev : [{ ...data, id: savedId }, ...prev]);
                     setLastSavedQuote({ ...data, id: savedId });
+                    salva = { ...data, id: savedId };
                     if (stayOnForm) {
                         setEditingId(savedId);
                     } else {
@@ -1774,6 +1783,46 @@ const App: React.FC = () => {
             savingQuoteRef.current = false;
             setSavingQuote(false);
         }
+        return salva;
+    };
+
+    // ---- Botões Salvar / Pipefy / Ramper: a cotação é salva UMA vez ----
+    // Garante que existe registro antes de integrar. Se esta sessão já salvou
+    // (lastSavedQuote com o mesmo id de editingId), NÃO salva de novo: devolve o
+    // registro existente e a integração roda sobre ele. Assim clicar Pipefy e
+    // depois Ramper gera uma cotação só, com um proposal_number só.
+    // Não cria caminho de save paralelo — encadeia no saveQuote de sempre, com a
+    // trava de 3 camadas intacta.
+    // Esta cotação já tem card na operação do Pipefy? Vem do histórico, que é
+    // atualizado quando o card é criado — sobrevive a recarregar a tela.
+    const idCotacaoAtual = editingId || lastSavedQuote?.id || null;
+    const jaFoiPraPipefy = !!(idCotacaoAtual && history.find(h => h.id === idCotacaoAtual)?.pipefyCardId);
+
+    const garantirSalva = async (): Promise<FreightCalculation | null> => {
+        if (lastSavedQuote && editingId === lastSavedQuote.id) return lastSavedQuote;
+        // stayOnForm = true: fica na tela, sem o modal pós-save que levava embora.
+        return await saveQuote('pending', false, true, true);
+    };
+
+    // PIPEFY: salva (se preciso) e abre o modal de fechamento que já existe — o
+    // Pipefy precisa dos 25 campos que só o modal coleta. O modal segue igual.
+    const handleBotaoPipefy = async () => {
+        const q = await garantirSalva();
+        if (!q) return;   // guard/gate barrou: a mensagem já foi mostrada
+        openWonModal(q);
+    };
+
+    // RAMPER: salva (se preciso), confirma e dispara, sem sair da tela.
+    const handleBotaoRamper = async () => {
+        const q = await garantirSalva();
+        if (!q) return;
+        const jaEnviou = enviadoRamper;
+        const pergunta = jaEnviou
+            ? 'Esta cotação já foi enviada ao Ramper. Enviar de novo criará outro card. Confirmar?'
+            : 'Enviar esta cotação para o Ramper?';
+        if (!window.confirm(pergunta)) return;
+        const ok = await handleSendToRamper(q, true);
+        if (ok) setEnviadoRamper(true);
     };
 
     const loadQuote = (quote: FreightCalculation) => {
@@ -1799,6 +1848,7 @@ const App: React.FC = () => {
         // foram gravados — assim trocar veículo/carga/rota também os invalida.
         setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
         // Cotação tabelada reabre no modo tabelado, com o valor final que foi gravado.
+        setEnviadoRamper(false);   // outra cotação: o envio anterior não conta
         const eraTabelada = quote.tipoPrecificacao === 'tabelado';
         setModoTabelado(eraTabelada);
         setValorFinalTabelado(eraTabelada ? maskCurrency(quote.totalFreight) : '0');
@@ -1838,6 +1888,7 @@ const App: React.FC = () => {
         // 'salvo', preso à mesma combinação — mudar rota/veículo/carga invalida.
         setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
         // Cotação tabelada reabre no modo tabelado, com o valor final que foi gravado.
+        setEnviadoRamper(false);   // outra cotação: o envio anterior não conta
         const eraTabelada = quote.tipoPrecificacao === 'tabelado';
         setModoTabelado(eraTabelada);
         setValorFinalTabelado(eraTabelada ? maskCurrency(quote.totalFreight) : '0');
@@ -1860,6 +1911,7 @@ const App: React.FC = () => {
         setSolicitante(''); setSolicitantePipefyId(undefined); setImplemento('');
         setQualpRota(null); setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
         setModoTabelado(false); setValorFinalTabelado('0'); setTemIcmsTabelado(false);
+        setEnviadoRamper(false);
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
     };
 
@@ -1998,12 +2050,14 @@ Disponibilidade: ${disponibilidade}`;
     };
 
     // Envia a cotação salva como card no Ramper Pipeline (etapa "Cotações"). Erro é exibido, nunca engolido.
-    const handleSendToRamper = async () => {
+    // `quoteOverride` deixa o botão passar a cotação recém-salva sem depender do
+    // setState ter propagado. Devolve true quando o card foi criado.
+    const handleSendToRamper = async (quoteOverride?: FreightCalculation, permanecerNaTela = false): Promise<boolean> => {
         const customerName = customers.find(c => c.id === selectedCustomerId)?.name || '';
         // O Ramper exige uma organização (ou pessoa). Sem cliente, o card não pode ser criado.
         if (!customerName && !solicitante) {
             showFeedback('Selecione um cliente (ou solicitante) na cotação antes de mandar pro Ramper.', 'error');
-            return;
+            return false;
         }
         setRamperSending(true);
         try {
@@ -2012,7 +2066,7 @@ Disponibilidade: ${disponibilidade}`;
             const title = `${refPart}Cotação de Frete SPOT - ${origin || '—'} x ${destination || '—'}`;
 
             // Campos personalizados do card: da cotação salva (lastSavedQuote), com fallback pro form atual.
-            const q = lastSavedQuote;
+            const q = quoteOverride ?? lastSavedQuote;
             const solicitanteVal = ((q?.solicitante ?? solicitante) || '').trim();
             const documentoVal = ((q?.clientReference ?? clientReference) || '').trim();
             // Tipo de Veículo = veículo + carroceria, no formato que o time usa (ex.: "Carreta Simples Sider").
@@ -2052,6 +2106,7 @@ Disponibilidade: ${disponibilidade}`;
             if (res?.error) {
                 console.error('Ramper error:', res.error);
                 showFeedback(`Falha ao criar card no Ramper: ${res.error}`, 'error');
+                return false;
             } else {
                 showFeedback('Card criado no Ramper');
                 // Avisa quando o responsável não casou (card ficou com o padrão do Ramper). Não é erro.
@@ -2078,13 +2133,20 @@ Disponibilidade: ${disponibilidade}`;
                         }, criadorId || currentUser.id, criadorNome || currentUser.name);
                     } catch (e) { console.error('negociacao auto-entry:', e); }
                 }
-                setShowPostSaveModal(false);
-                resetForm();
-                setActiveTab('history');
+                // Fluxo antigo (modal pós-save): sai pro histórico, como sempre foi.
+                // Botão novo na tela de resultado: PERMANECE, pra o operador poder
+                // mandar pro outro destino também sem refazer nada.
+                if (!permanecerNaTela) {
+                    setShowPostSaveModal(false);
+                    resetForm();
+                    setActiveTab('history');
+                }
+                return true;
             }
         } catch (e: any) {
             console.error('Ramper exception:', e);
             showFeedback('Falha ao criar card no Ramper, verifique a conexão', 'error');
+            return false;
         } finally {
             setRamperSending(false);
         }
@@ -3807,10 +3869,51 @@ Disponibilidade: ${disponibilidade}`;
                                                 </div>
                                             )}
 
-                                            <div className="grid grid-cols-2 gap-2 w-full mt-4">
-                                                <button onClick={() => saveQuote('won')} disabled={savingQuote} className="bg-emerald-600 text-white py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                                                    <ThumbsUp className="w-3.5 h-3.5" strokeWidth={1.75} /> Fechado
+                                            {/* Salvar · Pipefy · Ramper — os três agem NESTA tela. A cotação é
+                                                salva uma única vez: o primeiro botão que salva cria o registro,
+                                                os demais reconhecem que já está salva e só disparam a integração
+                                                sobre o mesmo id. Depois de enviar, o operador permanece aqui e
+                                                pode mandar pro outro destino também. */}
+                                            <div className="grid grid-cols-3 gap-2 w-full mt-4">
+                                                <button
+                                                    onClick={() => saveQuote('pending', false, false, true)}
+                                                    disabled={savingQuote}
+                                                    className="bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    <Save className="w-3.5 h-3.5" strokeWidth={1.75} /> {savingQuote ? 'Salvando...' : 'Salvar'}
                                                 </button>
+                                                {/* Pipefy: salva se preciso e abre o modal de fechamento, que
+                                                    continua existindo — é dele que saem os 25 campos do card. */}
+                                                <button
+                                                    onClick={handleBotaoPipefy}
+                                                    disabled={savingQuote}
+                                                    title={jaFoiPraPipefy ? 'Esta cotação já tem card na operação do Pipefy' : 'Salva e abre o fechamento da carga'}
+                                                    className={`py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${jaFoiPraPipefy
+                                                        ? 'bg-emerald-50 border border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                                                        : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+                                                >
+                                                    {jaFoiPraPipefy
+                                                        ? <><CheckCircle className="w-3.5 h-3.5" strokeWidth={1.75} /> No Pipefy</>
+                                                        : <><ThumbsUp className="w-3.5 h-3.5" strokeWidth={1.75} /> Pipefy</>}
+                                                </button>
+                                                {/* Ramper: salva se preciso, confirma e dispara sem sair da tela. */}
+                                                <button
+                                                    onClick={handleBotaoRamper}
+                                                    disabled={savingQuote || ramperSending}
+                                                    title={enviadoRamper ? 'Já enviado nesta sessão — reenviar cria outro card' : 'Salva e envia a cotação pro Ramper'}
+                                                    className={`py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${enviadoRamper
+                                                        ? 'bg-blue-50 border border-blue-300 text-[#1d6fb8] hover:bg-blue-100'
+                                                        : 'bg-[#1d6fb8] text-white hover:bg-[#1a5f9e]'}`}
+                                                >
+                                                    {ramperSending
+                                                        ? <>Enviando...</>
+                                                        : enviadoRamper
+                                                            ? <><CheckCircle className="w-3.5 h-3.5" strokeWidth={1.75} /> Reenviar</>
+                                                            : <><Send className="w-3.5 h-3.5" strokeWidth={1.75} /> Ramper</>}
+                                                </button>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2 w-full mt-2">
                                                 {/* Perdido: livre em cotação de Pauta. Se já é Ganha, marcar Perdida é rebaixamento
                                                     (mexe em faturamento/Pipefy) -> só master, com confirmação; operador fica bloqueado. */}
                                                 <button
@@ -3825,10 +3928,6 @@ Disponibilidade: ${disponibilidade}`;
                                                     title={cotacaoGanhaReaberta && !podeRebaixarGanha ? 'Só o gestor pode rebaixar uma cotação Ganha' : undefined}
                                                     className="bg-white border border-[#e5e7eb] text-red-600 py-2.5 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                     <ThumbsDown className="w-3.5 h-3.5" strokeWidth={1.75} /> Perdido
-                                                </button>
-                                                {/* Salvar edição: keepStatus=true -> NÃO rebaixa o status. Ganha continua Ganha. */}
-                                                <button onClick={() => saveQuote('pending', false, false, true)} disabled={savingQuote} className="bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                                                    <Save className="w-3.5 h-3.5" strokeWidth={1.75} /> {savingQuote ? 'Salvando...' : 'Salvar'}
                                                 </button>
                                                 <button onClick={handleCopyQuoteText} className="bg-white border border-[#e5e7eb] text-[#111827] py-2.5 rounded-lg font-medium text-xs hover:bg-[#f9fafb] flex items-center justify-center gap-1.5 transition-colors">
                                                     <ClipboardCopy className="w-3.5 h-3.5" strokeWidth={1.75} /> Copiar
