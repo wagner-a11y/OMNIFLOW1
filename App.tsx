@@ -1821,7 +1821,7 @@ const App: React.FC = () => {
             ? 'Esta cotação já foi enviada ao Ramper. Enviar de novo criará outro card. Confirmar?'
             : 'Enviar esta cotação para o Ramper?';
         if (!window.confirm(pergunta)) return;
-        const ok = await handleSendToRamper(q, true);
+        const ok = await handleSendToRamper(q);
         if (ok) setEnviadoRamper(true);
     };
 
@@ -2052,7 +2052,9 @@ Disponibilidade: ${disponibilidade}`;
     // Envia a cotação salva como card no Ramper Pipeline (etapa "Cotações"). Erro é exibido, nunca engolido.
     // `quoteOverride` deixa o botão passar a cotação recém-salva sem depender do
     // setState ter propagado. Devolve true quando o card foi criado.
-    const handleSendToRamper = async (quoteOverride?: FreightCalculation, permanecerNaTela = false): Promise<boolean> => {
+    // Sempre PERMANECE na tela: o envio virou botão da tela de resultado, e o
+    // operador pode querer mandar pro Pipefy também sem refazer nada.
+    const handleSendToRamper = async (quoteOverride?: FreightCalculation): Promise<boolean> => {
         const customerName = customers.find(c => c.id === selectedCustomerId)?.name || '';
         // O Ramper exige uma organização (ou pessoa). Sem cliente, o card não pode ser criado.
         if (!customerName && !solicitante) {
@@ -2132,14 +2134,6 @@ Disponibilidade: ${disponibilidade}`;
                             // Dono da negociação = quem CRIOU o frete (createdBy), não quem mandou pro Ramper.
                         }, criadorId || currentUser.id, criadorNome || currentUser.name);
                     } catch (e) { console.error('negociacao auto-entry:', e); }
-                }
-                // Fluxo antigo (modal pós-save): sai pro histórico, como sempre foi.
-                // Botão novo na tela de resultado: PERMANECE, pra o operador poder
-                // mandar pro outro destino também sem refazer nada.
-                if (!permanecerNaTela) {
-                    setShowPostSaveModal(false);
-                    resetForm();
-                    setActiveTab('history');
                 }
                 return true;
             }
@@ -4372,14 +4366,9 @@ Disponibilidade: ${disponibilidade}`;
                         </div>
                         <h3 className="text-base font-medium text-[#111827]">Cotação salva com sucesso</h3>
                         <p className="text-sm font-normal text-[#6b7280] mt-1 mb-6">O que deseja fazer agora?</p>
+                        {/* O envio pro Ramper saiu daqui: agora é botão na própria tela de
+                            resultado, junto de Salvar e Pipefy. Aqui ficam só as saídas. */}
                         <div className="space-y-3">
-                            <button
-                                onClick={handleSendToRamper}
-                                disabled={ramperSending}
-                                className="w-full py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-sm hover:bg-[#1a5f9e] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                            >
-                                <Send className="w-4 h-4" strokeWidth={1.75} /> {ramperSending ? 'Enviando...' : 'Mandar pro Ramper'}
-                            </button>
                             <div className="grid grid-cols-2 gap-3">
                                 <button
                                     onClick={() => { setShowPostSaveModal(false); resetForm(); setActiveTab('new'); }}
