@@ -3,6 +3,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 Deno.serve(async (req) => {
@@ -76,20 +77,44 @@ Deno.serve(async (req) => {
       }
     };
 
-    console.log('Sending request to Gemini API...');
-    const geminiRes = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
+    // O Gemini devolve 503 quando o modelo está sobrecarregado e 429 quando
+    // estoura cota — os dois são TRANSITÓRIOS. Sem retry, o operador via um erro
+    // seco e achava que o documento estava errado. Espera progressiva: 1s, 3s.
+    const ESPERAS = [1000, 3000];
+    let geminiRes: Response | null = null;
+    let ultimoTexto = '';
+    let ultimoStatus = 0;
 
-    if (!geminiRes.ok) {
-      const errorText = await geminiRes.text();
-      console.error('Gemini API Error:', errorText);
-      throw new Error(`Gemini API returned ${geminiRes.status}: ${errorText}`);
+    for (let tentativa = 0; tentativa <= ESPERAS.length; tentativa++) {
+      console.log(`Sending request to Gemini API (tentativa ${tentativa + 1})...`);
+      geminiRes = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (geminiRes.ok) break;
+
+      ultimoStatus = geminiRes.status;
+      ultimoTexto = await geminiRes.text();
+      const valeRetentar = ultimoStatus === 503 || ultimoStatus === 429 || ultimoStatus >= 500;
+      console.error(`Gemini API Error ${ultimoStatus} (tentativa ${tentativa + 1})`);
+      if (!valeRetentar || tentativa === ESPERAS.length) {
+        // Mensagem em português, dizendo o que fazer — o operador não deve
+        // decifrar payload do Google.
+        const amigavel = ultimoStatus === 503
+          ? 'O leitor de documentos (Google Gemini) está sobrecarregado no momento. Tente de novo em alguns segundos ou preencha os campos à mão.'
+          : ultimoStatus === 429
+            ? 'Cota do leitor de documentos esgotada no momento. Tente mais tarde ou preencha à mão.'
+            : `O leitor de documentos falhou (HTTP ${ultimoStatus}). Tente de novo ou preencha à mão.`;
+        return new Response(JSON.stringify({ error: amigavel, status: ultimoStatus }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      await new Promise((r) => setTimeout(r, ESPERAS[tentativa]));
     }
 
-    const result = await geminiRes.json();
+    const result = await geminiRes!.json();
     console.log('Gemini API Success');
 
     const textPayload = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -107,10 +132,7 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('CRITICAL EDGE FUNCTION ERROR:', error.message);
-    return new Response(JSON.stringify({ 
-      error: error.message,
-      stack: error.stack 
-    }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
