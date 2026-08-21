@@ -54,7 +54,7 @@ const nextProposalNumber = (hist: { proposalNumber?: string }[]): string => {
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
-import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor, vehicleHasANTT } from './utils/antt';
+import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor } from './utils/antt';
 import MunicipioAutocomplete, { useMunicipios } from './components/MunicipioAutocomplete';
 import { normalizar, resolverMunicipio } from './utils/municipios';
 import { definirEmergencia, lerEmergencia, EstadoEmergencia } from './services/emergencia';
@@ -178,12 +178,6 @@ const computeDashboardInsights = (history: FreightCalculation[], customers: Cust
 };
 
 // Veículos utilitários: frete base = KM × tarifa fixa (ignoram a tabela ANTT).
-const UTILITARIO_KM_RATES: Record<string, number> = {
-    [VehicleType.Fiorino]: 2.40,
-    [VehicleType.Van]: 3.20,
-    [VehicleType.HR_VUC]: 4.00,
-};
-
 const App: React.FC = () => {
     // Estados de Autenticação (sessão nativa do Supabase Auth)
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -1216,8 +1210,15 @@ const App: React.FC = () => {
         setActiveTab('history');
     };
 
-    // Indica se o veículo selecionado possui tabela ANTT (piso mínimo aplicável).
-    const hasAntt = vehicleHasANTT(vehicleType);
+    // Modo de formação do preço base, vindo do CADASTRO do veículo (calc_mode):
+    //   KM   -> preço base = km × factor  (utilitários)
+    //   ANTT -> piso mínimo pela Tabela A (caminhões; padrão)
+    //   FREE -> sem piso e sem tarifa     (Prancha, Aéreo)
+    // Antes isso vinha de duas listas fixas no código chaveadas pelos nomes do
+    // enum VehicleType — que não batem com os nomes gravados no banco. Por isso
+    // utilitários e Prancha recebiam piso ANTT. Agora a fonte é uma só: o cadastro.
+    const modoCalculo = vehicleConfigs[vehicleType]?.calcMode || 'ANTT';
+    const hasAntt = modoCalculo === 'ANTT';
 
     // Estado da chave de emergência: lido na entrada e revisitado a cada minuto,
     // para que quem já está com a tela aberta veja o master ligar ou desligar sem
@@ -1385,9 +1386,12 @@ const App: React.FC = () => {
         setRecalcDiff(null);
     }, [emergenciaLigada, isMultiRota, rotaUrbana, modoTabelado, qualpRota, snapshotValido]);
 
-    // Veículos utilitários (Fiorino/Van/HR-VUC): frete base = KM × tarifa fixa, ignorando a tabela ANTT.
-    const utilitarioRate = UTILITARIO_KM_RATES[vehicleType];
-    const isUtilitario = utilitarioRate !== undefined;
+    // Utilitários (modo KM): frete base = KM × tarifa do cadastro, sem tabela ANTT.
+    // A tarifa é o `factor` — o campo que a tela de Configurações rotula como
+    // "Fator por KM (R$)". Tarifa zerada não conta como utilitário: sem número,
+    // KM × 0 daria base zero, que é pior que não autopreencher.
+    const isUtilitario = modoCalculo === 'KM' && (vehicleConfigs[vehicleType]?.factor || 0) > 0;
+    const utilitarioRate = isUtilitario ? (vehicleConfigs[vehicleType]?.factor || 0) : undefined;
     const utilitarioFreight = useMemo(() => {
         if (!isUtilitario) return null;
         const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
@@ -4721,9 +4725,10 @@ Disponibilidade: ${disponibilidade}`;
                                                         </div>
                                                         <div>
                                                             <label className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tighter">Modo Cálculo</label>
-                                                            <select className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.calcMode} onChange={e => handleUpdateVehicleConfig(key, { ...config, calcMode: e.target.value as 'KM' | 'ANTT' })}>
+                                                            <select className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.calcMode} onChange={e => handleUpdateVehicleConfig(key, { ...config, calcMode: e.target.value as 'KM' | 'ANTT' | 'FREE' })}>
                                                                 <option value="KM">KM (Fator)</option>
                                                                 <option value="ANTT">ANTT (Fixo+Var)</option>
+                                                                <option value="FREE">Preço livre (sem piso)</option>
                                                             </select>
                                                         </div>
                                                         {config.calcMode === 'KM' ? (
