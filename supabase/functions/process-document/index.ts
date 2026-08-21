@@ -60,7 +60,11 @@ Deno.serve(async (req) => {
         REGISTRO" (que é o registro_cnh) nem com o "Nº ESPELHO".
       - "registro_cnh": rótulo "Nº REGISTRO" ou "REGISTRO". É diferente do código
         de segurança — se achar os dois, cada um vai no seu campo.
-      - "protocolo": rótulo "Nº PROTOCOLO" ou "PROTOCOLO".
+      - "protocolo": rótulo "Nº PROTOCOLO", "PROTOCOLO", "RENACH" ou "Nº RENACH".
+        Em vários modelos esse número aparece como RENACH (o registro do condutor
+        no cadastro nacional), às vezes com a UF na frente (ex.: "SP123456789").
+        Pode estar no verso, na faixa inferior ou perto do "Nº ESPELHO". Se
+        encontrar tanto PROTOCOLO quanto RENACH, prefira o rotulado PROTOCOLO.
       - "orgao_expedidor_cnh": o órgão emissor da CNH (ex.: "DETRAN-SP"),
         normalmente junto do local de emissão.
       - "data_validade_toxicologico": este dado NÃO costuma estar na CNH — é de
