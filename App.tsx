@@ -1390,13 +1390,18 @@ const App: React.FC = () => {
     // A tarifa é o `factor` — o campo que a tela de Configurações rotula como
     // "Fator por KM (R$)". Tarifa zerada não conta como utilitário: sem número,
     // KM × 0 daria base zero, que é pior que não autopreencher.
-    const isUtilitario = modoCalculo === 'KM' && (vehicleConfigs[vehicleType]?.factor || 0) > 0;
+    const isUtilitario = (modoCalculo === 'KM' || modoCalculo === 'KM_ROUND_TRIP')
+        && (vehicleConfigs[vehicleType]?.factor || 0) > 0;
     const utilitarioRate = isUtilitario ? (vehicleConfigs[vehicleType]?.factor || 0) : undefined;
+    // Utilitário vai e volta: quem dirige roda o DOBRO da distância da rota, e é
+    // pelo rodado que recebe. O modo 'KM' puro (só ida) fica disponível no cadastro
+    // para quem precisar, mas os utilitários usam KM_ROUND_TRIP.
+    const fatorTrajeto = modoCalculo === 'KM_ROUND_TRIP' ? 2 : 1;
     const utilitarioFreight = useMemo(() => {
         if (!isUtilitario) return null;
         const dist = parseFloat(distanceKm.replace(',', '.')) || 0;
-        return dist * utilitarioRate;
-    }, [isUtilitario, utilitarioRate, distanceKm]);
+        return dist * fatorTrajeto * utilitarioRate!;
+    }, [isUtilitario, utilitarioRate, fatorTrajeto, distanceKm]);
 
     // Valor numérico de referência para persistência e para o botão "Aderir ao Preço Base".
     const suggestedFreightANTT = anttFloor ?? utilitarioFreight ?? 0;
@@ -1406,11 +1411,11 @@ const App: React.FC = () => {
     // (não sobrescreve o que foi salvo). Ao mudar veículo/km, volta a autopreencher.
     useEffect(() => {
         if (!isUtilitario || utilitarioFreight === null) return;
-        const sig = `${vehicleType}|${distanceKm}`;
+        const sig = `${vehicleType}|${distanceKm}|${modoCalculo}`;
         if (loadedUtilRef.current !== null && loadedUtilRef.current === sig) return; // cotação salva reaberta: preserva o base salvo
         loadedUtilRef.current = null; // a partir daqui é edição do usuário: autopreenche normalmente
         setBaseFreight(maskCurrency(utilitarioFreight));
-    }, [isUtilitario, utilitarioFreight, vehicleType, distanceKm]);
+    }, [isUtilitario, utilitarioFreight, vehicleType, distanceKm, modoCalculo]);
 
     const calcData = useMemo(() => {
         // Monetários: num() lida com "R$ 1.234,56", "42" cru e "42,00" de forma uniforme.
@@ -3788,7 +3793,16 @@ Disponibilidade: ${disponibilidade}`;
                                                     R$ {formatCur(utilitarioFreight ?? 0)}
                                                 </p>
                                                 <p className="text-[11px] font-normal text-[#6b7280] text-center">
-                                                    {(parseFloat(distanceKm.replace(',', '.')) || 0).toLocaleString('pt-BR')} km × R$ {utilitarioRate.toFixed(2).replace('.', ',')}/km
+                                                    {fatorTrajeto === 2 ? (
+                                                        <>
+                                                            {(parseFloat(distanceKm.replace(',', '.')) || 0).toLocaleString('pt-BR')} km ida e volta ={' '}
+                                                            {((parseFloat(distanceKm.replace(',', '.')) || 0) * 2).toLocaleString('pt-BR')} km rodados × R$ {utilitarioRate!.toFixed(2).replace('.', ',')}/km
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            {(parseFloat(distanceKm.replace(',', '.')) || 0).toLocaleString('pt-BR')} km × R$ {utilitarioRate!.toFixed(2).replace('.', ',')}/km
+                                                        </>
+                                                    )}
                                                 </p>
                                                 <button
                                                     onClick={() => {
@@ -4725,13 +4739,14 @@ Disponibilidade: ${disponibilidade}`;
                                                         </div>
                                                         <div>
                                                             <label className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tighter">Modo Cálculo</label>
-                                                            <select className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.calcMode} onChange={e => handleUpdateVehicleConfig(key, { ...config, calcMode: e.target.value as 'KM' | 'ANTT' | 'FREE' })}>
-                                                                <option value="KM">KM (Fator)</option>
+                                                            <select className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.calcMode} onChange={e => handleUpdateVehicleConfig(key, { ...config, calcMode: e.target.value as 'KM' | 'KM_ROUND_TRIP' | 'ANTT' | 'FREE' })}>
+                                                                <option value="KM_ROUND_TRIP">KM ida e volta (Fator)</option>
+                                                                <option value="KM">KM só ida (Fator)</option>
                                                                 <option value="ANTT">ANTT (Fixo+Var)</option>
                                                                 <option value="FREE">Preço livre (sem piso)</option>
                                                             </select>
                                                         </div>
-                                                        {config.calcMode === 'KM' ? (
+                                                        {(config.calcMode === 'KM' || config.calcMode === 'KM_ROUND_TRIP') ? (
                                                             <div>
                                                                 <label className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tighter">Fator por KM (R$)</label>
                                                                 <input type="number" step="0.01" className="w-full p-3 bg-white rounded-xl font-medium text-[#111827] border" value={config.factor} onChange={e => handleUpdateVehicleConfig(key, { ...config, factor: Number(e.target.value) })} />
