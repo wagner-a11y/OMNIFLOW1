@@ -23,14 +23,37 @@ Deno.serve(async (req) => {
 
     console.log(`Payload received: ${fileType}, data length: ${fileBase64.length}`);
 
+    // Prompt ampliado para cobrir TODOS os campos que o cadastro de pessoa física
+    // do Bsoft exige. O CRLV segue como estava — não é usado na Fase 2, mas não
+    // pode quebrar. `tipo_documento` é sempre devolvido para a tela saber o que leu.
     const prompt = `
       Você é um especialista em OCR de documentos de transporte brasileiro.
-      Analise o documento (CNH ou CRLV) e retorne APENAS um JSON:
-      
-      Para CNH: { "nome": str, "cpf": str, "rg": str, "registro_cnh": str, "codigo_seguranca": str, "protocolo": str }
-      Para CRLV: { "placa": str, "renavam": str, "chassi": str, "cor": str, "ano_fab": str, "ano_mod": str, "marca": str, "modelo": str }
-      
-      Retorne null para campos não encontrados. Não inclua markdown no retorno.
+      Analise o documento (CNH ou CRLV) e retorne APENAS um JSON.
+
+      Para CNH:
+      {
+        "tipo_documento": "CNH",
+        "nome": str, "sobrenome": str, "cpf": str, "rg": str, "orgao_expedidor_rg": str,
+        "sexo": "M" ou "F" ou null, "data_nascimento": "YYYY-MM-DD",
+        "registro_cnh": str, "codigo_seguranca": str, "protocolo": str,
+        "categoria": str, "orgao_expedidor_cnh": str,
+        "data_validade": "YYYY-MM-DD", "data_expedicao": "YYYY-MM-DD",
+        "data_primeira_habilitacao": "YYYY-MM-DD", "data_validade_toxicologico": "YYYY-MM-DD"
+      }
+
+      Para CRLV:
+      {
+        "tipo_documento": "CRLV",
+        "placa": str, "renavam": str, "chassi": str, "cor": str,
+        "ano_fab": str, "ano_mod": str, "marca": str, "modelo": str
+      }
+
+      REGRAS:
+      - Sempre inclua "tipo_documento" com o valor "CNH" ou "CRLV".
+      - Em CNH, "nome" é o primeiro nome e "sobrenome" o restante do nome completo.
+      - Toda data no formato YYYY-MM-DD. Se a data estiver em DD/MM/AAAA, converta.
+      - Use null para qualquer campo não encontrado. Não invente valores.
+      - Retorne só o JSON, sem markdown e sem texto ao redor.
     `;
 
     // Direct REST call to Gemini
