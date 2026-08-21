@@ -29,7 +29,11 @@ export interface DadosCNH {
     data_validade_toxicologico: string;
 }
 
-export const CAMPOS_CNH: Array<{ chave: keyof DadosCNH; label: string; tipo?: 'date' }> = [
+/**
+ * `manual: true` = campo que NÃO vem na CNH e é preenchido à mão. A tela não o
+ * marca como falha de leitura — senão pareceria que o OCR errou toda vez.
+ */
+export const CAMPOS_CNH: Array<{ chave: keyof DadosCNH; label: string; tipo?: 'date'; manual?: boolean }> = [
     { chave: 'nome', label: 'Nome' },
     { chave: 'sobrenome', label: 'Sobrenome' },
     { chave: 'cpf', label: 'CPF' },
@@ -45,7 +49,8 @@ export const CAMPOS_CNH: Array<{ chave: keyof DadosCNH; label: string; tipo?: 'd
     { chave: 'data_expedicao', label: 'Expedição', tipo: 'date' },
     { chave: 'data_validade', label: 'Validade', tipo: 'date' },
     { chave: 'data_primeira_habilitacao', label: '1ª habilitação', tipo: 'date' },
-    { chave: 'data_validade_toxicologico', label: 'Validade do toxicológico', tipo: 'date' },
+    // O exame toxicológico é documento à parte — não está impresso na CNH.
+    { chave: 'data_validade_toxicologico', label: 'Validade do toxicológico', tipo: 'date', manual: true },
 ];
 
 export const CNH_VAZIA: DadosCNH = {

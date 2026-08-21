@@ -49,11 +49,32 @@ Deno.serve(async (req) => {
         "ano_fab": str, "ano_mod": str, "marca": str, "modelo": str
       }
 
+      ONDE PROCURAR na CNH (os rótulos mudam conforme o modelo/estado):
+      - "sexo": rótulo "SEXO", geralmente ao lado da data de nascimento ou da
+        filiação. Costuma vir como uma única letra M ou F. Em alguns modelos
+        aparece como "MASCULINO"/"FEMININO" — nesse caso devolva só "M" ou "F".
+        Procure em toda a frente do documento antes de desistir.
+      - "codigo_seguranca": rótulo "Nº SEGURANÇA", "N SEGURANCA", "CÓDIGO DE
+        SEGURANÇA" ou "SEGURANÇA". É um número longo (geralmente 11 dígitos),
+        normalmente no rodapé ou no canto direito. NÃO confunda com o "Nº
+        REGISTRO" (que é o registro_cnh) nem com o "Nº ESPELHO".
+      - "registro_cnh": rótulo "Nº REGISTRO" ou "REGISTRO". É diferente do código
+        de segurança — se achar os dois, cada um vai no seu campo.
+      - "protocolo": rótulo "Nº PROTOCOLO" ou "PROTOCOLO".
+      - "orgao_expedidor_cnh": o órgão emissor da CNH (ex.: "DETRAN-SP"),
+        normalmente junto do local de emissão.
+      - "data_validade_toxicologico": este dado NÃO costuma estar na CNH — é de
+        um exame separado. Só preencha se estiver escrito no documento; caso
+        contrário devolva null, sem tentar deduzir.
+
       REGRAS:
       - Sempre inclua "tipo_documento" com o valor "CNH" ou "CRLV".
       - Em CNH, "nome" é o primeiro nome e "sobrenome" o restante do nome completo.
       - Toda data no formato YYYY-MM-DD. Se a data estiver em DD/MM/AAAA, converta.
-      - Use null para qualquer campo não encontrado. Não invente valores.
+      - Leia TODO o documento, incluindo rodapé, verso e textos em fonte pequena,
+        antes de devolver null para um campo.
+      - Use null para qualquer campo não encontrado. Não invente valores nem
+        deduza o que não está escrito.
       - Retorne só o JSON, sem markdown e sem texto ao redor.
     `;
 

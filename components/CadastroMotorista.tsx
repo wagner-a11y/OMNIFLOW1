@@ -134,18 +134,21 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
                 <div className="flex items-center gap-2 mb-4">
                     <Info className="w-4 h-4 text-[#6b7280]" strokeWidth={1.75} />
                     <p className="text-xs font-medium text-[#6b7280]">
-                        Confira tudo antes de cadastrar — a leitura automática pode errar. Campos em âmbar estão vazios.
+                        Confira tudo antes de cadastrar — a leitura automática pode errar. Campos em âmbar
+                        ficaram vazios na leitura; os marcados “não vem na CNH” são preenchidos à mão.
                     </p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {CAMPOS_CNH.map(({ chave, label, tipo }) => {
+                    {CAMPOS_CNH.map(({ chave, label, tipo, manual }) => {
                         const valor = String(dados[chave] || '');
-                        const vazio = !valor.trim();
+                        // Campo `manual` vazio não é falha de leitura: ele não vem na CNH.
+                        const vazio = !valor.trim() && !manual;
                         const obrigatorio = OBRIGATORIOS.includes(chave);
                         return (
                             <div key={chave} className="flex flex-col">
                                 <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
                                     {label}{obrigatorio && <span className="text-red-500 ml-0.5">*</span>}
+                                    {manual && <span className="ml-1 normal-case text-[#9ca3af]">· não vem na CNH</span>}
                                 </label>
                                 <input
                                     type={tipo === 'date' ? 'date' : 'text'}
