@@ -92,7 +92,7 @@ function comoLista(payload: unknown): Record<string, unknown>[] {
 
 async function buscar(base: string, tipo: Tipo): Promise<
   { ok: true; lista: Record<string, unknown>[] }
-  | { ok: false; status: number; erro: string; contentType?: string; corpoInicio?: string }
+  | { ok: false; status: number; erro: string; contentType?: string }
 > {
   const auth = "Basic " + btoa(`${BSOFT_API_USER}:${BSOFT_API_PASS}`);
   const url = `${base}${ENDPOINTS[tipo]}`;
@@ -102,41 +102,73 @@ async function buscar(base: string, tipo: Tipo): Promise<
   });
   const texto = await res.text();
 
+  // SEGURANÇA: nada do corpo da resposta é propagado. O Bsoft ecoa a URL
+  // recebida nas mensagens de erro, e a URL carrega o token do secret — foi
+  // assim que um token vazou num diagnóstico em 21/08/2026. Só o content-type
+  // (que não carrega dado) sai daqui.
   const contentType = res.headers.get("content-type") || "(sem content-type)";
-  // Trecho do corpo para diagnostico. NUNCA contem credencial: é a resposta do
-  // Bsoft, e o header Authorization fica só na requisição.
-  const corpoInicio = texto.slice(0, 400);
 
   if (res.status === 401 || res.status === 403) {
-    return { ok: false, status: res.status, erro: "Falha de auth na API Bsoft", contentType, corpoInicio };
+    return { ok: false, status: res.status, erro: "Falha de auth na API Bsoft", contentType };
   }
   if (!res.ok) {
-    return { ok: false, status: res.status, erro: `Bsoft respondeu HTTP ${res.status}`, contentType, corpoInicio };
+    return { ok: false, status: res.status, erro: `Bsoft respondeu HTTP ${res.status}`, contentType };
   }
   try {
     const lista = comoLista(JSON.parse(texto));
-    // Um item cru por endpoint, para conferir o formato sem vazar volume.
-    console.log(`[${tipo}] itens=${lista.length} amostra=${JSON.stringify(lista[0] ?? null)}`);
+    // Só a contagem e as chaves — nunca valores, nunca URL.
+    console.log(`[${tipo}] itens=${lista.length} chaves=${JSON.stringify(Object.keys(lista[0] ?? {}))}`);
     return { ok: true, lista };
   } catch {
-    return { ok: false, status: res.status, erro: `Resposta de ${tipo} não é JSON`, contentType, corpoInicio };
+    return { ok: false, status: res.status, erro: `Resposta de ${tipo} não é JSON`, contentType };
   }
 }
 
-/** Converte um item cru na linha de dominio_veiculo. null = item sem código ou sem nome. */
+/**
+ * Converte um item cru na linha de dominio_veiculo, pelo formato REAL de cada
+ * endpoint (confirmado por probe em 21/08/2026):
+ *   marca     {id, marca, categoria}
+ *   categoria {id, categoria, nome_interno}
+ *   grupo     {id, grupo, tipo_frota, ativo, empresa:{id, descricao, cnpj}}
+ *
+ * As chaves alternativas continuam na busca como rede de segurança, caso o Bsoft
+ * mude o formato — mas a chave real vem primeiro.
+ * Devolve null quando falta código ou nome (item inaproveitável).
+ */
 function paraLinha(tipo: Tipo, item: Record<string, unknown>) {
-  const codigo = pega(item, ["id", "codigo", "cod", "id_marca", "id_categoria", "id_grupo"]);
-  const nome = tipo === "marca"
-    ? pega(item, ["marca", "nome", "descricao"])
-    : pega(item, ["nome", "descricao", "marca", "categoria", "grupo"]);
-  if (!codigo || !nome) return null;
-  return {
-    tipo,
-    codigo,
-    nome,
-    categoria_ref: tipo === "marca" ? pega(item, ["categoria"]) : null,
-    atualizado_em: new Date().toISOString(),
-  };
+  const codigo = pega(item, ["id", "codigo", "cod"]);
+  if (!codigo) return null;
+
+  let nome: string | null = null;
+  let categoria_ref: string | null = null;
+  let nome_interno: string | null = null;
+  let empresa_id: string | null = null;
+
+  if (tipo === "marca") {
+    nome = pega(item, ["marca", "nome", "descricao"]);
+    categoria_ref = pega(item, ["categoria"]);
+  } else if (tipo === "categoria") {
+    nome = pega(item, ["categoria", "nome", "descricao"]);
+    nome_interno = pega(item, ["nome_interno"]);
+  } else {
+    nome = pega(item, ["grupo", "nome", "descricao"]);
+    const emp = item["empresa"];
+    if (emp && typeof emp === "object") {
+      empresa_id = pega(emp as Record<string, unknown>, ["id", "codigo"]);
+    }
+  }
+  if (!nome) return null;
+
+  return { tipo, codigo, nome, categoria_ref, nome_interno, empresa_id, atualizado_em: new Date().toISOString() };
+}
+
+/**
+ * Grupo inativo não entra no dicionário: `ativo` vem como "S"/"N" no Bsoft.
+ * Só filtra grupo — marca e categoria não trazem esse campo.
+ */
+function grupoAtivo(item: Record<string, unknown>): boolean {
+  const a = pega(item, ["ativo"]);
+  return a === null || a.toUpperCase() === "S";
 }
 
 Deno.serve(async (req: Request) => {
@@ -168,7 +200,6 @@ Deno.serve(async (req: Request) => {
           error: r.erro, tipo, status: r.status,
           endpoint: ENDPOINTS[tipo],   // só o path; a base NUNCA é ecoada (carrega token)
           contentType: r.contentType,
-          corpoInicio: r.corpoInicio,
         }, r.status === 401 || r.status === 403 ? 401 : 502);
       }
       brutos[tipo] = r.lista;
@@ -184,9 +215,7 @@ Deno.serve(async (req: Request) => {
           tipo: t,
           endpoint: ENDPOINTS[t],
           itens: brutos[t].length,
-          chaves: brutos[t][0] ? Object.keys(brutos[t][0]) : [],
-          amostra_crua: brutos[t][0] ?? null,
-          interpretado: brutos[t][0] ? paraLinha(t, brutos[t][0]) : null,
+          chaves: brutos[t][0] ? Object.keys(brutos[t][0]) : [],   // só as chaves, nunca os valores
         })),
       });
     }
@@ -197,7 +226,9 @@ Deno.serve(async (req: Request) => {
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     for (const tipo of tipos) {
-      const linhas = brutos[tipo].map((i) => paraLinha(tipo, i)).filter((l): l is NonNullable<typeof l> => l !== null);
+      // Grupo inativo é descartado antes de virar linha.
+      const elegiveis = tipo === "grupo" ? brutos[tipo].filter(grupoAtivo) : brutos[tipo];
+      const linhas = elegiveis.map((i) => paraLinha(tipo, i)).filter((l): l is NonNullable<typeof l> => l !== null);
       descartados[tipo] = brutos[tipo].length - linhas.length;
 
       if (linhas.length) {
