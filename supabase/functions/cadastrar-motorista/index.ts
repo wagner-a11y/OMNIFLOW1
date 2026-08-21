@@ -8,8 +8,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 // CNH ao cadastro.
 //
 // ANTI-DUPLICAÇÃO: antes de criar, procura pelo CPF. Se a pessoa já existe, NÃO
-// cria de novo — devolve o codPessoa existente com jaExistia=true e garante que
-// ela esteja no grupo 'motoristas'.
+// cria de novo — devolve o codPessoa existente com jaExistia=true, sem alterar
+// o cadastro dela (ver a nota sobre `grupos` no trecho do jaExistia).
 //
 // SEGURANÇA: BSOFT_API_URL NÃO é a base REST (aponta para a consulta SQL e traz
 // token na query string). Aqui a base é montada por conta própria. Nem a URL,
@@ -130,25 +130,6 @@ Deno.serve(async (req: Request) => {
   let corpoReq: Record<string, unknown> = {};
   try { corpoReq = await req.json(); } catch { /* sem corpo */ }
 
-  // ---- Modo probe: descobre QUAL par de credencial autentica. Não grava. ----
-  if (corpoReq?.probe) {
-    const resultados = [];
-    for (const c of creds) {
-      try {
-        const r = await chamar(c, "/pessoas/v1/pessoas/fisicas?limit=1");
-        resultados.push({
-          credencial: c.nome,            // só o NOME do secret, nunca o valor
-          status: r.status,
-          autenticou: r.status !== 401 && r.status !== 403,
-          pareceJson: r.corpo !== null,
-        });
-      } catch (e) {
-        resultados.push({ credencial: c.nome, status: 0, autenticou: false, erro: (e as Error).message });
-      }
-    }
-    return json({ probe: true, gravou: false, endpoint: "/pessoas/v1/pessoas/fisicas", resultados });
-  }
-
   // ---- Cadastro real ----
   const p = corpoReq as Record<string, any>;
   const cpf = soDigitos(p.cpf);
@@ -164,34 +145,38 @@ Deno.serve(async (req: Request) => {
 
   try {
     // 1) Já existe alguém com este CPF?
-    const busca = await chamar(cred, `/pessoas/v1/pessoas/fisicas?cpf=${encodeURIComponent(cpf)}`);
+    // O Bsoft busca por CAMINHO (/fisicas/{cpf}), não por query string: todas as
+    // variantes de filtro (?cpf=, ?filtro=, ?busca=, ?documento=) devolvem 400.
+    // Era por isso que a anti-duplicação não achava ninguém e o POST apanhava de
+    // "Já existe um registro com CPF" — comprovado por probe em 21/08/2026.
+    const busca = await chamar(cred, `/pessoas/v1/pessoas/fisicas/${encodeURIComponent(cpf)}`);
     if (busca.status === 401 || busca.status === 403) {
       return json({ error: "Falha de auth na API Bsoft ao consultar pessoas." }, 401);
     }
-    const achados = comoLista(busca.corpo).filter((x) => soDigitos(x.cpf) === cpf);
+    // 404 = não existe, e é resposta legítima aqui (não é erro).
+    const candidatos = busca.status === 404
+      ? []
+      : (comoLista(busca.corpo).length ? comoLista(busca.corpo)
+         : (busca.corpo && typeof busca.corpo === "object" ? [busca.corpo as Record<string, unknown>] : []));
+    const achados = candidatos.filter((x) => soDigitos(x.cpf) === cpf);
     const existente = achados.length ? codDaPessoa(achados[0]) : null;
 
     let codPessoa = existente;
     let jaExistia = false;
+    let avisoGrupo = "";
 
     if (existente) {
       jaExistia = true;
-      // Garante o grupo 'motoristas' sem sobrescrever os grupos que já tem.
-      const atual = achados[0];
-      const grupos = Array.isArray(atual.grupos) ? (atual.grupos as unknown[]).map(String) : [];
-      const temMotorista = grupos.some((g) => g.toLowerCase().includes("motorista"));
-      if (!temMotorista) {
-        const put = await chamar(cred, `/pessoas/v1/pessoas/fisicas/${encodeURIComponent(existente)}`, {
-          method: "PUT",
-          body: { grupos: [...grupos, "motoristas"] },
-        });
-        if (put.status >= 400) {
-          return json({
-            codPessoa: existente, jaExistia: true, anexado: false,
-            aviso: `Pessoa já existia, mas não consegui adicionar ao grupo motoristas: ${mensagemDoBsoft(put.corpo, put.status)}`,
-          });
-        }
-      }
+      // NÃO mexemos no cadastro de quem já existe. Motivo, medido na API:
+      // o GET de pessoa física devolve 23 campos e NENHUM deles é `grupos` —
+      // grupos é campo só de escrita (aceito no POST, nunca lido de volta).
+      // Como não dá para saber em que grupos a pessoa já está, um PUT com
+      // grupos:["motoristas"] arriscaria APAGAR os outros grupos dela
+      // (cliente, fornecedor...) sem que ninguém percebesse. Entre correr esse
+      // risco num cadastro real e pedir um clique ao operador, pedimos o clique.
+      avisoGrupo = "Essa pessoa já tinha cadastro no Datamex, então não criei outra nem " +
+                   "alterei o que existe. Se ela ainda não estiver no grupo de motoristas, " +
+                   "marque isso no Datamex.";
     } else {
       // 2) Cria a pessoa física. Nomes conforme a API do Bsoft.
       const novo: Record<string, unknown> = {
@@ -240,7 +225,8 @@ Deno.serve(async (req: Request) => {
       else anexado = true;
     }
 
-    return json({ codPessoa, jaExistia, anexado, ...(avisoAnexo ? { aviso: avisoAnexo } : {}) });
+    const aviso = [avisoGrupo, avisoAnexo].filter(Boolean).join(" ");
+    return json({ codPessoa, jaExistia, anexado, ...(aviso ? { aviso } : {}) });
   } catch (e) {
     console.error("cadastrar-motorista:", (e as Error).message);
     return json({ error: (e as Error).message || "Erro inesperado no cadastro." }, 500);
