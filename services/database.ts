@@ -200,7 +200,7 @@ export const getVehicleConfigs = async (): Promise<Record<string, ANTTCoefficien
             variable: Number(config.variable),
             axles: config.axles,
             factor: config.factor ? Number(config.factor) : 0,
-            calcMode: config.calc_mode || 'ANTT'
+            calcMode: config.calc_mode || 'ANTT'   // coluna existe desde 21/08/2026; default protege linha antiga
         };
     });
 
@@ -214,11 +214,14 @@ export const upsertVehicleConfig = async (
     const { error } = await supabase
         .from('vehicle_configs')
         .upsert([{
-            vehicle_type: vehicleType,
+            // trim(): sem isso, digitar "3/4 " com espaco cria uma linha NOVA em vez
+            // de editar a existente -- foi como a duplicata de 12/08/2026 apareceu.
+            vehicle_type: vehicleType.trim(),
             fixed: config.fixed,
             variable: config.variable,
             axles: config.axles || 2,
             factor: config.factor,
+            calc_mode: config.calcMode || 'ANTT',
             updated_at: new Date().toISOString()
         }]);
 
