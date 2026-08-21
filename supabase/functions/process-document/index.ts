@@ -60,11 +60,12 @@ Deno.serve(async (req) => {
         REGISTRO" (que é o registro_cnh) nem com o "Nº ESPELHO".
       - "registro_cnh": rótulo "Nº REGISTRO" ou "REGISTRO". É diferente do código
         de segurança — se achar os dois, cada um vai no seu campo.
-      - "protocolo": rótulo "Nº PROTOCOLO", "PROTOCOLO", "RENACH" ou "Nº RENACH".
-        Em vários modelos esse número aparece como RENACH (o registro do condutor
-        no cadastro nacional), às vezes com a UF na frente (ex.: "SP123456789").
-        Pode estar no verso, na faixa inferior ou perto do "Nº ESPELHO". Se
-        encontrar tanto PROTOCOLO quanto RENACH, prefira o rotulado PROTOCOLO.
+      - "protocolo": fica na LATERAL da CNH, ao lado da foto do condutor, e
+        normalmente está impresso NA VERTICAL (texto girado 90 graus). Leia esse
+        texto lateral mesmo estando rotacionado — é o campo mais esquecido do
+        documento justamente por causa disso. Rótulos: "Nº PROTOCOLO",
+        "PROTOCOLO" ou "RENACH". Pode vir com a UF na frente (ex.: "SP123456789").
+        Se encontrar PROTOCOLO e RENACH, prefira o rotulado PROTOCOLO.
       - "orgao_expedidor_cnh": o órgão emissor da CNH (ex.: "DETRAN-SP"),
         normalmente junto do local de emissão.
       - "data_validade_toxicologico": este dado NÃO costuma estar na CNH — é de
@@ -75,8 +76,9 @@ Deno.serve(async (req) => {
       - Sempre inclua "tipo_documento" com o valor "CNH" ou "CRLV".
       - Em CNH, "nome" é o primeiro nome e "sobrenome" o restante do nome completo.
       - Toda data no formato YYYY-MM-DD. Se a data estiver em DD/MM/AAAA, converta.
-      - Leia TODO o documento, incluindo rodapé, verso e textos em fonte pequena,
-        antes de devolver null para um campo.
+      - Leia TODO o documento antes de devolver null para um campo: rodapé, verso,
+        fonte pequena e — importante — os textos VERTICAIS nas bordas laterais,
+        que ficam girados 90 graus e passam despercebidos.
       - Use null para qualquer campo não encontrado. Não invente valores nem
         deduza o que não está escrito.
       - Retorne só o JSON, sem markdown e sem texto ao redor.
