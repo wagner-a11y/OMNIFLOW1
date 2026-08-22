@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, CopyPlus, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send, Tv
+    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, CopyPlus, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send, Tv, IdCard
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
@@ -56,6 +56,7 @@ import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, A
 import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor } from './utils/antt';
 import MunicipioAutocomplete, { useMunicipios } from './components/MunicipioAutocomplete';
+import CadastroMotorista from './components/CadastroMotorista';
 import { normalizar, resolverMunicipio } from './utils/municipios';
 import { definirEmergencia, lerEmergencia, EstadoEmergencia } from './services/emergencia';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
@@ -205,7 +206,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista'>('dashboard');
     const [acoesAbertas, setAcoesAbertas] = useState(true); // submenu "Ações do Comercial" aberto/fechado
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
@@ -2453,6 +2454,8 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
                         { id: 'history', icon: History, label: 'Histórico' },
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
+                        // Cadastro Rápido (Fase 2): visível a todos os usuários logados.
+                        { id: 'cadastro-motorista', icon: IdCard, label: 'Cadastro Rápido' },
                         { id: 'prospeccao', icon: Target, label: 'Meu CRM', adminOnly: true },
                         // Contato Diário migrou pro submenu "Ações do Comercial" (abaixo).
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
@@ -2562,6 +2565,7 @@ Disponibilidade: ${disponibilidade}`;
                                         activeTab === 'prospeccao' ? 'Prospecção · Mini CRM' :
                                         activeTab === 'contato-diario' ? 'Contato Diário · Carteira' :
                                         activeTab === 'trash' ? 'Lixeira' :
+                                        activeTab === 'cadastro-motorista' ? 'Cadastro Rápido · Motorista' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
@@ -2587,6 +2591,12 @@ Disponibilidade: ${disponibilidade}`;
                     )}
 
                     {activeTab === 'tracking' && <PipefyBoard />}
+
+                    {/* Cadastro Rápido — Motorista (Fase 2). Isolado: não toca em cotação,
+                        faturamento nem Pipefy. Visível a todos os usuários logados. */}
+                    {activeTab === 'cadastro-motorista' && (
+                        <CadastroMotorista autor={{ id: currentUser.id, name: currentUser.name }} />
+                    )}
 
                     {activeTab === 'prospeccao' && currentUser.role === 'master' && (
                         <ProspeccaoBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} />

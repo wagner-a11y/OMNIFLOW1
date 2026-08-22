@@ -135,8 +135,17 @@ export const extractDataFromDoc = async (fileBase64: string, fileType: string) =
         });
 
         if (error) {
+            // invoke só expõe "non-2xx status code" e engole o corpo — mas é no
+            // corpo que está o motivo real (ex.: Gemini sobrecarregado). Sem isto,
+            // o operador via uma mensagem que não dizia nada e não sabia se o
+            // problema era o documento dele.
             console.error('--- OCR ERROR: Supabase Function Invoke (process-document) ---', error);
-            return { error: error.message };
+            let msg = error.message;
+            try {
+                const corpo = await (error as any).context?.json?.();
+                if (corpo?.error) msg = corpo.error;
+            } catch { /* fica a mensagem genérica */ }
+            return { error: msg };
         }
 
         console.log('--- OCR SUCCESS ---', data);
