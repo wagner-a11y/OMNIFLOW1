@@ -50,7 +50,13 @@ export interface DadosFiscais {
     naturalidade: string;
     uf_naturalidade: string;
     matricula_inss: string;
+    /**
+     * Registro do TRANSPORTADOR, não do condutor. Só é pedido — e só é
+     * obrigatório — quando o motorista também é dono do veículo.
+     */
     rntrc: string;
+    /** Motorista que também é proprietário do veículo. Mexe em grupo e RNTRC. */
+    proprietario: boolean;
     /** Obrigatório no Bsoft. Vai com máscara: "(00) 00000-0000". */
     celular: string;
 }
@@ -81,6 +87,8 @@ export const FISCAIS_PADRAO: DadosFiscais = {
     // equivalente aceito pela API.
     matricula_inss: '0.000.000.000-0',
     rntrc: '',
+    // Padrão é só condutor: é o caso comum, e não pede RNTRC.
+    proprietario: false,
 };
 
 export const ENDERECO_VAZIO: DadosEndereco = {
@@ -219,6 +227,8 @@ export async function cadastrarMotorista(
             body: {
                 ...dados,
                 ...fiscais,
+                // Sem RNTRC quando não é proprietário: o back nem monta o campo.
+                rntrc: fiscais.proprietario ? fiscais.rntrc : '',
                 // `municipioRotulo` é só rótulo de tela; a API recebe o código IBGE.
                 endereco: {
                     cep: endereco.cep,

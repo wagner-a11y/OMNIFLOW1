@@ -182,6 +182,10 @@ Deno.serve(async (req: Request) => {
       avisoGrupo = "Essa pessoa já tinha cadastro no Datamex, então não criei outra nem " +
                    "alterei o que existe. Se ela ainda não estiver no grupo de motoristas, " +
                    "marque isso no Datamex.";
+      if (p.proprietario) {
+        avisoGrupo += " Como você marcou que ela é proprietária do veículo, marque também o " +
+                      "grupo 'Proprietários Veículos' manualmente no Datamex.";
+      }
     } else {
       // 2) Cria a pessoa física. Nomes conforme a API do Bsoft.
       const novo: Record<string, unknown> = {
@@ -190,7 +194,9 @@ Deno.serve(async (req: Request) => {
         sobrenome: p.sobrenome ?? "",
         sexo: p.sexo ?? null,
         dtNascimento: p.data_nascimento ?? null,
-        grupos: ["motoristas"],
+        // O RNTRC é registro do TRANSPORTADOR, não do condutor: só quem também é
+        // dono do veículo entra no grupo de proprietários e tem RNTRC.
+        grupos: p.proprietario ? ["motoristas", "proprietariosVeiculos"] : ["motoristas"],
         // Campos fiscais que o Bsoft exige na pessoa física. Os padrões vêm da
         // tela (o operador pode trocar); aqui só há rede de segurança.
         //
@@ -213,7 +219,12 @@ Deno.serve(async (req: Request) => {
         // Mandamos o valor zerado; se a API recusar, o erro dela diz o que quer.
         matriculaINSS: p.matricula_inss || "0.000.000.000-0",
         // RNTRC não está na CNH: é digitado pelo operador, sem valor automático.
-        RNTRC: p.rntrc || null,
+        // Motorista que só dirige não tem RNTRC — nesses casos o campo nem é
+        // enviado, em vez de ir vazio.
+        ...(p.proprietario && p.rntrc ? { RNTRC: p.rntrc } : {}),
+        // Campos que a API só cobra de quem entra no grupo de proprietários
+        // (o cadastro de condutor puro passa sem eles).
+        ...(p.proprietario ? { dependentesIRRF: p.dependentes_irrf ?? 0 } : {}),
         cnh: {
           numero: p.registro_cnh ?? null,
           seguro: p.codigo_seguranca ?? null,

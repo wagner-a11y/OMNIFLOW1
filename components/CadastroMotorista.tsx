@@ -58,6 +58,10 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
         setFiscais(prev => ({ ...prev, [k]: v }));
         setResultado(null);
     };
+    const setProprietario = (v: boolean) => {
+        setFiscais(prev => ({ ...prev, proprietario: v }));
+        setResultado(null);
+    };
     const setEnd = (k: keyof DadosEndereco, v: string) => {
         setEndereco(prev => ({ ...prev, [k]: v }));
         setResultado(null);
@@ -137,8 +141,10 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
 
     const faltando = [
         ...OBRIGATORIOS.filter(k => !String(dados[k] || '').trim()),
-        ...(['estado_civil', 'nacionalidade', 'uf_naturalidade', 'rntrc'] as Array<keyof DadosFiscais>)
+        ...(['estado_civil', 'nacionalidade', 'uf_naturalidade'] as Array<keyof DadosFiscais>)
             .filter(k => !String(fiscais[k] || '').trim()),
+        // RNTRC é do transportador: só cobra de quem também é dono do veículo.
+        ...(fiscais.proprietario && !fiscais.rntrc.trim() ? ['rntrc'] : []),
         // Celular não basta estar preenchido: precisa dos 11 dígitos.
         ...(celularValido(fiscais.celular) ? [] : ['celular']),
         // `cidade` é o código IBGE: só existe se a busca de CEP tiver validado.
@@ -308,22 +314,48 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
                     </div>
                 </div>
 
-                {/* Os dois que não vêm de lugar nenhum: sem padrão e sem OCR. */}
+                {/* O que não vem de lugar nenhum: sem padrão e sem OCR. */}
                 <div className="mt-5 pt-5 border-t border-[#e5e7eb] flex flex-wrap gap-6">
                     <div>
                         <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
-                            RNTRC<span className="text-red-500 ml-0.5">*</span>
-                            <span className="ml-1 normal-case text-[#9ca3af]">· não está na CNH, digite à mão</span>
+                            Este motorista é o proprietário do veículo?
                         </label>
-                        <input
-                            value={fiscais.rntrc}
-                            onChange={e => setFiscal('rntrc', e.target.value)}
-                            placeholder="Número do RNTRC do motorista"
-                            className={`w-full md:w-72 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${fiscais.rntrc
-                                ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
-                                : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`}
-                        />
+                        <div className="flex gap-2">
+                            {[{ v: false, r: 'Não, só dirige' }, { v: true, r: 'Sim, é o dono' }].map(o => (
+                                <button
+                                    key={String(o.v)}
+                                    type="button"
+                                    onClick={() => setProprietario(o.v)}
+                                    className={`px-4 py-2.5 rounded-lg text-xs font-semibold border transition-colors ${fiscais.proprietario === o.v
+                                        ? 'bg-[#1d6fb8] border-[#1d6fb8] text-white'
+                                        : 'bg-white border-[#e5e7eb] text-[#6b7280] hover:bg-[#f9fafb]'}`}
+                                >
+                                    {o.r}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[10px] font-normal text-[#9ca3af] mt-1.5 max-w-xs">
+                            O RNTRC é registro do transportador. Quem só dirige não tem.
+                        </p>
                     </div>
+
+                    {/* RNTRC só existe para quem também é dono do veículo. */}
+                    {fiscais.proprietario && (
+                        <div>
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
+                                RNTRC<span className="text-red-500 ml-0.5">*</span>
+                                <span className="ml-1 normal-case text-[#9ca3af]">· do proprietário, digite à mão</span>
+                            </label>
+                            <input
+                                value={fiscais.rntrc}
+                                onChange={e => setFiscal('rntrc', e.target.value)}
+                                placeholder="Número do RNTRC"
+                                className={`w-full md:w-64 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${fiscais.rntrc
+                                    ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
+                                    : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`}
+                            />
+                        </div>
+                    )}
                     <div>
                         <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
                             Celular<span className="text-red-500 ml-0.5">*</span>
