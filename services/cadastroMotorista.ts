@@ -27,7 +27,72 @@ export interface DadosCNH {
     data_expedicao: string;
     data_primeira_habilitacao: string;
     data_validade_toxicologico: string;
+    /** Local de nascimento, quando o modelo da CNH traz. Alimenta a UF de naturalidade. */
+    naturalidade_municipio: string;
+    naturalidade_uf: string;
+    /** UF do órgão emissor — o que sobra quando a CNH não traz naturalidade. */
+    uf_emissao_cnh: string;
 }
+
+/**
+ * Campos que o Bsoft exige na pessoa física e que NÃO estão na CNH.
+ * Vêm com padrão preenchido, menos o RNTRC, que é digitação do operador.
+ */
+export interface DadosFiscais {
+    estado_civil: string;
+    nacionalidade: string;
+    uf_naturalidade: string;
+    matricula_inss: string;
+    rntrc: string;
+}
+
+/** Endereço da pessoa — sub-recurso do cadastro no Bsoft. */
+export interface DadosEndereco {
+    cep: string;
+    logradouro: string;
+    numero: string;
+    complemento: string;
+    bairro: string;
+    /** Código IBGE de 7 dígitos, resolvido pela busca de CEP. Vazio = não conferido. */
+    cidade: string;
+    /** Sigla da UF. */
+    estado: string;
+    /** Só para a tela mostrar "Porto Alegre, RS" — não vai para a API. */
+    municipioRotulo: string;
+}
+
+export const FISCAIS_PADRAO: DadosFiscais = {
+    estado_civil: 'S',
+    nacionalidade: 'Brasileira',
+    uf_naturalidade: '',
+    // O TMS oferece "Ignorar Validação" para quem não tem matrícula; o zerado é o
+    // equivalente aceito pela API.
+    matricula_inss: '0.000.000.000-0',
+    rntrc: '',
+};
+
+export const ENDERECO_VAZIO: DadosEndereco = {
+    cep: '', logradouro: '', numero: '', complemento: '',
+    bairro: '', cidade: '', estado: '', municipioRotulo: '',
+};
+
+/**
+ * Preenche a UF de naturalidade a partir do que a CNH deu: primeiro o local de
+ * nascimento; se o documento não trouxer, a UF do órgão emissor como aproximação.
+ * O operador confere e corrige — por isso é padrão, não verdade.
+ */
+export function fiscaisDaCnh(cnh: DadosCNH, atual: DadosFiscais): DadosFiscais {
+    if (atual.uf_naturalidade) return atual;   // o operador já escolheu: não sobrescreve
+    const uf = (cnh.naturalidade_uf || cnh.uf_emissao_cnh || '').toUpperCase().slice(0, 2);
+    return uf ? { ...atual, uf_naturalidade: uf } : atual;
+}
+
+export const ESTADOS_CIVIS: Array<{ valor: string; label: string }> = [
+    { valor: 'S', label: 'Solteiro(a)' },
+    { valor: 'C', label: 'Casado(a)' },
+    { valor: 'D', label: 'Divorciado(a)' },
+    { valor: 'V', label: 'Viúvo(a)' },
+];
 
 /**
  * `manual: true` = campo que NÃO vem na CNH e é preenchido à mão. A tela não o
@@ -49,7 +114,9 @@ export const CAMPOS_CNH: Array<{ chave: keyof DadosCNH; label: string; tipo?: 'd
     { chave: 'data_expedicao', label: 'Expedição', tipo: 'date' },
     { chave: 'data_validade', label: 'Validade', tipo: 'date' },
     { chave: 'data_primeira_habilitacao', label: '1ª habilitação', tipo: 'date' },
-    // O exame toxicológico é documento à parte — não está impresso na CNH.
+    // O exame toxicológico é documento à parte — não está impresso na CNH. Mesmo
+    // assim a API do Bsoft o EXIGE (cnh.dtValidadeExameToxicologico): sem ele o
+    // cadastro é recusado. Por isso é `manual` (não é falha de OCR) e obrigatório.
     { chave: 'data_validade_toxicologico', label: 'Validade do toxicológico', tipo: 'date', manual: true },
 ];
 
@@ -58,6 +125,7 @@ export const CNH_VAZIA: DadosCNH = {
     data_nascimento: '', registro_cnh: '', codigo_seguranca: '', protocolo: '',
     categoria: '', orgao_expedidor_cnh: '', data_validade: '', data_expedicao: '',
     data_primeira_habilitacao: '', data_validade_toxicologico: '',
+    naturalidade_municipio: '', naturalidade_uf: '', uf_emissao_cnh: '',
 };
 
 /** Normaliza o retorno da IA: null vira string vazia, e aceita chaves alternativas. */
@@ -87,26 +155,43 @@ export function daIaParaFormulario(bruto: Record<string, unknown>): DadosCNH {
         data_expedicao: t('data_expedicao'),
         data_primeira_habilitacao: t('data_primeira_habilitacao'),
         data_validade_toxicologico: t('data_validade_toxicologico'),
+        naturalidade_municipio: t('naturalidade_municipio'),
+        naturalidade_uf: t('naturalidade_uf').toUpperCase().slice(0, 2),
+        uf_emissao_cnh: t('uf_emissao_cnh').toUpperCase().slice(0, 2),
     };
 }
 
 export interface ResultadoCadastro {
     codPessoa?: string;
+    codEndereco?: string | null;
     jaExistia?: boolean;
     anexado?: boolean;
     aviso?: string;
     error?: string;
 }
 
-/** Cria (ou reaproveita) o motorista no Bsoft. */
+/** Cria (ou reaproveita) o motorista no Bsoft, com endereço e anexo. */
 export async function cadastrarMotorista(
     dados: DadosCNH,
+    fiscais: DadosFiscais,
+    endereco: DadosEndereco,
     anexo?: { base64: string; extensao: string },
 ): Promise<ResultadoCadastro> {
     try {
         const { data, error } = await supabase.functions.invoke('cadastrar-motorista', {
             body: {
                 ...dados,
+                ...fiscais,
+                // `municipioRotulo` é só rótulo de tela; a API recebe o código IBGE.
+                endereco: {
+                    cep: endereco.cep,
+                    logradouro: endereco.logradouro,
+                    numero: endereco.numero,
+                    complemento: endereco.complemento,
+                    bairro: endereco.bairro,
+                    cidade: endereco.cidade,
+                    estado: endereco.estado,
+                },
                 ...(anexo ? { arquivoBase64: anexo.base64, arquivoExtensao: anexo.extensao } : {}),
             },
         });

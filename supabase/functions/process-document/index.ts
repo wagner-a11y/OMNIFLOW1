@@ -39,7 +39,8 @@ Deno.serve(async (req) => {
         "registro_cnh": str, "codigo_seguranca": str, "protocolo": str,
         "categoria": str, "orgao_expedidor_cnh": str,
         "data_validade": "YYYY-MM-DD", "data_expedicao": "YYYY-MM-DD",
-        "data_primeira_habilitacao": "YYYY-MM-DD", "data_validade_toxicologico": "YYYY-MM-DD"
+        "data_primeira_habilitacao": "YYYY-MM-DD", "data_validade_toxicologico": "YYYY-MM-DD",
+        "naturalidade_municipio": str, "naturalidade_uf": str, "uf_emissao_cnh": str
       }
 
       Para CRLV:
@@ -71,6 +72,17 @@ Deno.serve(async (req) => {
       - "data_validade_toxicologico": este dado NÃO costuma estar na CNH — é de
         um exame separado. Só preencha se estiver escrito no documento; caso
         contrário devolva null, sem tentar deduzir.
+      - "naturalidade_municipio" e "naturalidade_uf": o LOCAL DE NASCIMENTO do
+        condutor, rótulos "LOCAL DE NASCIMENTO", "NATURALIDADE" ou "NASCIDO EM".
+        Costuma aparecer como "CIDADE - UF" ou "CIDADE/UF": separe os dois, o
+        município em "naturalidade_municipio" e a sigla de 2 letras em
+        "naturalidade_uf". Nem todo modelo de CNH traz isso — se não houver,
+        devolva null nos dois, sem chutar a partir do órgão emissor.
+      - "uf_emissao_cnh": a sigla de 2 letras da UF do órgão que emitiu a CNH.
+        Normalmente dá para tirar do próprio órgão expedidor ("DETRAN-RS" -> "RS")
+        ou do local de emissão impresso no documento. SEMPRE preencha este campo
+        quando a UF estiver identificável — ele é o que sobra quando a CNH não
+        traz naturalidade.
 
       REGRAS:
       - Sempre inclua "tipo_documento" com o valor "CNH" ou "CRLV".

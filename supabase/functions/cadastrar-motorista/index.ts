@@ -4,8 +4,13 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 // cadastrar-motorista — Fase 2 do Cadastro Automático.
 //
 // Cria (ou reaproveita) a pessoa física do motorista na API REST do Bsoft, a
-// partir dos dados já CONFERIDOS pelo operador na tela. Opcionalmente anexa a
-// CNH ao cadastro.
+// partir dos dados já CONFERIDOS pelo operador na tela. Depois grava o ENDEREÇO
+// (sub-recurso da pessoa) e anexa a CNH.
+//
+// ORDEM: 1) cria/acha a pessoa  2) grava o endereço  3) anexa a CNH.
+// O endereço precisa do codPessoa na URL, por isso vem depois. Falha no endereço
+// ou no anexo NÃO desfaz a pessoa criada — vira aviso, e o operador completa no
+// Datamex em vez de tentar de novo e duplicar.
 //
 // ANTI-DUPLICAÇÃO: antes de criar, procura pelo CPF. Se a pessoa já existe, NÃO
 // cria de novo — devolve o codPessoa existente com jaExistia=true, sem alterar
@@ -102,7 +107,7 @@ const soDigitos = (s: unknown) => String(s ?? "").replace(/\D/g, "");
 function codDaPessoa(obj: unknown): string | null {
   if (!obj || typeof obj !== "object") return null;
   const o = obj as Record<string, unknown>;
-  for (const k of ["codPessoa", "codigoPessoa", "codigo", "id"]) {
+  for (const k of ["codPessoa", "codEndereco", "codigoEndereco", "codigoPessoa", "codigo", "id"]) {
     const v = o[k];
     if (v !== null && v !== undefined && String(v).trim()) return String(v).trim();
   }
@@ -186,6 +191,17 @@ Deno.serve(async (req: Request) => {
         sexo: p.sexo ?? null,
         dtNascimento: p.data_nascimento ?? null,
         grupos: ["motoristas"],
+        // Campos fiscais que o Bsoft exige na pessoa física. Os padrões vêm da
+        // tela (o operador pode trocar); aqui só há rede de segurança.
+        estadoCivil: p.estado_civil || "S",
+        nacionalidade: p.nacionalidade || "Brasileira",
+        ufNaturalidade: p.uf_naturalidade || null,
+        // O TMS tem "Ignorar Validação" para o INSS de quem não tem matrícula.
+        // Mandamos o valor zerado; se a API recusar, o erro dela diz o que quer.
+        matriculaINSS: p.matricula_inss || "0.000.000.000-0",
+        // RNTRC não está na CNH: é digitado pelo operador, sem valor automático.
+        RNTRC: p.rntrc || null,
+        // municipioNaturalidade fica de fora de propósito: não é obrigatório.
         cnh: {
           numero: p.registro_cnh ?? null,
           seguro: p.codigo_seguranca ?? null,
@@ -212,7 +228,52 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 3) Anexa a CNH, se veio. Falha aqui não desfaz o cadastro.
+    // 3) Endereço — sub-recurso da pessoa: o código vai na URL, não no corpo.
+    let codEndereco: string | null = null;
+    let avisoEndereco: string | undefined;
+    const end = p.endereco as Record<string, any> | undefined;
+
+    if (end?.cep && codPessoa) {
+      if (jaExistia) {
+        // Não regravamos endereço de quem já tinha cadastro: não temos como
+        // saber se o que está lá é o mesmo, e um POST criaria um endereço a mais.
+        avisoEndereco = "Não gravei o endereço porque a pessoa já existia — confira o que está no Datamex.";
+      } else {
+        const corpoEnd: Record<string, unknown> = {
+          // O Bsoft exige o CEP COM hífen: "00000-000".
+          cep: String(end.cep),
+          logradouro: end.logradouro ?? "",
+          numero: end.numero ?? "",
+          bairro: end.bairro ?? "",
+          // cidade é o código IBGE de 7 dígitos, não o nome.
+          cidade: String(end.cidade ?? ""),
+          estado: end.estado ?? "",
+          // Fixos de pessoa física — não aparecem na tela, não são decisão do operador.
+          tipoEndereco: "N",
+          inscricaoMunicipal: "ISENTO",
+          inscricaoEstadual: "ISENTO",
+          inscricaoEstadualNaoContribuinte: "S",
+          cobrancaPreferencial: "S",
+          enderecoPreferencial: "S",
+        };
+        if (end.complemento) corpoEnd.complemento = end.complemento;
+
+        const criadoEnd = await chamar(cred, `/pessoas/v1/pessoas/${encodeURIComponent(codPessoa)}/enderecos`, {
+          method: "POST",
+          body: corpoEnd,
+        });
+        if (criadoEnd.status >= 400) {
+          avisoEndereco = `A pessoa foi criada, mas o endereço não entrou: ${mensagemDoBsoft(criadoEnd.corpo, criadoEnd.status)}`;
+        } else {
+          // O POST de endereço responde 201 com um ARRAY de um item, diferente
+          // do POST de pessoa, que responde um objeto. Desembrulha antes de ler.
+          const item = Array.isArray(criadoEnd.corpo) ? criadoEnd.corpo[0] : criadoEnd.corpo;
+          codEndereco = codDaPessoa(item);
+        }
+      }
+    }
+
+    // 4) Anexa a CNH, se veio. Falha aqui não desfaz o cadastro.
     let anexado = false;
     let avisoAnexo: string | undefined;
     if (p.arquivoBase64 && codPessoa) {
@@ -225,8 +286,8 @@ Deno.serve(async (req: Request) => {
       else anexado = true;
     }
 
-    const aviso = [avisoGrupo, avisoAnexo].filter(Boolean).join(" ");
-    return json({ codPessoa, jaExistia, anexado, ...(aviso ? { aviso } : {}) });
+    const aviso = [avisoGrupo, avisoEndereco, avisoAnexo].filter(Boolean).join(" ");
+    return json({ codPessoa, codEndereco, jaExistia, anexado, ...(aviso ? { aviso } : {}) });
   } catch (e) {
     console.error("cadastrar-motorista:", (e as Error).message);
     return json({ error: (e as Error).message || "Erro inesperado no cadastro." }, 500);
