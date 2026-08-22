@@ -339,22 +339,37 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
                         </p>
                     </div>
 
-                    {/* RNTRC só existe para quem também é dono do veículo. */}
+                    {/* RNTRC e dependentes só existem para quem é dono do veículo. */}
                     {fiscais.proprietario && (
-                        <div>
-                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
-                                RNTRC<span className="text-red-500 ml-0.5">*</span>
-                                <span className="ml-1 normal-case text-[#9ca3af]">· do proprietário, digite à mão</span>
-                            </label>
-                            <input
-                                value={fiscais.rntrc}
-                                onChange={e => setFiscal('rntrc', e.target.value)}
-                                placeholder="Número do RNTRC"
-                                className={`w-full md:w-64 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${fiscais.rntrc
-                                    ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
-                                    : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`}
-                            />
-                        </div>
+                        <>
+                            <div>
+                                <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
+                                    RNTRC<span className="text-red-500 ml-0.5">*</span>
+                                    <span className="ml-1 normal-case text-[#9ca3af]">· do proprietário, digite à mão</span>
+                                </label>
+                                <input
+                                    value={fiscais.rntrc}
+                                    onChange={e => setFiscal('rntrc', e.target.value)}
+                                    placeholder="Número do RNTRC"
+                                    className={`w-full md:w-64 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${fiscais.rntrc
+                                        ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
+                                        : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
+                                    Dependentes IRRF
+                                    <span className="ml-1 normal-case text-[#9ca3af]">· 0 se não tiver</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    value={fiscais.dependentes_irrf}
+                                    onChange={e => setFiscal('dependentes_irrf', e.target.value)}
+                                    className="w-full md:w-36 px-3 py-2.5 rounded-lg text-sm font-medium outline-none border bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8] transition-colors"
+                                />
+                            </div>
+                        </>
                     )}
                     <div>
                         <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">

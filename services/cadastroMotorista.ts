@@ -57,6 +57,8 @@ export interface DadosFiscais {
     rntrc: string;
     /** Motorista que também é proprietário do veículo. Mexe em grupo e RNTRC. */
     proprietario: boolean;
+    /** Só é enviado quando proprietário — a API o exige nesse caso. */
+    dependentes_irrf: string;
     /** Obrigatório no Bsoft. Vai com máscara: "(00) 00000-0000". */
     celular: string;
 }
@@ -89,6 +91,7 @@ export const FISCAIS_PADRAO: DadosFiscais = {
     rntrc: '',
     // Padrão é só condutor: é o caso comum, e não pede RNTRC.
     proprietario: false,
+    dependentes_irrf: '0',
 };
 
 export const ENDERECO_VAZIO: DadosEndereco = {

@@ -222,9 +222,16 @@ Deno.serve(async (req: Request) => {
         // Motorista que só dirige não tem RNTRC — nesses casos o campo nem é
         // enviado, em vez de ir vazio.
         ...(p.proprietario && p.rntrc ? { RNTRC: p.rntrc } : {}),
-        // Campos que a API só cobra de quem entra no grupo de proprietários
-        // (o cadastro de condutor puro passa sem eles).
-        ...(p.proprietario ? { dependentesIRRF: p.dependentes_irrf ?? 0 } : {}),
+        // Campos que a API só cobra de quem entra no grupo de proprietários. O
+        // condutor puro passa sem eles (provado no cadastro 11229), então não
+        // são enviados nesse caso — não é só economia, é não classificar como
+        // transportador quem só dirige.
+        ...(p.proprietario ? {
+          dependentesIRRF: Number(p.dependentes_irrf ?? 0) || 0,
+          // "T" = TAC, transportador autônomo de carga: é o que se aplica a
+          // motorista-proprietário pessoa física.
+          tipoTransportadora: p.tipo_transportadora || "T",
+        } : {}),
         cnh: {
           numero: p.registro_cnh ?? null,
           seguro: p.codigo_seguranca ?? null,
