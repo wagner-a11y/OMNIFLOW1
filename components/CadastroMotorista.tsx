@@ -6,7 +6,8 @@ import { buscarCep, formatarCep } from '../services/cep';
 import {
     CAMPOS_CNH, CNH_VAZIA, DadosCNH, DadosEndereco, DadosFiscais,
     ENDERECO_VAZIO, ESTADOS_CIVIS, FISCAIS_PADRAO, ResultadoCadastro,
-    cadastrarMotorista, daIaParaFormulario, fiscaisDaCnh, registrarLog,
+    cadastrarMotorista, celularValido, daIaParaFormulario, fiscaisDaCnh,
+    formatarCelular, registrarLog,
 } from '../services/cadastroMotorista';
 
 // ============================================================================
@@ -129,7 +130,8 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
     const rotuloDe = (k: string) =>
         CAMPOS_CNH.find(c => c.chave === k)?.label
         ?? ({ rntrc: 'RNTRC', uf_naturalidade: 'UF de naturalidade', estado_civil: 'Estado civil',
-              nacionalidade: 'Nacionalidade', cep: 'CEP', logradouro: 'Endereço', numero: 'Número',
+              nacionalidade: 'Nacionalidade', naturalidade: 'Naturalidade (município)',
+              celular: 'Celular', cep: 'CEP', logradouro: 'Endereço', numero: 'Número',
               bairro: 'Bairro', cidade: 'Município (busque pelo CEP)' } as Record<string, string>)[k]
         ?? k;
 
@@ -137,6 +139,8 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
         ...OBRIGATORIOS.filter(k => !String(dados[k] || '').trim()),
         ...(['estado_civil', 'nacionalidade', 'uf_naturalidade', 'rntrc'] as Array<keyof DadosFiscais>)
             .filter(k => !String(fiscais[k] || '').trim()),
+        // Celular não basta estar preenchido: precisa dos 11 dígitos.
+        ...(celularValido(fiscais.celular) ? [] : ['celular']),
         // `cidade` é o código IBGE: só existe se a busca de CEP tiver validado.
         ...(['cep', 'logradouro', 'numero', 'bairro', 'cidade'] as Array<keyof DadosEndereco>)
             .filter(k => !String(endereco[k] || '').trim()),
@@ -266,6 +270,18 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
                     </div>
                     <div className="flex flex-col">
                         <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
+                            Naturalidade (município)
+                            <span className="ml-1 normal-case text-[#9ca3af]">· da CNH</span>
+                        </label>
+                        <input
+                            value={fiscais.naturalidade}
+                            onChange={e => setFiscal('naturalidade', e.target.value)}
+                            placeholder="Município de nascimento"
+                            className="w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none border bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8] transition-colors"
+                        />
+                    </div>
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
                             UF de naturalidade<span className="text-red-500 ml-0.5">*</span>
                             <span className="ml-1 normal-case text-[#9ca3af]">· da CNH</span>
                         </label>
@@ -292,20 +308,42 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
                     </div>
                 </div>
 
-                {/* RNTRC em destaque: é o único que não tem padrão nem vem de lugar nenhum. */}
-                <div className="mt-5 pt-5 border-t border-[#e5e7eb]">
-                    <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
-                        RNTRC<span className="text-red-500 ml-0.5">*</span>
-                        <span className="ml-1 normal-case text-[#9ca3af]">· não está na CNH, digite à mão</span>
-                    </label>
-                    <input
-                        value={fiscais.rntrc}
-                        onChange={e => setFiscal('rntrc', e.target.value)}
-                        placeholder="Número do RNTRC do motorista"
-                        className={`w-full md:w-72 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${fiscais.rntrc
-                            ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
-                            : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`}
-                    />
+                {/* Os dois que não vêm de lugar nenhum: sem padrão e sem OCR. */}
+                <div className="mt-5 pt-5 border-t border-[#e5e7eb] flex flex-wrap gap-6">
+                    <div>
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
+                            RNTRC<span className="text-red-500 ml-0.5">*</span>
+                            <span className="ml-1 normal-case text-[#9ca3af]">· não está na CNH, digite à mão</span>
+                        </label>
+                        <input
+                            value={fiscais.rntrc}
+                            onChange={e => setFiscal('rntrc', e.target.value)}
+                            placeholder="Número do RNTRC do motorista"
+                            className={`w-full md:w-72 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${fiscais.rntrc
+                                ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
+                                : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
+                            Celular<span className="text-red-500 ml-0.5">*</span>
+                            <span className="ml-1 normal-case text-[#9ca3af]">· DDD + 9 dígitos</span>
+                        </label>
+                        <input
+                            value={fiscais.celular}
+                            onChange={e => setFiscal('celular', formatarCelular(e.target.value))}
+                            placeholder="(00) 00000-0000"
+                            inputMode="numeric"
+                            className={`w-full md:w-56 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${celularValido(fiscais.celular)
+                                ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
+                                : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`}
+                        />
+                        {fiscais.celular && !celularValido(fiscais.celular) && (
+                            <p className="text-[10px] font-medium text-amber-700 mt-1">
+                                Faltam dígitos — são 11 no total (DDD + 9).
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
 

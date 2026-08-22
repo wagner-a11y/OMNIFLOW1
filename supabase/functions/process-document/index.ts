@@ -34,7 +34,9 @@ Deno.serve(async (req) => {
       Para CNH:
       {
         "tipo_documento": "CNH",
-        "nome": str, "sobrenome": str, "cpf": str, "rg": str, "orgao_expedidor_rg": str,
+        "nome": str, "sobrenome": str, "cpf": str,
+        "numero_rg": str, "orgao_expedidor_rg": str, "uf_rg": str,
+        "nome_mae": str, "nome_pai": str,
         "sexo": "M" ou "F" ou null, "data_nascimento": "YYYY-MM-DD",
         "registro_cnh": str, "codigo_seguranca": str, "protocolo": str,
         "categoria": str, "orgao_expedidor_cnh": str,
@@ -72,6 +74,18 @@ Deno.serve(async (req) => {
       - "data_validade_toxicologico": este dado NÃO costuma estar na CNH — é de
         um exame separado. Só preencha se estiver escrito no documento; caso
         contrário devolva null, sem tentar deduzir.
+      - "nome_mae" e "nome_pai": a FILIAÇÃO, impressa na CNH sob o rótulo
+        "FILIAÇÃO". Vêm um embaixo do outro, normalmente a mãe primeiro — mas
+        NÃO confie na ordem: use o nome que fizer sentido (nomes femininos para
+        mãe, masculinos para pai) e, na dúvida, devolva na ordem impressa.
+        Se só houver um nome, preencha o que estiver identificado e devolva null
+        no outro. Não invente o que não está escrito.
+      - "numero_rg", "orgao_expedidor_rg" e "uf_rg": o documento de identidade
+        aparece na CNH junto do CPF, rotulado "DOC. IDENTIDADE / ORG. EMISSOR /
+        UF" ou "CARTEIRA DE IDENTIDADE". Costuma vir tudo numa linha só, por
+        exemplo "12345678 SSP RS": separe em número, órgão e a sigla de 2 letras.
+        A DATA de emissão do RG normalmente NÃO está na CNH — não a devolva e
+        não tente deduzi-la.
       - "naturalidade_municipio" e "naturalidade_uf": o LOCAL DE NASCIMENTO do
         condutor, rótulos "LOCAL DE NASCIMENTO", "NATURALIDADE" ou "NASCIDO EM".
         Costuma aparecer como "CIDADE - UF" ou "CIDADE/UF": separe os dois, o

@@ -193,15 +193,27 @@ Deno.serve(async (req: Request) => {
         grupos: ["motoristas"],
         // Campos fiscais que o Bsoft exige na pessoa física. Os padrões vêm da
         // tela (o operador pode trocar); aqui só há rede de segurança.
+        //
+        // ATENÇÃO AOS NOMES: a API ACEITA campo com nome errado e responde 200
+        // sem gravar nada — foi assim que nacionalidade, naturalidade e RG se
+        // perderam silenciosamente na primeira versão. Os nomes abaixo são os do
+        // exemplo oficial da doc de Pessoas Físicas; não "corrigir" por intuição.
         estadoCivil: p.estado_civil || "S",
-        nacionalidade: p.nacionalidade || "Brasileira",
-        ufNaturalidade: p.uf_naturalidade || null,
+        nacionalidade: p.nacionalidade || "Brasil",
+        naturalidade: p.naturalidade || null,
+        naturalidadeUF: p.uf_naturalidade || null,   // NÃO é "ufNaturalidade"
+        numeroRG: p.rg || null,                      // NÃO é "rg"
+        orgaoExpedidorRG: p.orgao_expedidor_rg || null,   // RG maiúsculo
+        ufEmissaoRG: p.uf_rg || null,
+        mae: p.nome_mae || null,
+        pai: p.nome_pai || null,
+        // Celular é obrigatório e vai com máscara: "(00) 00000-0000".
+        celular: p.celular || null,
         // O TMS tem "Ignorar Validação" para o INSS de quem não tem matrícula.
         // Mandamos o valor zerado; se a API recusar, o erro dela diz o que quer.
         matriculaINSS: p.matricula_inss || "0.000.000.000-0",
         // RNTRC não está na CNH: é digitado pelo operador, sem valor automático.
         RNTRC: p.rntrc || null,
-        // municipioNaturalidade fica de fora de propósito: não é obrigatório.
         cnh: {
           numero: p.registro_cnh ?? null,
           seguro: p.codigo_seguranca ?? null,
@@ -214,8 +226,10 @@ Deno.serve(async (req: Request) => {
           orgaoExpedidor: p.orgao_expedidor_cnh ?? null,
         },
       };
-      if (p.rg) novo.rg = p.rg;
-      if (p.orgao_expedidor_rg) novo.orgaoExpedidorRg = p.orgao_expedidor_rg;
+      // A data de emissão do RG normalmente não está na CNH. Só mandamos quando
+      // o operador digitou: mandar vazio já rendeu "[emissaoRG] com conteúdo
+      // inválido" num teste anterior.
+      if (p.data_emissao_rg) novo.emissaoRG = p.data_emissao_rg;
 
       const criado = await chamar(cred, "/pessoas/v1/pessoas/fisicas", { method: "POST", body: novo });
       if (criado.status >= 400) {
