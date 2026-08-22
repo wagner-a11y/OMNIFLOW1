@@ -176,12 +176,13 @@ function acharPorNome(dominio: Dominio, tipo: string, texto: string): Escolha {
     return { codigo: achada.codigo, rotulo: achada.nome, origem: 'documento', alternativas: lista };
 }
 
-/** Rodado deduzido do tipo de veículo. Carreta fica de fora: ver nota abaixo. */
+/** Rodado deduzido do tipo de veículo. Semi-reboque usa "00" (Nao aplicavel). */
 const RODADO_POR_TIPO: Record<string, string> = {
-    cavalo: '03',   // Cavalo Mecanico
+    cavalo: '03',    // Cavalo Mecanico
     truck: '01',
     toco: '02',
-    vuc: '05',      // Utilitario
+    vuc: '05',       // Utilitario
+    carreta: '00',   // Semi-reboque não tem rodado próprio: 'Nao aplicavel'
 };
 
 /** capM3 padrão, definido pelo Wagner. Carroceria manda mais que o tipo. */

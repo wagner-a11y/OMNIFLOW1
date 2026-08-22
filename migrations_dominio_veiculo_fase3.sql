@@ -51,3 +51,12 @@ INSERT INTO public.dominio_veiculo (tipo, codigo, nome) VALUES
     ('cor', 'Roxo', 'Roxo'),       ('cor', 'Verde', 'Verde'),
     ('cor', 'Vermelho', 'Vermelho'), ('cor', 'Fantasia', 'Fantasia')
 ON CONFLICT (tipo, codigo) DO UPDATE SET nome = EXCLUDED.nome, atualizado_em = now();
+
+-- =====================================================================
+-- Ajuste validado pelo Wagner em 22/08/2026: o rodado '00' faltava.
+-- Semi-reboque não tem rodado próprio, e é justamente o caso da carreta —
+-- sem esta linha a tradução deixava o campo em aberto em todo reboque.
+-- =====================================================================
+INSERT INTO public.dominio_veiculo (tipo, codigo, nome) VALUES
+    ('tipoRodado', '00', 'Nao aplicavel')
+ON CONFLICT (tipo, codigo) DO UPDATE SET nome = EXCLUDED.nome, atualizado_em = now();
