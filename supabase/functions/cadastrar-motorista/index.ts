@@ -135,6 +135,36 @@ Deno.serve(async (req: Request) => {
   let corpoReq: Record<string, unknown> = {};
   try { corpoReq = await req.json(); } catch { /* sem corpo */ }
 
+  // ---- Consulta por CPF (só leitura, não grava) ----
+  // Usada pelo cadastro de VEÍCULO para escolher o proprietário. Devolve só o
+  // código e o nome — o suficiente para o operador confirmar que é a pessoa
+  // certa, sem despejar o cadastro inteiro na tela.
+  if (corpoReq?.consultarCpf) {
+    const alvo = soDigitos(corpoReq.consultarCpf);
+    if (alvo.length !== 11) return json({ error: "CPF precisa ter 11 dígitos." }, 400);
+
+    let credC = creds[0];
+    for (const c of creds) {
+      const t = await chamar(c, "/pessoas/v1/pessoas/fisicas?limit=1");
+      if (t.status !== 401 && t.status !== 403) { credC = c; break; }
+    }
+    const r = await chamar(credC, `/pessoas/v1/pessoas/fisicas/${encodeURIComponent(alvo)}`);
+    if (r.status === 404) return json({ existe: false });
+    if (r.status >= 400) return json({ error: mensagemDoBsoft(r.corpo, r.status) }, 400);
+
+    const lista = comoLista(r.corpo).length
+      ? comoLista(r.corpo)
+      : (r.corpo && typeof r.corpo === "object" ? [r.corpo as Record<string, unknown>] : []);
+    const achada = lista.filter((x) => soDigitos(x.cpf) === alvo)[0];
+    if (!achada) return json({ existe: false });
+
+    return json({
+      existe: true,
+      codPessoa: codDaPessoa(achada),
+      nome: [achada.nome, achada.sobrenome].filter(Boolean).join(" ").trim(),
+    });
+  }
+
   // ---- Cadastro real ----
   const p = corpoReq as Record<string, any>;
   const cpf = soDigitos(p.cpf);

@@ -1,0 +1,528 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle, Info, Loader2, Search, Send, Truck } from 'lucide-react';
+import { extractDataFromDoc } from '../services/geminiService';
+import UploadDocumento from './UploadDocumento';
+import {
+    CAMPOS_CRITICOS, CAPM3_POR_CARROCERIA, CampoCritico, ResultadoVeiculo,
+    VEICULO_VAZIO, VeiculoParaGravar, buscarProprietario, cadastrarVeiculo,
+    formatarPlaca, placaValida,
+} from '../services/cadastroVeiculo';
+import {
+    CRLV_VAZIO, DadosCRLV, Dominio, Escolha,
+    carregarDominio, traduzirCrlv,
+} from '../services/traducaoVeiculo';
+
+// ============================================================================
+// Cadastro Rápido — Veículo (Fase 3A).
+//
+// Anexa o CRLV -> a IA lê -> a tradução escolhe os códigos do Bsoft -> o
+// operador CONFERE -> grava. Uma placa por vez, proprietário pessoa física.
+//
+// A conferência não é formalidade: os campos CRÍTICOS ficam bloqueados até o
+// operador tocar em cada um. Sem isso dava para gravar direto o que a IA
+// cuspiu, e é justamente o que a regra do módulo proíbe.
+// ============================================================================
+
+interface Props {
+    autor: { id?: string; name?: string };
+}
+
+const soDigitos = (s: string) => (s || '').replace(/\D/g, '');
+const mascaraCpf = (s: string) => {
+    const d = soDigitos(s).slice(0, 11);
+    return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+};
+
+interface Proprietario {
+    codPessoa: string;
+    nome: string;
+}
+
+const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
+    const [dominio, setDominio] = useState<Dominio>([]);
+    const [crlv, setCrlv] = useState<DadosCRLV>(CRLV_VAZIO);
+    const [form, setForm] = useState<VeiculoParaGravar>(VEICULO_VAZIO);
+    const [opcoes, setOpcoes] = useState<Record<string, Escolha>>({});
+    const [lendo, setLendo] = useState(false);
+    const [leu, setLeu] = useState(false);
+    const [erroLeitura, setErroLeitura] = useState<string | null>(null);
+
+    // Cada crítico só sai da lista quando o operador encosta nele.
+    const [conferidos, setConferidos] = useState<Set<CampoCritico>>(new Set());
+
+    const [cpfProp, setCpfProp] = useState('');
+    const [buscandoProp, setBuscandoProp] = useState(false);
+    const [proprietario, setProprietario] = useState<Proprietario | null>(null);
+    const [erroProp, setErroProp] = useState<string | null>(null);
+
+    const [confirmando, setConfirmando] = useState(false);
+    const [gravando, setGravando] = useState(false);
+    const [resultado, setResultado] = useState<ResultadoVeiculo | null>(null);
+
+    useEffect(() => {
+        carregarDominio().then(setDominio).catch(() => setDominio([]));
+    }, []);
+
+    const listaDe = (tipo: string) =>
+        dominio.filter(d => d.tipo === tipo).map(d => ({ codigo: d.codigo, rotulo: d.nome }));
+
+    const marcasDaCategoria = useMemo(() => {
+        const cat = dominio.find(d => d.tipo === 'categoria' && d.codigo === form.categoriaVeiculo);
+        if (!cat) return [];
+        return dominio
+            .filter(d => d.tipo === 'marca' && (d.categoria_ref || '').toUpperCase() === cat.nome.toUpperCase())
+            .map(d => ({ codigo: d.codigo, rotulo: d.nome }));
+    }, [dominio, form.categoriaVeiculo]);
+
+    const setCampo = (k: keyof VeiculoParaGravar, v: string) => {
+        setForm(prev => ({ ...prev, [k]: v }));
+        setResultado(null);
+        if ((CAMPOS_CRITICOS as readonly string[]).includes(k)) {
+            setConferidos(prev => new Set(prev).add(k as CampoCritico));
+        }
+    };
+
+    const aoAnexar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setLendo(true); setErroLeitura(null); setResultado(null);
+        try {
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(r.result as string);
+                r.onerror = () => reject(new Error('Não consegui ler o arquivo.'));
+                r.readAsDataURL(file);
+            });
+            const base64 = dataUrl.split(',')[1];
+            const ocr = await extractDataFromDoc(base64, file.type);
+            if (!ocr || ocr.error) {
+                setErroLeitura(ocr?.error || 'A leitura não retornou nada.');
+                return;
+            }
+            const b = ocr as Record<string, unknown>;
+            const t = (...k: string[]) => {
+                for (const x of k) {
+                    const v = b[x];
+                    if (v !== null && v !== undefined && String(v).trim()) return String(v).trim();
+                }
+                return '';
+            };
+            const lido: DadosCRLV = {
+                tipo_documento: t('tipo_documento'),
+                placa: t('placa'), renavam: t('renavam'), chassi: t('chassi'), cor: t('cor'),
+                ano_fabricacao: t('ano_fabricacao', 'ano_fab'), ano_modelo: t('ano_modelo', 'ano_mod'),
+                marca_texto: t('marca_texto', 'marca'), modelo: t('modelo'),
+                especie_texto: t('especie_texto'), tipo_veiculo_inferido: t('tipo_veiculo_inferido'),
+                carroceria_texto: t('carroceria_texto'), tara: t('tara'),
+                capacidade_carga: t('capacidade_carga'), eixos: t('eixos'),
+            };
+            if (lido.tipo_documento && lido.tipo_documento.toUpperCase() !== 'CRLV') {
+                setErroLeitura(`O documento parece ser ${lido.tipo_documento}, não um CRLV. Confira o arquivo.`);
+            }
+            setCrlv(lido);
+
+            const tr = traduzirCrlv(dominio, lido);
+            setOpcoes({
+                categoria: tr.categoria, marca: tr.marca, cor: tr.cor,
+                carroceria: tr.carroceria, rodado: tr.rodado,
+            });
+            const capSugerido = CAPM3_POR_CARROCERIA[tr.carroceria.codigo];
+            setForm(prev => ({
+                ...prev,
+                descricao: `${tr.marca.rotulo} ${lido.modelo}`.trim(),
+                placa: formatarPlaca(lido.placa),
+                chassi: lido.chassi.toUpperCase(),
+                renavam: soDigitos(lido.renavam),
+                anoModelo: lido.ano_modelo, anoFabricacao: lido.ano_fabricacao,
+                cor: tr.cor.codigo,
+                categoriaVeiculo: tr.categoria.codigo,
+                marcaVeiculo: tr.marca.codigo,
+                tipoCarroceria: tr.carroceria.codigo,
+                tipoRodado: tr.rodado.codigo,
+                tara: lido.tara, capacidadeCarga: lido.capacidade_carga,
+                quantidadeEixos: lido.eixos,
+                // Vazio quando a carroceria não casou: chutar volume é pior.
+                capM3: capSugerido ? String(capSugerido) : '',
+            }));
+            // Leitura nova zera a conferência — o operador revê tudo de novo.
+            setConferidos(new Set());
+            setLeu(true);
+        } catch (err) {
+            setErroLeitura((err as Error).message);
+        } finally {
+            setLendo(false);
+            e.target.value = '';
+        }
+    };
+
+    const procurarProprietario = async () => {
+        const cpf = soDigitos(cpfProp);
+        if (cpf.length !== 11) { setErroProp('O CPF precisa ter 11 dígitos.'); return; }
+        setBuscandoProp(true); setErroProp(null); setProprietario(null); setResultado(null);
+        try {
+            const r = await buscarProprietario(cpf);
+            if (r.error) { setErroProp(r.error); return; }
+            if (!r.codPessoa) {
+                setErroProp(
+                    'Não existe pessoa com esse CPF no Datamex. Cadastre primeiro em ' +
+                    'Cadastro Rápido · Motorista, marcando "é o dono do veículo".',
+                );
+                return;
+            }
+            setProprietario({ codPessoa: r.codPessoa, nome: r.nome || '' });
+            setCampo('proprietarioId', r.codPessoa);
+        } finally {
+            setBuscandoProp(false);
+        }
+    };
+
+    const criticosPendentes = CAMPOS_CRITICOS.filter(c => !conferidos.has(c));
+    const faltaPreencher = [
+        !placaValida(form.placa) && 'placa válida',
+        !form.categoriaVeiculo && 'categoria',
+        !form.tipoCarroceria && 'carroceria',
+        !(Number(form.capM3) > 0) && 'capacidade em m³ maior que zero',
+        !form.proprietarioId && 'proprietário',
+    ].filter(Boolean) as string[];
+
+    const podeGravar = !faltaPreencher.length && !criticosPendentes.length && !gravando;
+
+    const gravar = async () => {
+        setGravando(true); setConfirmando(false);
+        try {
+            const r = await cadastrarVeiculo(form);
+            setResultado(r);
+            if (!r.error) {
+                setForm(VEICULO_VAZIO); setCrlv(CRLV_VAZIO); setOpcoes({});
+                setConferidos(new Set()); setLeu(false);
+                setProprietario(null); setCpfProp('');
+            }
+        } finally {
+            setGravando(false);
+        }
+    };
+
+    // ---- pedaços de UI ----------------------------------------------------
+
+    const rotuloCritico = (texto: string, chave: CampoCritico) => (
+        <label className="text-[10px] font-medium uppercase text-[#92400e] mb-1.5 flex items-center gap-1.5">
+            {texto}<span className="text-red-500">*</span>
+            {!conferidos.has(chave) && (
+                <span className="normal-case text-[9px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                    confira
+                </span>
+            )}
+        </label>
+    );
+
+    const classeCritica = (chave: CampoCritico, ok = true) =>
+        `w-full px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${!ok
+            ? 'bg-red-50 border-red-400 focus:border-red-500'
+            : conferidos.has(chave)
+                ? 'bg-white border-emerald-300 focus:border-emerald-500'
+                : 'bg-amber-50 border-amber-400 focus:border-amber-500'}`;
+
+    const classeNormal =
+        'w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none border bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8] transition-colors';
+
+    const Seletor: React.FC<{
+        valor: string; onChange: (v: string) => void;
+        lista: Array<{ codigo: string; rotulo: string }>; className: string;
+    }> = ({ valor, onChange, lista, className }) => (
+        <select value={valor} onChange={e => onChange(e.target.value)} className={className}>
+            <option value="">— selecione —</option>
+            {lista.map(o => <option key={o.codigo} value={o.codigo}>{o.rotulo}</option>)}
+        </select>
+    );
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-[#1d6fb8] rounded-lg text-white"><Truck className="w-5 h-5" strokeWidth={1.75} /></div>
+                <div>
+                    <h2 className="text-lg font-medium text-[#111827]">Cadastro Rápido — Veículo</h2>
+                    <p className="text-sm font-normal text-[#6b7280]">Anexe o CRLV, confira o que foi lido e cadastre no Datamex.</p>
+                </div>
+            </div>
+
+            {/* 1 — anexo */}
+            <div className="bg-white border border-[#e5e7eb] rounded-xl p-6 flex flex-wrap items-center gap-4">
+                <UploadDocumento label="CRLV" anexado={leu} carregando={lendo} onSelect={aoAnexar} />
+                <span className="text-xs font-normal text-[#6b7280]">
+                    {lendo ? 'Lendo o documento…' : leu ? 'Documento lido. Confira os campos abaixo.' : 'Imagem ou PDF do CRLV.'}
+                </span>
+            </div>
+
+            {erroLeitura && (
+                <div className="bg-amber-50 border border-amber-300 text-amber-900 px-6 py-3 rounded-xl flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
+                    <div>
+                        <p className="text-sm font-semibold">Leitura com problema</p>
+                        <p className="text-xs font-medium opacity-90 mt-0.5">{erroLeitura} Você pode preencher à mão.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* 2 — críticos */}
+            <div className="bg-white border-2 border-amber-300 rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" strokeWidth={1.75} />
+                    <p className="text-xs font-semibold text-[#92400e]">
+                        Confira estes cinco campos um a um — são os de maior impacto e os que a leitura
+                        automática mais erra. O botão de gravar só libera depois que você passar por todos.
+                    </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="flex flex-col">
+                        {rotuloCritico('Placa', 'placa')}
+                        <input
+                            value={form.placa}
+                            onChange={e => setCampo('placa', formatarPlaca(e.target.value))}
+                            placeholder="ABC-1234"
+                            className={classeCritica('placa', !form.placa || placaValida(form.placa))}
+                        />
+                        {form.placa && !placaValida(form.placa) && (
+                            <p className="text-[10px] font-medium text-red-600 mt-1">
+                                Formato inválido. Use ABC-1234 ou ABC-1D23.
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="flex flex-col">
+                        {rotuloCritico('Chassi', 'chassi')}
+                        <input
+                            value={form.chassi}
+                            onChange={e => setCampo('chassi', e.target.value.toUpperCase())}
+                            placeholder="17 caracteres"
+                            className={classeCritica('chassi')}
+                        />
+                    </div>
+
+                    <div className="flex flex-col">
+                        {rotuloCritico('Capacidade m³', 'capM3')}
+                        <input
+                            type="number" min={1}
+                            value={form.capM3}
+                            onChange={e => setCampo('capM3', e.target.value)}
+                            className={classeCritica('capM3', !form.capM3 || Number(form.capM3) > 0)}
+                        />
+                        <p className="text-[10px] font-normal text-[#92400e] mt-1">
+                            {form.capM3 ? 'Valor sugerido, confira antes de gravar.' : 'Sem sugestão para esta carroceria — preencha.'}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col">
+                        {rotuloCritico('Categoria', 'categoriaVeiculo')}
+                        <Seletor
+                            valor={form.categoriaVeiculo}
+                            onChange={v => { setCampo('categoriaVeiculo', v); setCampo('marcaVeiculo', ''); }}
+                            lista={listaDe('categoria')}
+                            className={classeCritica('categoriaVeiculo')}
+                        />
+                        {opcoes.categoria?.origem === 'nao_resolvido' && leu && (
+                            <p className="text-[10px] font-medium text-amber-700 mt-1">A leitura não definiu — escolha.</p>
+                        )}
+                    </div>
+
+                    <div className="flex flex-col">
+                        {rotuloCritico('Carroceria', 'tipoCarroceria')}
+                        <Seletor
+                            valor={form.tipoCarroceria}
+                            onChange={v => {
+                                setCampo('tipoCarroceria', v);
+                                const s = CAPM3_POR_CARROCERIA[v];
+                                if (s) setForm(prev => ({ ...prev, capM3: String(s) }));
+                            }}
+                            lista={listaDe('tipoCarroceria')}
+                            className={classeCritica('tipoCarroceria')}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* 3 — demais campos */}
+            <div className="bg-white border border-[#e5e7eb] rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                    <Info className="w-4 h-4 text-[#6b7280]" strokeWidth={1.75} />
+                    <p className="text-xs font-medium text-[#6b7280]">
+                        Preenchidos pela leitura do CRLV. Todos editáveis.
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Marca</label>
+                        <Seletor valor={form.marcaVeiculo} onChange={v => setCampo('marcaVeiculo', v)}
+                            lista={marcasDaCategoria} className={classeNormal} />
+                    </div>
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Cor</label>
+                        <Seletor valor={form.cor} onChange={v => setCampo('cor', v)}
+                            lista={listaDe('cor')} className={classeNormal} />
+                    </div>
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Rodado</label>
+                        <Seletor valor={form.tipoRodado} onChange={v => setCampo('tipoRodado', v)}
+                            lista={listaDe('tipoRodado')} className={classeNormal} />
+                    </div>
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Grupo</label>
+                        <Seletor valor={form.grupoVeiculo} onChange={v => setCampo('grupoVeiculo', v)}
+                            lista={listaDe('grupo')} className={classeNormal} />
+                    </div>
+
+                    {([
+                        { k: 'renavam' as const, label: 'Renavam' },
+                        { k: 'anoFabricacao' as const, label: 'Ano fabricação' },
+                        { k: 'anoModelo' as const, label: 'Ano modelo' },
+                        { k: 'tara' as const, label: 'Tara (kg)' },
+                        { k: 'capacidadeCarga' as const, label: 'Capacidade de carga (kg)' },
+                        { k: 'quantidadeEixos' as const, label: 'Eixos' },
+                        { k: 'estado' as const, label: 'UF' },
+                        { k: 'cidade' as const, label: 'Município (código IBGE)' },
+                    ]).map(({ k, label }) => (
+                        <div key={k} className="flex flex-col">
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">{label}</label>
+                            <input value={form[k]} onChange={e => setCampo(k, e.target.value)} className={classeNormal} />
+                        </div>
+                    ))}
+
+                    <div className="flex flex-col md:col-span-2">
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Descrição</label>
+                        <input value={form.descricao} onChange={e => setCampo('descricao', e.target.value)} className={classeNormal} />
+                    </div>
+                </div>
+            </div>
+
+            {/* 4 — proprietário */}
+            <div className="bg-white border border-[#e5e7eb] rounded-xl p-6">
+                <p className="text-xs font-medium text-[#6b7280] mb-4">
+                    Proprietário do veículo — pessoa física. Busque pelo CPF de quem já está no Datamex.
+                </p>
+                <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
+                            CPF do proprietário<span className="text-red-500 ml-0.5">*</span>
+                        </label>
+                        <input
+                            value={cpfProp}
+                            onChange={e => { setCpfProp(mascaraCpf(e.target.value)); setProprietario(null); }}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); procurarProprietario(); } }}
+                            placeholder="000.000.000-00"
+                            className={`w-48 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${proprietario
+                                ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
+                                : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`}
+                        />
+                    </div>
+                    <button
+                        type="button" onClick={procurarProprietario}
+                        disabled={buscandoProp || soDigitos(cpfProp).length !== 11}
+                        className="px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    >
+                        {buscandoProp ? <><Loader2 className="w-4 h-4 animate-spin" /> Buscando…</> : <><Search className="w-4 h-4" strokeWidth={1.75} /> Buscar</>}
+                    </button>
+                    {proprietario && (
+                        <span className="text-xs font-medium text-emerald-700 pb-2.5">
+                            {proprietario.nome} · código {proprietario.codPessoa}
+                        </span>
+                    )}
+                </div>
+                {erroProp && (
+                    <div className="mt-3 bg-amber-50 border border-amber-300 text-amber-900 px-4 py-2.5 rounded-lg flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
+                        <p className="text-xs font-medium">{erroProp}</p>
+                    </div>
+                )}
+            </div>
+
+            {/* 5 — gravar */}
+            <div className="flex flex-wrap items-center gap-4">
+                <button
+                    onClick={() => setConfirmando(true)}
+                    disabled={!podeGravar}
+                    className="px-6 py-3 rounded-lg text-sm font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                    {gravando ? <><Loader2 className="w-4 h-4 animate-spin" /> Gravando…</> : <><Send className="w-4 h-4" strokeWidth={1.75} /> Cadastrar veículo no Datamex</>}
+                </button>
+                {!!criticosPendentes.length && (
+                    <span className="text-xs font-medium text-amber-700">
+                        Falta conferir: {criticosPendentes.map(c => ({
+                            placa: 'placa', chassi: 'chassi', capM3: 'capacidade m³',
+                            categoriaVeiculo: 'categoria', tipoCarroceria: 'carroceria',
+                        } as Record<string, string>)[c]).join(', ')}
+                    </span>
+                )}
+                {!criticosPendentes.length && !!faltaPreencher.length && (
+                    <span className="text-xs font-medium text-amber-700">Falta: {faltaPreencher.join(', ')}</span>
+                )}
+            </div>
+
+            {/* Honestidade sobre o que vai gravado sem o operador ver. */}
+            <p className="text-[11px] font-normal text-[#9ca3af]">
+                Tipo de equipamento gravado sem classificação (padrão do sistema). A classificação
+                detalhada pode ser adicionada depois.
+            </p>
+
+            {/* 6 — confirmação */}
+            {confirmando && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                        <h3 className="text-base font-semibold text-[#111827] mb-1">Confirmar cadastro</h3>
+                        <p className="text-xs font-normal text-[#6b7280] mb-4">Isso cria o veículo no Datamex. Confira:</p>
+                        <dl className="text-sm space-y-1.5 mb-6">
+                            {([
+                                ['Placa', form.placa],
+                                ['Categoria', listaDe('categoria').find(c => c.codigo === form.categoriaVeiculo)?.rotulo ?? '—'],
+                                ['Proprietário', proprietario ? `${proprietario.nome} (${proprietario.codPessoa})` : '—'],
+                                ['Capacidade m³', form.capM3],
+                            ] as Array<[string, string]>).map(([k, v]) => (
+                                <div key={k} className="flex justify-between gap-4">
+                                    <dt className="text-[#6b7280] font-normal">{k}</dt>
+                                    <dd className="font-semibold text-[#111827] text-right">{v}</dd>
+                                </div>
+                            ))}
+                        </dl>
+                        <div className="flex gap-2 justify-end">
+                            <button onClick={() => setConfirmando(false)}
+                                className="px-4 py-2.5 rounded-lg text-xs font-semibold text-[#6b7280] hover:bg-[#f3f4f6]">
+                                Cancelar
+                            </button>
+                            <button onClick={gravar}
+                                className="px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94]">
+                                Cadastrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 7 — resultado */}
+            {resultado && (
+                resultado.error ? (
+                    <div className="bg-red-50 border border-red-300 text-red-900 px-6 py-4 rounded-xl flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-red-600" strokeWidth={1.75} />
+                        <div>
+                            <p className="text-sm font-semibold">
+                                {resultado.jaExistia ? 'Veículo já cadastrado' : 'Não foi cadastrado'}
+                            </p>
+                            <p className="text-xs font-medium opacity-90 mt-0.5">{resultado.error}</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-6 py-4 rounded-xl flex items-start gap-3">
+                        <CheckCircle className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" strokeWidth={1.75} />
+                        <div>
+                            <p className="text-sm font-semibold">Veículo cadastrado no Datamex</p>
+                            <p className="text-xs font-medium opacity-90 mt-0.5">
+                                Código do veículo: <strong>{resultado.codVeiculo}</strong>
+                                {resultado.placa ? ` · placa ${resultado.placa}` : ''}
+                            </p>
+                        </div>
+                    </div>
+                )
+            )}
+        </div>
+    );
+};
+
+export default CadastroVeiculo;
