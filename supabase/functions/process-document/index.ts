@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
         "tipo_veiculo_inferido": "cavalo"|"carreta"|"truck"|"toco"|"vuc"|"outro",
         "carroceria_texto": str,
         "local_texto": str,
+        "proprietario_nome": str, "proprietario_documento": str,
         "tara": num, "capacidade_carga": num, "eixos": num
       }
 
@@ -81,6 +82,15 @@ Deno.serve(async (req) => {
         vem numa linha só, sem vírgula: "VITORIA ES", "SAO PAULO SP",
         "BELO HORIZONTE MG". Copie exatamente como está impresso, com o
         município e a sigla de 2 letras, sem reescrever nem acentuar.
+      - "proprietario_nome": o nome de quem consta como PROPRIETÁRIO do veículo,
+        rótulo "NOME" ou "PROPRIETÁRIO". Pode ser nome de pessoa ou razão social
+        de empresa ("OMNICARGO TRANSPORTES LTDA"). Copie como está impresso.
+      - "proprietario_documento": o "CPF/CNPJ" que aparece junto do nome do
+        proprietário. Devolva SÓ OS DÍGITOS, sem ponto, barra ou traço — 11
+        dígitos se for CPF, 14 se for CNPJ. Não complete nem corte zeros: a
+        quantidade de dígitos é o que diz se é pessoa física ou jurídica, e
+        errar isso manda o cadastro para o caminho errado. Se não conseguir ler
+        com certeza, devolva null em vez de um número incompleto.
       - "tara", "capacidade_carga", "eixos": números, sem unidade nem ponto de
         milhar. Tara e capacidade em QUILOS (o CRLV às vezes traz CMT em
         toneladas — nesse caso não converta, devolva null e deixe o operador

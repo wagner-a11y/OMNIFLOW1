@@ -135,3 +135,81 @@ export async function buscarProprietario(cpf: string): Promise<{ codPessoa?: str
         return { error: (e as Error).message || 'Falha ao consultar o CPF.' };
     }
 }
+
+// ----------------------------------------------------------------------------
+// Proprietário — Fase 3B. O DOCUMENTO decide o caminho, não o operador:
+// 11 dígitos = pessoa física, 14 = pessoa jurídica. Nada de escolher tipo numa
+// aba e errar; o CRLV já diz quem é.
+// ----------------------------------------------------------------------------
+
+export type TipoPessoa = 'fisica' | 'juridica' | 'indefinido';
+
+export function tipoDoDocumento(doc: string): TipoPessoa {
+    const d = (doc || '').replace(/\D/g, '');
+    if (d.length === 11) return 'fisica';
+    if (d.length === 14) return 'juridica';
+    return 'indefinido';
+}
+
+/** Máscara que muda sozinha conforme o documento cresce. */
+export function formatarDocumento(valor: string): string {
+    const d = (valor || '').replace(/\D/g, '').slice(0, 14);
+    if (d.length <= 11) {
+        return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    }
+    return d.replace(/(\d{2})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+}
+
+export interface PessoaJuridica {
+    existe?: boolean;
+    codPessoa?: string;
+    cnpj?: string;
+    razaoSocial?: string;
+    nomeFantasia?: string;
+    jaExistia?: boolean;
+    aviso?: string;
+    error?: string;
+}
+
+/** Consulta a empresa pelo CNPJ. Só leitura. */
+export async function buscarPessoaJuridica(cnpj: string): Promise<PessoaJuridica> {
+    return chamarFuncao('buscar-pessoa-juridica', { cnpj });
+}
+
+/** Cria a empresa proprietária. Só usada quando a busca não achou. */
+export async function cadastrarPessoaJuridica(dados: {
+    cnpj: string; razaoSocial: string; nomeFantasia: string;
+    rntrc: string; enquadramento?: string;
+}): Promise<PessoaJuridica> {
+    return chamarFuncao('cadastrar-pessoa-juridica', dados);
+}
+
+/** invoke só expõe "non-2xx"; o motivo real vem no corpo. */
+async function chamarFuncao(nome: string, body: unknown): Promise<PessoaJuridica> {
+    try {
+        const { data, error } = await supabase.functions.invoke(nome, { body });
+        if (error) {
+            let msg = error.message;
+            try {
+                const b = await (error as any).context?.json?.();
+                if (b?.error) msg = b.error;
+            } catch { /* noop */ }
+            return { error: msg };
+        }
+        return data as PessoaJuridica;
+    } catch (e) {
+        return { error: (e as Error).message || 'Falha ao consultar a empresa.' };
+    }
+}
+
+/** Enquadramentos aceitos pela API (opcional no cadastro). */
+export const ENQUADRAMENTOS: Array<{ valor: string; label: string }> = [
+    { valor: '', label: '— não informar —' },
+    { valor: 's', label: 'Optante pelo Simples' },
+    { valor: 'g', label: 'Lucro Geral' },
+    { valor: 'r', label: 'Lucro Geral - Real' },
+    { valor: 'p', label: 'Lucro Geral - Presumido' },
+    { valor: 'm', label: 'MEI - Microempreendedor' },
+];

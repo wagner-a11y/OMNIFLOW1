@@ -3,9 +3,11 @@ import { AlertTriangle, CheckCircle, Info, Loader2, Search, Send, Truck } from '
 import { extractDataFromDoc } from '../services/geminiService';
 import UploadDocumento from './UploadDocumento';
 import {
-    CAMPOS_CRITICOS, CAPM3_POR_CARROCERIA, CampoCritico, ResultadoVeiculo,
-    VEICULO_VAZIO, VeiculoParaGravar, buscarProprietario, cadastrarVeiculo,
-    formatarPlaca, placaValida,
+    CAMPOS_CRITICOS, CAPM3_POR_CARROCERIA, CampoCritico, ENQUADRAMENTOS,
+    ResultadoVeiculo, TipoPessoa, VEICULO_VAZIO, VeiculoParaGravar,
+    buscarPessoaJuridica, buscarProprietario, cadastrarPessoaJuridica,
+    cadastrarVeiculo, formatarDocumento, formatarPlaca, placaValida,
+    tipoDoDocumento,
 } from '../services/cadastroVeiculo';
 import {
     CRLV_VAZIO, DadosCRLV, Dominio, Escolha,
@@ -30,14 +32,10 @@ interface Props {
 }
 
 const soDigitos = (s: string) => (s || '').replace(/\D/g, '');
-const mascaraCpf = (s: string) => {
-    const d = soDigitos(s).slice(0, 11);
-    return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-};
-
 interface Proprietario {
     codPessoa: string;
     nome: string;
+    tipo: TipoPessoa;
 }
 
 const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
@@ -56,10 +54,15 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
     // Cada crítico só sai da lista quando o operador encosta nele.
     const [conferidos, setConferidos] = useState<Set<CampoCritico>>(new Set());
 
-    const [cpfProp, setCpfProp] = useState('');
+    const [docProp, setDocProp] = useState('');
     const [buscandoProp, setBuscandoProp] = useState(false);
     const [proprietario, setProprietario] = useState<Proprietario | null>(null);
     const [erroProp, setErroProp] = useState<string | null>(null);
+    // PJ não encontrada: abre o mini-cadastro em vez de travar o operador.
+    const [pjNova, setPjNova] = useState<{ razaoSocial: string; nomeFantasia: string; rntrc: string; enquadramento: string } | null>(null);
+    const [criandoPj, setCriandoPj] = useState(false);
+
+    const tipoProp: TipoPessoa = tipoDoDocumento(docProp);
 
     const [confirmando, setConfirmando] = useState(false);
     const [gravando, setGravando] = useState(false);
@@ -145,6 +148,12 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
             const mun = lido.local_texto ? resolverMunicipio(municipios, lido.local_texto) : null;
             setMunicipioDoCrlv(!!mun);
 
+            // O CRLV traz o dono: já preenche o campo e limpa qualquer busca
+            // anterior, para o operador não vincular o proprietário do veículo
+            // que estava na tela antes.
+            setDocProp(lido.proprietario_documento ? formatarDocumento(lido.proprietario_documento) : '');
+            setProprietario(null); setPjNova(null); setErroProp(null);
+
             const capSugerido = CAPM3_POR_CARROCERIA[tr.carroceria.codigo];
             setForm(prev => ({
                 ...prev,
@@ -176,24 +185,74 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
         }
     };
 
+    /**
+     * Uma busca só para os dois casos. O DOCUMENTO decide o caminho — 11 dígitos
+     * vão para pessoas físicas, 14 para jurídicas. O operador não escolhe tipo,
+     * então não tem como escolher errado.
+     */
     const procurarProprietario = async () => {
-        const cpf = soDigitos(cpfProp);
-        if (cpf.length !== 11) { setErroProp('O CPF precisa ter 11 dígitos.'); return; }
-        setBuscandoProp(true); setErroProp(null); setProprietario(null); setResultado(null);
+        const d = soDigitos(docProp);
+        setErroProp(null); setProprietario(null); setPjNova(null); setResultado(null);
+
+        if (tipoProp === 'indefinido') {
+            setErroProp('Documento incompleto: são 11 dígitos para CPF ou 14 para CNPJ.');
+            return;
+        }
+        setBuscandoProp(true);
         try {
-            const r = await buscarProprietario(cpf);
-            if (r.error) { setErroProp(r.error); return; }
-            if (!r.codPessoa) {
-                setErroProp(
-                    'Não existe pessoa com esse CPF no Datamex. Cadastre primeiro em ' +
-                    'Cadastro Rápido · Motorista, marcando "é o dono do veículo".',
-                );
+            if (tipoProp === 'fisica') {
+                const r = await buscarProprietario(d);
+                if (r.error) { setErroProp(r.error); return; }
+                if (!r.codPessoa) {
+                    setErroProp(
+                        'Não existe pessoa com esse CPF no Datamex. Cadastre primeiro em ' +
+                        'Cadastro Rápido · Motorista, marcando "é o dono do veículo".',
+                    );
+                    return;
+                }
+                setProprietario({ codPessoa: r.codPessoa, nome: r.nome || '', tipo: 'fisica' });
+                setCampo('proprietarioId', r.codPessoa);
                 return;
             }
-            setProprietario({ codPessoa: r.codPessoa, nome: r.nome || '' });
+
+            const r = await buscarPessoaJuridica(d);
+            if (r.error) { setErroProp(r.error); return; }
+            if (!r.existe || !r.codPessoa) {
+                // Empresa nova: o mini-cadastro já vem com o que o CRLV deu.
+                setPjNova({
+                    razaoSocial: crlv.proprietario_nome || '',
+                    nomeFantasia: crlv.proprietario_nome || '',
+                    rntrc: '', enquadramento: '',
+                });
+                return;
+            }
+            setProprietario({ codPessoa: r.codPessoa, nome: r.razaoSocial || r.nomeFantasia || '', tipo: 'juridica' });
             setCampo('proprietarioId', r.codPessoa);
         } finally {
             setBuscandoProp(false);
+        }
+    };
+
+    /** Cria a empresa proprietária e já a vincula ao veículo. */
+    const criarPj = async () => {
+        if (!pjNova) return;
+        setCriandoPj(true); setErroProp(null);
+        try {
+            const r = await cadastrarPessoaJuridica({
+                cnpj: soDigitos(docProp),
+                razaoSocial: pjNova.razaoSocial,
+                nomeFantasia: pjNova.nomeFantasia,
+                rntrc: pjNova.rntrc,
+                enquadramento: pjNova.enquadramento,
+            });
+            if (r.error) { setErroProp(r.error); return; }
+            if (!r.codPessoa) { setErroProp('O Datamex não devolveu o código da empresa.'); return; }
+            setProprietario({ codPessoa: r.codPessoa, nome: r.razaoSocial || pjNova.razaoSocial, tipo: 'juridica' });
+            setCampo('proprietarioId', r.codPessoa);
+            setPjNova(null);
+            if (r.aviso) setErroProp(r.aviso);
+        } finally {
+            setCriandoPj(false);
         }
     };
 
@@ -216,7 +275,7 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
             if (!r.error) {
                 setForm(VEICULO_VAZIO); setCrlv(CRLV_VAZIO); setOpcoes({});
                 setConferidos(new Set()); setLeu(false); setMunicipioDoCrlv(false);
-                setProprietario(null); setCpfProp('');
+                setProprietario(null); setDocProp(''); setPjNova(null);
             }
         } finally {
             setGravando(false);
@@ -441,39 +500,116 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
                 </div>
             </div>
 
-            {/* 4 — proprietário */}
+            {/* 4 — proprietário: um caminho só, o documento decide */}
             <div className="bg-white border border-[#e5e7eb] rounded-xl p-6">
                 <p className="text-xs font-medium text-[#6b7280] mb-4">
-                    Proprietário do veículo — pessoa física. Busque pelo CPF de quem já está no Datamex.
+                    Proprietário do veículo. O documento define o caminho: 11 dígitos é pessoa
+                    física, 14 é empresa. Vem do CRLV, mas você pode trocar.
                 </p>
                 <div className="flex flex-wrap items-end gap-3">
                     <div className="flex flex-col">
                         <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
-                            CPF do proprietário<span className="text-red-500 ml-0.5">*</span>
+                            CPF ou CNPJ<span className="text-red-500 ml-0.5">*</span>
+                            {tipoProp !== 'indefinido' && (
+                                <span className="ml-1 normal-case text-[#1d6fb8] font-semibold">
+                                    · {tipoProp === 'fisica' ? 'pessoa física' : 'empresa'}
+                                </span>
+                            )}
                         </label>
                         <input
-                            value={cpfProp}
-                            onChange={e => { setCpfProp(mascaraCpf(e.target.value)); setProprietario(null); }}
+                            value={docProp}
+                            onChange={e => {
+                                setDocProp(formatarDocumento(e.target.value));
+                                setProprietario(null); setPjNova(null);
+                            }}
                             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); procurarProprietario(); } }}
-                            placeholder="000.000.000-00"
-                            className={`w-48 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${proprietario
+                            placeholder="CPF ou CNPJ"
+                            className={`w-60 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${proprietario
                                 ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
                                 : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`}
                         />
                     </div>
                     <button
                         type="button" onClick={procurarProprietario}
-                        disabled={buscandoProp || soDigitos(cpfProp).length !== 11}
+                        disabled={buscandoProp || tipoProp === 'indefinido'}
                         className="px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                     >
                         {buscandoProp ? <><Loader2 className="w-4 h-4 animate-spin" /> Buscando…</> : <><Search className="w-4 h-4" strokeWidth={1.75} /> Buscar</>}
                     </button>
-                    {proprietario && (
-                        <span className="text-xs font-medium text-emerald-700 pb-2.5">
-                            {proprietario.nome} · código {proprietario.codPessoa}
-                        </span>
-                    )}
                 </div>
+
+                {/* Achou: o operador confirma que é quem devia ser. */}
+                {proprietario && (
+                    <div className="mt-4 bg-emerald-50 border border-emerald-300 text-emerald-900 px-4 py-3 rounded-lg flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" strokeWidth={1.75} />
+                        <div>
+                            <p className="text-xs font-semibold">
+                                Proprietário encontrado · {proprietario.tipo === 'juridica' ? 'empresa' : 'pessoa física'}
+                            </p>
+                            <p className="text-xs font-medium opacity-90 mt-0.5">
+                                {proprietario.nome} — código {proprietario.codPessoa}. Confira se é mesmo quem
+                                deve constar como dono do veículo.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Não achou a empresa: cadastra na hora, sem sair da tela. */}
+                {pjNova && (
+                    <div className="mt-4 border-2 border-amber-300 rounded-lg p-4 bg-amber-50/40">
+                        <p className="text-xs font-semibold text-[#92400e] mb-3">
+                            Empresa não encontrada no Datamex. Preencha para cadastrá-la como proprietária.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="flex flex-col">
+                                <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
+                                    Razão social<span className="text-red-500 ml-0.5">*</span>
+                                </label>
+                                <input value={pjNova.razaoSocial}
+                                    onChange={e => setPjNova({ ...pjNova, razaoSocial: e.target.value })}
+                                    className={classeNormal} />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
+                                    Nome fantasia<span className="text-red-500 ml-0.5">*</span>
+                                </label>
+                                <input value={pjNova.nomeFantasia}
+                                    onChange={e => setPjNova({ ...pjNova, nomeFantasia: e.target.value })}
+                                    className={classeNormal} />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-[10px] font-medium uppercase text-[#92400e] mb-1.5">
+                                    RNTRC<span className="text-red-500 ml-0.5">*</span>
+                                </label>
+                                <input value={pjNova.rntrc}
+                                    onChange={e => setPjNova({ ...pjNova, rntrc: e.target.value })}
+                                    placeholder="RNTRC do proprietário"
+                                    className={`w-full px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pjNova.rntrc
+                                        ? 'bg-white border-emerald-300 focus:border-emerald-500'
+                                        : 'bg-amber-50 border-amber-400 focus:border-amber-500'}`} />
+                                <p className="text-[10px] font-medium text-[#92400e] mt-1">
+                                    O RNTRC não vem no CRLV, digite o do proprietário. Sem ele o cadastro não grava.
+                                </p>
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Enquadramento</label>
+                                <select value={pjNova.enquadramento}
+                                    onChange={e => setPjNova({ ...pjNova, enquadramento: e.target.value })}
+                                    className={classeNormal}>
+                                    {ENQUADRAMENTOS.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <button
+                            type="button" onClick={criarPj}
+                            disabled={criandoPj || !pjNova.razaoSocial.trim() || !pjNova.nomeFantasia.trim() || !pjNova.rntrc.trim()}
+                            className="mt-3 px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                        >
+                            {criandoPj ? <><Loader2 className="w-4 h-4 animate-spin" /> Cadastrando…</> : 'Cadastrar empresa e vincular'}
+                        </button>
+                    </div>
+                )}
+
                 {erroProp && (
                     <div className="mt-3 bg-amber-50 border border-amber-300 text-amber-900 px-4 py-2.5 rounded-lg flex items-start gap-2">
                         <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
@@ -553,6 +689,14 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
                                 {resultado.jaExistia ? 'Veículo já cadastrado' : 'Não foi cadastrado'}
                             </p>
                             <p className="text-xs font-medium opacity-90 mt-0.5">{resultado.error}</p>
+                            {/* Não dá para checar o grupo por API (write-only), então
+                                quando a recusa cheira a isso, apontamos o caminho. */}
+                            {/grupo|propriet/i.test(resultado.error || '') && (
+                                <p className="text-xs font-medium mt-1.5">
+                                    Verifique se o proprietário está no grupo “Proprietários Veículos”
+                                    no Datamex — isso não dá para conferir por aqui.
+                                </p>
+                            )}
                         </div>
                     </div>
                 ) : (

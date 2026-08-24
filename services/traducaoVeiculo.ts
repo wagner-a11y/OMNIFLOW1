@@ -41,6 +41,9 @@ export interface DadosCRLV {
     carroceria_texto: string;
     /** Campo LOCAL do CRLV: município + UF de registro, ex.: "VITORIA ES". */
     local_texto: string;
+    /** Proprietário no CRLV — o documento decide se é PF ou PJ. */
+    proprietario_nome: string;
+    proprietario_documento: string;
     tara: string;
     capacidade_carga: string;
     eixos: string;
@@ -49,7 +52,8 @@ export interface DadosCRLV {
 export const CRLV_VAZIO: DadosCRLV = {
     placa: '', renavam: '', chassi: '', cor: '', ano_fabricacao: '', ano_modelo: '',
     marca_texto: '', modelo: '', especie_texto: '', tipo_veiculo_inferido: '',
-    carroceria_texto: '', local_texto: '', tara: '', capacidade_carga: '', eixos: '',
+    carroceria_texto: '', local_texto: '', proprietario_nome: '', proprietario_documento: '',
+    tara: '', capacidade_carga: '', eixos: '',
 };
 
 /** Uma escolha da tradução: o que foi decidido e o que mais havia. */
