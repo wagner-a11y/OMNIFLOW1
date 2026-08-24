@@ -54,6 +54,7 @@ Deno.serve(async (req) => {
         "especie_texto": str,
         "tipo_veiculo_inferido": "cavalo"|"carreta"|"truck"|"toco"|"vuc"|"outro",
         "carroceria_texto": str,
+        "local_texto": str,
         "tara": num, "capacidade_carga": num, "eixos": num
       }
 
@@ -75,6 +76,11 @@ Deno.serve(async (req) => {
       - "carroceria_texto": o tipo de carroceria, quando impresso
         (ex.: "BAU", "GRANELEIRA", "SIDER", "ABERTA", "PORTA CONTAINER").
         Nem todo CRLV traz — devolva null se não houver.
+      - "local_texto": o campo "LOCAL", que fica no bloco da DIREITA do CRLV,
+        perto da DATA. É o município e a UF onde o veículo está registrado, e
+        vem numa linha só, sem vírgula: "VITORIA ES", "SAO PAULO SP",
+        "BELO HORIZONTE MG". Copie exatamente como está impresso, com o
+        município e a sigla de 2 letras, sem reescrever nem acentuar.
       - "tara", "capacidade_carga", "eixos": números, sem unidade nem ponto de
         milhar. Tara e capacidade em QUILOS (o CRLV às vezes traz CMT em
         toneladas — nesse caso não converta, devolva null e deixe o operador

@@ -11,6 +11,8 @@ import {
     CRLV_VAZIO, DadosCRLV, Dominio, Escolha,
     carregarDominio, traduzirCrlv,
 } from '../services/traducaoVeiculo';
+import MunicipioAutocomplete, { useMunicipios } from './MunicipioAutocomplete';
+import { resolverMunicipio } from '../utils/municipios';
 
 // ============================================================================
 // Cadastro Rápido — Veículo (Fase 3A).
@@ -40,6 +42,10 @@ interface Proprietario {
 
 const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
     const [dominio, setDominio] = useState<Dominio>([]);
+    // Mesma base do autocomplete da cotação e do cadastro de motorista.
+    const { lista: municipios } = useMunicipios();
+    // Só para a tela avisar de onde veio o município — não vai para a API.
+    const [municipioDoCrlv, setMunicipioDoCrlv] = useState(false);
     const [crlv, setCrlv] = useState<DadosCRLV>(CRLV_VAZIO);
     const [form, setForm] = useState<VeiculoParaGravar>(VEICULO_VAZIO);
     const [opcoes, setOpcoes] = useState<Record<string, Escolha>>({});
@@ -73,6 +79,12 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
             .filter(d => d.tipo === 'marca' && (d.categoria_ref || '').toUpperCase() === cat.nome.toUpperCase())
             .map(d => ({ codigo: d.codigo, rotulo: d.nome }));
     }, [dominio, form.categoriaVeiculo]);
+
+    /** O form guarda o código IBGE; a tela precisa do município para exibir. */
+    const municipioEscolhido = useMemo(
+        () => municipios.find(m => String(m.codigo) === String(form.cidade)) ?? null,
+        [municipios, form.cidade],
+    );
 
     const setCampo = (k: keyof VeiculoParaGravar, v: string) => {
         setForm(prev => ({ ...prev, [k]: v }));
@@ -113,8 +125,8 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
                 ano_fabricacao: t('ano_fabricacao', 'ano_fab'), ano_modelo: t('ano_modelo', 'ano_mod'),
                 marca_texto: t('marca_texto', 'marca'), modelo: t('modelo'),
                 especie_texto: t('especie_texto'), tipo_veiculo_inferido: t('tipo_veiculo_inferido'),
-                carroceria_texto: t('carroceria_texto'), tara: t('tara'),
-                capacidade_carga: t('capacidade_carga'), eixos: t('eixos'),
+                carroceria_texto: t('carroceria_texto'), local_texto: t('local_texto'),
+                tara: t('tara'), capacidade_carga: t('capacidade_carga'), eixos: t('eixos'),
             };
             if (lido.tipo_documento && lido.tipo_documento.toUpperCase() !== 'CRLV') {
                 setErroLeitura(`O documento parece ser ${lido.tipo_documento}, não um CRLV. Confira o arquivo.`);
@@ -126,6 +138,13 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
                 categoria: tr.categoria, marca: tr.marca, cor: tr.cor,
                 carroceria: tr.carroceria, rodado: tr.rodado,
             });
+            // O LOCAL do CRLV ("VITORIA ES") vira código IBGE pela MESMA função que
+            // promove município em cotação antiga. Ela devolve null de propósito
+            // quando o texto é ambíguo — nesse caso o campo fica vazio e o
+            // operador escolhe, em vez de gravar um município no chute.
+            const mun = lido.local_texto ? resolverMunicipio(municipios, lido.local_texto) : null;
+            setMunicipioDoCrlv(!!mun);
+
             const capSugerido = CAPM3_POR_CARROCERIA[tr.carroceria.codigo];
             setForm(prev => ({
                 ...prev,
@@ -141,6 +160,8 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
                 tipoRodado: tr.rodado.codigo,
                 tara: lido.tara, capacidadeCarga: lido.capacidade_carga,
                 quantidadeEixos: lido.eixos,
+                cidade: mun ? String(mun.codigo) : '',
+                estado: mun ? mun.uf : '',
                 // Vazio quando a carroceria não casou: chutar volume é pior.
                 capM3: capSugerido ? String(capSugerido) : '',
             }));
@@ -194,7 +215,7 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
             setResultado(r);
             if (!r.error) {
                 setForm(VEICULO_VAZIO); setCrlv(CRLV_VAZIO); setOpcoes({});
-                setConferidos(new Set()); setLeu(false);
+                setConferidos(new Set()); setLeu(false); setMunicipioDoCrlv(false);
                 setProprietario(null); setCpfProp('');
             }
         } finally {
@@ -378,14 +399,40 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
                         { k: 'tara' as const, label: 'Tara (kg)' },
                         { k: 'capacidadeCarga' as const, label: 'Capacidade de carga (kg)' },
                         { k: 'quantidadeEixos' as const, label: 'Eixos' },
-                        { k: 'estado' as const, label: 'UF' },
-                        { k: 'cidade' as const, label: 'Município (código IBGE)' },
                     ]).map(({ k, label }) => (
                         <div key={k} className="flex flex-col">
                             <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">{label}</label>
                             <input value={form[k]} onChange={e => setCampo(k, e.target.value)} className={classeNormal} />
                         </div>
                     ))}
+
+                    <div className="flex flex-col md:col-span-2">
+                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
+                            Município / UF
+                            {municipioDoCrlv && (
+                                <span className="ml-1 normal-case text-[#b45309] font-semibold">
+                                    · puxado do CRLV, confira
+                                </span>
+                            )}
+                        </label>
+                        <MunicipioAutocomplete
+                            valor={municipioEscolhido?.rotulo ?? ''}
+                            lista={municipios}
+                            resolvido={municipioEscolhido}
+                            onSelecionar={m => {
+                                setCampo('cidade', String(m.codigo));
+                                setCampo('estado', m.uf);
+                                setMunicipioDoCrlv(false);   // escolha do operador manda
+                            }}
+                            placeholder="Município de registro do veículo"
+                        />
+                        {leu && !municipioEscolhido && (
+                            <p className="text-[10px] font-medium text-amber-700 mt-1">
+                                O CRLV não trouxe um município que eu conseguisse identificar com
+                                segurança. Escolha na lista.
+                            </p>
+                        )}
+                    </div>
 
                     <div className="flex flex-col md:col-span-2">
                         <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Descrição</label>
