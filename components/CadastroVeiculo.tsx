@@ -158,6 +158,9 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
             setForm(prev => ({
                 ...prev,
                 descricao: `${tr.marca.rotulo} ${lido.modelo}`.trim(),
+                // Modelo é campo próprio no Bsoft (modeloVeiculo), texto livre.
+                // Não basta estar dentro da descrição: sem ele o CT-e não emite.
+                modelo: lido.modelo,
                 placa: formatarPlaca(lido.placa),
                 chassi: lido.chassi.toUpperCase(),
                 renavam: soDigitos(lido.renavam),
@@ -452,6 +455,7 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
                     </div>
 
                     {([
+                        { k: 'modelo' as const, label: 'Modelo' },
                         { k: 'renavam' as const, label: 'Renavam' },
                         { k: 'anoFabricacao' as const, label: 'Ano fabricação' },
                         { k: 'anoModelo' as const, label: 'Ano modelo' },

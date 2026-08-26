@@ -183,6 +183,9 @@ Deno.serve(async (req: Request) => {
       cidade: String(p.cidade ?? ""),
       categoriaVeiculo: String(p.categoriaVeiculo ?? ""),
       marcaVeiculo: String(p.marcaVeiculo ?? ""),
+      // Texto livre, e não o código de dicionário da marca. Sem ele o veículo
+      // entra sem modelo e o CT-e não emite.
+      modeloVeiculo: String(p.modelo ?? ""),
       grupoVeiculo: String(p.grupoVeiculo ?? ""),
       // Fixo em "0" — sem classificação, que é o mesmo que a tela oficial do
       // Datamex grava. A API EXIGE o campo (400 sem ele), mas não existe

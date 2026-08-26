@@ -187,6 +187,9 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
             setForm(prev => ({
                 ...prev,
                 descricao: `${tr.marca.rotulo} ${lido.modelo}`.trim(),
+                // Modelo é campo próprio no Bsoft (modeloVeiculo), texto livre.
+                // Não basta estar dentro da descrição: sem ele o CT-e não emite.
+                modelo: lido.modelo,
                 placa: formatarPlaca(lido.placa),
                 chassi: lido.chassi.toUpperCase(),
                 renavam: soDigitos(lido.renavam),
@@ -383,6 +386,7 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                             <Seletor valor={form.grupoVeiculo} onChange={v => setCampo('grupoVeiculo', v)} lista={listaDe('grupo')} className={classeNormal} />
                         </div>
                         {([
+                            { k: 'modelo' as const, label: 'Modelo' },
                             { k: 'renavam' as const, label: 'Renavam' },
                             { k: 'anoFabricacao' as const, label: 'Ano fab.' },
                             { k: 'anoModelo' as const, label: 'Ano mod.' },

@@ -307,8 +307,13 @@ Deno.serve(async (req: Request) => {
           logradouro: end.logradouro ?? "",
           numero: end.numero ?? "",
           bairro: end.bairro ?? "",
-          // cidade é o código IBGE de 7 dígitos, não o nome.
+          // ATENÇÃO: aqui `cidade` é o NOME do município (String) e o código de
+          // 7 dígitos vai em `codIBGE`, campo separado. É o INVERSO do POST de
+          // veículo, onde `cidade` é o próprio código — e foi essa troca que
+          // fez o endereço da pessoa 11298 gravar sem município e sem estado,
+          // travando a emissão de CT-e. Medido na doc de Pessoas > Endereços.
           cidade: String(end.cidade ?? ""),
+          codIBGE: String(end.codIBGE ?? ""),
           estado: end.estado ?? "",
           // Fixos de pessoa física — não aparecem na tela, não são decisão do operador.
           tipoEndereco: "N",

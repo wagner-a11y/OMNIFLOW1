@@ -66,6 +66,10 @@ Deno.serve(async (req) => {
       - "marca_texto": copie EXATAMENTE como está impresso, inclusive a barra
         e o modelo junto (ex.: "M.BENZ/ATEGO 2426", "VW/24.280 CRM 6X2").
         Não normalize, não expanda a abreviação: quem traduz é outra etapa.
+      - "modelo": a parte do campo "MARCA / MODELO / VERSÃO" que vem DEPOIS da
+        barra, sem a marca. Em "VW/CONSTELLATION 24.280" o modelo é
+        "CONSTELLATION 24.280"; em "M.BENZ/ATEGO 2426" é "ATEGO 2426". É campo
+        próprio no cadastro e não pode vir vazio nem repetir a marca.
       - "especie_texto": o campo ESPÉCIE/TIPO (ex.: "CAMINHAO TRATOR",
         "SEMI-REBOQUE", "CAMINHAO", "CAMIONETA").
       - "tipo_veiculo_inferido": deduza da espécie e do modelo, usando SÓ um

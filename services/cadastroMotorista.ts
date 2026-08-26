@@ -72,6 +72,13 @@ export interface DadosEndereco {
     bairro: string;
     /** Código IBGE de 7 dígitos, resolvido pela busca de CEP. Vazio = não conferido. */
     cidade: string;
+    /**
+     * NOME do município. O POST de endereço quer o nome no campo `cidade` e o
+     * código num campo separado (`codIBGE`) — ao contrário do POST de veículo,
+     * onde `cidade` É o código. Confundir os dois faz o Datamex gravar o
+     * endereço sem município nem estado, e sem eles o CT-e não emite.
+     */
+    municipioNome: string;
     /** Sigla da UF. */
     estado: string;
     /** Só para a tela mostrar "Porto Alegre, RS" — não vai para a API. */
@@ -96,7 +103,7 @@ export const FISCAIS_PADRAO: DadosFiscais = {
 
 export const ENDERECO_VAZIO: DadosEndereco = {
     cep: '', logradouro: '', numero: '', complemento: '',
-    bairro: '', cidade: '', estado: '', municipioRotulo: '',
+    bairro: '', cidade: '', municipioNome: '', estado: '', municipioRotulo: '',
 };
 
 /**
@@ -239,7 +246,9 @@ export async function cadastrarMotorista(
                     numero: endereco.numero,
                     complemento: endereco.complemento,
                     bairro: endereco.bairro,
-                    cidade: endereco.cidade,
+                    // `cidade` é o NOME; o código vai à parte, em `codIBGE`.
+                    cidade: endereco.municipioNome,
+                    codIBGE: endereco.cidade,
                     estado: endereco.estado,
                 },
                 ...(anexo ? { arquivoBase64: anexo.base64, arquivoExtensao: anexo.extensao } : {}),

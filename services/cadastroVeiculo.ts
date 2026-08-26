@@ -47,6 +47,13 @@ export type CampoCritico = typeof CAMPOS_CRITICOS[number];
 /** O que a tela monta e manda para a Edge Function. */
 export interface VeiculoParaGravar {
     descricao: string;
+    /**
+     * Modelo do veículo, texto livre (vai em `modeloVeiculo`). Vem da parte
+     * DEPOIS da barra em "MARCA/MODELO" do CRLV — "VW/CONSTELLATION" tem marca
+     * VW e modelo CONSTELLATION. Não confundir com `marcaVeiculo`, que é código
+     * de dicionário. Modelo vazio trava a emissão de CT-e.
+     */
+    modelo: string;
     placa: string;
     chassi: string;
     renavam: string;
@@ -68,7 +75,7 @@ export interface VeiculoParaGravar {
 }
 
 export const VEICULO_VAZIO: VeiculoParaGravar = {
-    descricao: '', placa: '', chassi: '', renavam: '', anoModelo: '', anoFabricacao: '',
+    descricao: '', modelo: '', placa: '', chassi: '', renavam: '', anoModelo: '', anoFabricacao: '',
     cor: '', estado: '', cidade: '', categoriaVeiculo: '', marcaVeiculo: '',
     grupoVeiculo: GRUPO_PADRAO, tara: '', capM3: '', capacidadeCarga: '',
     quantidadeEixos: '', tipoRodado: '', tipoCarroceria: '', proprietarioId: '',

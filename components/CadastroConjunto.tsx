@@ -121,6 +121,7 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
             setEndereco(prev => ({
                 ...prev, cep: a.cep, logradouro: a.logradouro || prev.logradouro,
                 bairro: a.bairro || prev.bairro, cidade: String(a.municipio.codigo),
+                municipioNome: a.municipio.nome,
                 estado: a.municipio.uf, municipioRotulo: a.municipio.rotulo,
             }));
         } catch (err) {
