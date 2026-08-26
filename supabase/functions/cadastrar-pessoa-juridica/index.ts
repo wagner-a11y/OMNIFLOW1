@@ -7,11 +7,17 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 // menos comum: o normal é a PJ já estar lá e o fluxo só vincular.
 //
 // Campos obrigatórios pela doc: cnpj, razaoSocial, nomeFantasia, grupos.
-// RNTRC vira obrigatório por entrar em `proprietariosVeiculos` — e é o único
-// que não vem do CRLV, por isso a tela pede em destaque.
+// RNTRC e tipoTransportadora viram obrigatórios por entrar em
+// `proprietariosVeiculos`. O RNTRC é o único que não vem do CRLV, por isso a
+// tela pede em destaque.
 //
-// PJ é MUITO mais simples que PF: não tem tipoTransportadora, matriculaINSS
-// nem dependentesIRRF. Esses são de pessoa natural.
+// ATENÇÃO — a doc de Pessoas Jurídicas NÃO menciona tipoTransportadora, mas a
+// API o EXIGE de empresa proprietária ("Atributo obrigatório
+// [tipoTransportadora] não especificado"). A doc está incompleta, como já
+// estava no tipoEquipamento do veículo. Medido em 26/08/2026.
+//
+// PJ continua bem mais simples que PF: não tem matriculaINSS nem
+// dependentesIRRF, que são de pessoa natural.
 //
 // ANTI-DUPLICAÇÃO: procura pelo CNPJ antes de criar. Se já existir, devolve o
 // código existente em vez de criar outra — e NÃO altera o cadastro dela, pela
@@ -75,6 +81,26 @@ function mensagemDoBsoft(corpo: unknown, texto: string, status: number): string 
 /** Enquadramentos aceitos pela API. Vazio é válido: o campo é opcional. */
 const ENQUADRAMENTOS = ["s", "g", "r", "p", "m"];
 
+/**
+ * CONFIG AJUSTÁVEL — tipo de transportadora da PJ.
+ *
+ * A tela do Datamex oferece três opções (ETC, CTC, Equiparado) e empresa
+ * proprietária de veículo é ETC. Pessoa física proprietária usa "T" (TAC), que
+ * é o único valor documentado — a doc de Pessoas Jurídicas não menciona o campo,
+ * mas a API o EXIGE quando a empresa entra em `proprietariosVeiculos`.
+ *
+ * Só o padrão é usado hoje. Os outros ficam mapeados para o dia em que aparecer
+ * uma cooperativa ou uma equiparada.
+ */
+const TIPO_TRANSPORTADORA = {
+  ETC: "E",          // Empresa de Transporte Rodoviário de Cargas — o caso da frota
+  CTC: "C",          // Cooperativa — NÃO confirmado contra a API
+  EQUIPARADO: "Q",   // Equiparado — NÃO confirmado contra a API
+} as const;
+
+/** Empresa proprietária de veículo é ETC. */
+const TIPO_TRANSPORTADORA_PADRAO = TIPO_TRANSPORTADORA.ETC;
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (!BSOFT_API_USER || !BSOFT_API_PASS) {
@@ -118,13 +144,23 @@ Deno.serve(async (req: Request) => {
     }
 
     // 2. Cria. Molde conforme a doc de Pessoas Jurídicas.
+    const grupos = Array.isArray(p.grupos) && p.grupos.length
+      ? (p.grupos as string[])
+      : ["proprietariosVeiculos"];
+    const ehProprietaria = grupos.some((g) => String(g) === "proprietariosVeiculos");
+
     const novo: Record<string, unknown> = {
       cnpj,
       razaoSocial: String(p.razaoSocial).trim(),
       nomeFantasia: String(p.nomeFantasia).trim(),
-      grupos: ["proprietariosVeiculos"],
+      grupos,
       RNTRC: String(p.rntrc).trim(),
     };
+    // Só entra para quem é proprietária de veículo. PJ que é apenas cliente ou
+    // fornecedor não é transportadora e não deve ser classificada como uma.
+    if (ehProprietaria) {
+      novo.tipoTransportadora = p.tipoTransportadora || TIPO_TRANSPORTADORA_PADRAO;
+    }
     if (enquadramento) novo.enquadramento = enquadramento;
     if (p.celular) novo.celular = p.celular;
     if (p.email) novo.email = p.email;
