@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    LayoutDashboard, Calculator, History, Settings, LogOut, Truck, Map as MapIcon, DollarSign, Package, Scale, FileText, TrendingUp, AlertCircle, CheckCircle2, XCircle, ChevronRight, Search, Filter, ArrowUpDown, Save, Trash2, Edit3, Copy as ClipboardCopy, CopyPlus, ThumbsUp, ThumbsDown, Plus, Upload, Users, Percent, Key, UserCircle, X, RotateCcw, FileDown, PlusCircle, Target, Info, Activity, Layers, ShieldCheck, ArrowRightLeft, CreditCard, Wrench, Lock, User as UserIcon, UserCheck, ImageIcon, Download, AlertTriangle, Clock, Hash, PieChart, Calendar, ChevronDown, Check, Zap, Award, ArrowDown, BarChart3, CheckCircle, List, ArrowRight, Sparkles, Send, Tv, IdCard
+    Activity, AlertCircle, AlertTriangle, ArrowDown, ArrowRight, ArrowRightLeft, ArrowUpDown, Award, BarChart3, Calculator, Calendar, Check, CheckCircle, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy as ClipboardCopy, CopyPlus, CreditCard, DollarSign, Download, Edit3, FileDown, FileText, Filter, Hash, History, IdCard, ImageIcon, Info, Key, Layers, LayoutDashboard, Link2, List, Lock, LogOut, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, Save, Scale, Search, Send, Settings, ShieldCheck, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, User as UserIcon, UserCheck, UserCircle, Users, Wrench, X, XCircle, Zap
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
@@ -58,6 +58,7 @@ import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor } from './utils
 import MunicipioAutocomplete, { useMunicipios } from './components/MunicipioAutocomplete';
 import CadastroMotorista from './components/CadastroMotorista';
 import CadastroVeiculo from './components/CadastroVeiculo';
+import CadastroConjunto from './components/CadastroConjunto';
 import { normalizar, resolverMunicipio } from './utils/municipios';
 import { definirEmergencia, lerEmergencia, EstadoEmergencia } from './services/emergencia';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
@@ -207,7 +208,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-veiculo'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-veiculo' | 'cadastro-conjunto'>('dashboard');
     const [acoesAbertas, setAcoesAbertas] = useState(true); // submenu "Ações do Comercial" aberto/fechado
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
@@ -2459,6 +2460,8 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'cadastro-motorista', icon: IdCard, label: 'Cadastro Rápido' },
                         // Fase 3A (veículo): ainda em validação, só existe na branch.
                         { id: 'cadastro-veiculo', icon: Truck, label: 'Cadastro Veículo' },
+                        // Fase 3C: conjunto (motorista + cavalo + carretas) numa tela só.
+                        { id: 'cadastro-conjunto', icon: Link2, label: 'Cadastro Conjunto' },
                         { id: 'prospeccao', icon: Target, label: 'Meu CRM', adminOnly: true },
                         // Contato Diário migrou pro submenu "Ações do Comercial" (abaixo).
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
@@ -2570,6 +2573,7 @@ Disponibilidade: ${disponibilidade}`;
                                         activeTab === 'trash' ? 'Lixeira' :
                                         activeTab === 'cadastro-motorista' ? 'Cadastro Rápido · Motorista' :
                                         activeTab === 'cadastro-veiculo' ? 'Cadastro Rápido · Veículo' :
+                                        activeTab === 'cadastro-conjunto' ? 'Cadastro de Conjunto' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
@@ -2598,6 +2602,10 @@ Disponibilidade: ${disponibilidade}`;
 
                     {/* Cadastro Rápido — Motorista (Fase 2). Isolado: não toca em cotação,
                         faturamento nem Pipefy. Visível a todos os usuários logados. */}
+                    {activeTab === 'cadastro-conjunto' && (
+                        <CadastroConjunto autor={{ id: currentUser.id, name: currentUser.name }} />
+                    )}
+
                     {activeTab === 'cadastro-veiculo' && (
                         <CadastroVeiculo autor={{ id: currentUser.id, name: currentUser.name }} />
                     )}
