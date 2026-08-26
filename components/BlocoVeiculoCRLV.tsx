@@ -13,6 +13,7 @@ import {
 import {
     CRLV_VAZIO, DadosCRLV, Dominio, carregarDominio, traduzirCrlv,
 } from '../services/traducaoVeiculo';
+import { RefProprietario } from '../services/conjunto';
 
 // ============================================================================
 // BlocoVeiculoCRLV — uma peça do conjunto: um CRLV + o proprietário dela.
@@ -30,11 +31,12 @@ export interface EstadoPeca {
     form: VeiculoParaGravar;
     placa: string;
     categoriaNome: string;
-    /** Todos os críticos conferidos e o proprietário resolvido. */
+    /** Críticos conferidos e um dono DEFINIDO (que pode ainda não existir). */
     pronto: boolean;
     /** Nada anexado nem digitado — peça opcional que o operador não usou. */
     vazio: boolean;
-    proprietarioNome: string;
+    /** O dono: motorista desta tela, alguém existente, ou empresa a criar. */
+    ref: RefProprietario | null;
 }
 
 interface Props {
@@ -42,12 +44,22 @@ interface Props {
     subtitulo?: string;
     /** Peça opcional (implemento) mostra que pode ficar em branco. */
     opcional?: boolean;
+    /**
+     * Quando o motorista da tela foi marcado como dono, esta peça pode apontar
+     * para ele sem busca nenhuma — ele ainda nem existe no Datamex.
+     */
+    motoristaEhDono?: boolean;
+    nomeMotorista?: string;
+    /** Peça principal já nasce apontando para o motorista, quando ele é o dono. */
+    assumirMotorista?: boolean;
     onChange: (e: EstadoPeca) => void;
 }
 
 const soDigitos = (s: string) => (s || '').replace(/\D/g, '');
 
-const BlocoVeiculoCRLV: React.FC<Props> = ({ titulo, subtitulo, opcional, onChange }) => {
+const BlocoVeiculoCRLV: React.FC<Props> = ({
+    titulo, subtitulo, opcional, motoristaEhDono, nomeMotorista, assumirMotorista, onChange,
+}) => {
     const [dominio, setDominio] = useState<Dominio>([]);
     const { lista: municipios } = useMunicipios();
 
@@ -62,12 +74,27 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({ titulo, subtitulo, opcional, onChan
     const [docProp, setDocProp] = useState('');
     const [buscandoProp, setBuscandoProp] = useState(false);
     const [proprietario, setProprietario] = useState<{ codPessoa: string; nome: string; tipo: TipoPessoa } | null>(null);
+    /**
+     * Quem é o dono. Começa apontando para o motorista quando ele foi marcado
+     * como proprietário — nesse caso não há o que buscar: ele está sendo criado
+     * nesta mesma tela e ainda não tem código.
+     */
+    const [ref, setRef] = useState<RefProprietario | null>(assumirMotorista ? { tipo: 'motorista' } : null);
+    const [querTrocarDono, setQuerTrocarDono] = useState(false);
     const [erroProp, setErroProp] = useState<string | null>(null);
     const [trocando, setTrocando] = useState(false);
     const [pjNova, setPjNova] = useState<{ razaoSocial: string; nomeFantasia: string; rntrc: string; enquadramento: string } | null>(null);
-    const [criandoPj, setCriandoPj] = useState(false);
 
     useEffect(() => { carregarDominio().then(setDominio).catch(() => setDominio([])); }, []);
+
+    // O pai ligou/desligou "motorista é o dono" e esta peça ainda não teve o
+    // dono escolhido à mão: acompanha, sem sobrescrever decisão do operador.
+    useEffect(() => {
+        if (querTrocarDono) return;
+        if (assumirMotorista) setRef({ tipo: 'motorista' });
+        else if (ref?.tipo === 'motorista') setRef(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [assumirMotorista, querTrocarDono]);
 
     const listaDe = (tipo: string) =>
         dominio.filter(d => d.tipo === tipo).map(d => ({ codigo: d.codigo, rotulo: d.nome }));
@@ -93,16 +120,20 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({ titulo, subtitulo, opcional, onChan
     useEffect(() => {
         const vazio = !leu && !form.placa && !docProp;
         const criticosOk = CAMPOS_CRITICOS.every(c => conferidos.has(c));
+        // Basta o dono estar DEFINIDO. Empresa nova conta como definida assim
+        // que os campos obrigatórios dela estão preenchidos — ela é criada na
+        // cascata, no fim. Exigir que já existisse era o que travava a tela.
+        const donoOk = ref !== null && (ref.tipo !== 'novaPJ'
+            || (!!ref.razaoSocial.trim() && !!ref.nomeFantasia.trim() && !!ref.rntrc.trim()));
         const camposOk = placaValida(form.placa) && !!form.categoriaVeiculo
-            && !!form.tipoCarroceria && Number(form.capM3) > 0 && !!form.proprietarioId;
+            && !!form.tipoCarroceria && Number(form.capM3) > 0;
         onChange({
             form, placa: form.placa, categoriaNome,
-            pronto: criticosOk && camposOk,
-            vazio,
-            proprietarioNome: proprietario?.nome ?? '',
+            pronto: criticosOk && camposOk && donoOk,
+            vazio, ref,
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [form, conferidos, leu, docProp, categoriaNome, proprietario]);
+    }, [form, conferidos, leu, docProp, categoriaNome, ref]);
 
     const setCampo = (k: keyof VeiculoParaGravar, v: string) => {
         setForm(prev => ({ ...prev, [k]: v }));
@@ -195,47 +226,51 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({ titulo, subtitulo, opcional, onChan
                 const r = await buscarProprietario(d);
                 if (r.error) { setErroProp(r.error); return; }
                 if (!r.codPessoa) {
-                    setErroProp('Não existe pessoa com esse CPF no Datamex. Cadastre em Cadastro Rápido · Motorista, marcando "é o dono do veículo".');
+                    setErroProp(
+                        'Não existe pessoa física com esse CPF no Datamex. Se o dono for o motorista ' +
+                        'desta tela, marque "Sim, é o dono" no bloco do motorista. Se for outra pessoa ' +
+                        'física, cadastre-a antes em Cadastro Rápido · Motorista — o Datamex exige os ' +
+                        'dados da CNH para criar pessoa física, e isso não cabe num mini-cadastro.',
+                    );
                     return;
                 }
                 setProprietario({ codPessoa: r.codPessoa, nome: r.nome || '', tipo: 'fisica' });
-                setCampo('proprietarioId', r.codPessoa);
+                setRef({ tipo: 'existente', codPessoa: r.codPessoa, nome: r.nome || '' });
                 return;
             }
             const r = await buscarPessoaJuridica(d);
             if (r.error) { setErroProp(r.error); return; }
             if (!r.existe || !r.codPessoa) {
-                setPjNova({
+                const inicial = {
                     razaoSocial: crlv.proprietario_nome || '', nomeFantasia: crlv.proprietario_nome || '',
                     rntrc: '', enquadramento: '',
-                });
+                };
+                setPjNova(inicial);
+                setRef({ tipo: 'novaPJ', cnpj: d, ...inicial });
                 return;
             }
             setProprietario({ codPessoa: r.codPessoa, nome: r.razaoSocial || r.nomeFantasia || '', tipo: 'juridica' });
-            setCampo('proprietarioId', r.codPessoa);
+            setRef({ tipo: 'existente', codPessoa: r.codPessoa, nome: r.razaoSocial || r.nomeFantasia || '' });
         } finally {
             setBuscandoProp(false);
         }
     };
 
-    const criarPj = async () => {
-        if (!pjNova) return;
-        setCriandoPj(true); setErroProp(null);
-        try {
-            const r = await cadastrarPessoaJuridica({
-                cnpj: soDigitos(docProp), razaoSocial: pjNova.razaoSocial,
-                nomeFantasia: pjNova.nomeFantasia, rntrc: pjNova.rntrc,
-                enquadramento: pjNova.enquadramento,
+    /**
+     * Empresa nova não é gravada aqui. Vira referência e a cascata cria no fim,
+     * junto com o resto — assim o operador não fica preso a um cadastro que só
+     * faz sentido se o conjunto inteiro for adiante.
+     */
+    const atualizarPj = (campo: string, valor: string) => {
+        setPjNova(prev => {
+            const novo = { ...(prev ?? { razaoSocial: '', nomeFantasia: '', rntrc: '', enquadramento: '' }), [campo]: valor };
+            setRef({
+                tipo: 'novaPJ', cnpj: soDigitos(docProp),
+                razaoSocial: novo.razaoSocial, nomeFantasia: novo.nomeFantasia,
+                rntrc: novo.rntrc, enquadramento: novo.enquadramento,
             });
-            if (r.error) { setErroProp(r.error); return; }
-            if (!r.codPessoa) { setErroProp('O Datamex não devolveu o código da empresa.'); return; }
-            setProprietario({ codPessoa: r.codPessoa, nome: r.razaoSocial || pjNova.razaoSocial, tipo: 'juridica' });
-            setCampo('proprietarioId', r.codPessoa);
-            setPjNova(null);
-            if (r.aviso) setErroProp(r.aviso);
-        } finally {
-            setCriandoPj(false);
-        }
+            return novo;
+        });
     };
 
     // ---- estilos ----
@@ -375,83 +410,109 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({ titulo, subtitulo, opcional, onChan
 
                     {/* proprietário desta peça */}
                     <div className="border-t border-[#e5e7eb] pt-4">
-                        {crlv.proprietario_nome && !trocando && (
-                            <p className="text-xs font-medium text-[#6b7280] mb-2">
-                                Documento em nome de <strong className="text-[#111827]">{crlv.proprietario_nome}</strong>.
-                                Esse é o dono <em>legal</em> — quem responde pela ANTT pode ser outro.
-                            </p>
-                        )}
-                        <div className="flex flex-wrap items-end gap-3">
-                            <div className="flex flex-col">
-                                <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
-                                    CPF/CNPJ do proprietário<span className="text-red-500 ml-0.5">*</span>
-                                    {tipoProp !== 'indefinido' && (
-                                        <span className="ml-1 normal-case text-[#1d6fb8] font-semibold">
-                                            · {tipoProp === 'fisica' ? 'pessoa física' : 'empresa'}
-                                        </span>
-                                    )}
-                                </label>
-                                <input value={docProp}
-                                    onChange={e => { setDocProp(formatarDocumento(e.target.value)); setProprietario(null); setPjNova(null); setTrocando(true); }}
-                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); procurarProprietario(); } }}
-                                    className={`w-56 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${proprietario
-                                        ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
-                                        : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`} />
-                            </div>
-                            <button type="button" onClick={procurarProprietario}
-                                disabled={buscandoProp || tipoProp === 'indefinido'}
-                                className="px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed transition-colors flex items-center gap-2">
-                                {buscandoProp ? <><Loader2 className="w-4 h-4 animate-spin" /> Buscando…</> : <><Search className="w-4 h-4" strokeWidth={1.75} /> Buscar proprietário</>}
-                            </button>
-                        </div>
-
-                        {proprietario && (
-                            <div className="mt-3 bg-emerald-50 border border-emerald-300 text-emerald-900 px-4 py-2.5 rounded-lg flex items-start gap-2">
+                        {/* Caso mais comum: o dono é o motorista que está sendo criado
+                            aqui. Não há o que buscar — ele ainda nem tem código. */}
+                        {ref?.tipo === 'motorista' ? (
+                            <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-4 py-3 rounded-lg flex items-start gap-2">
                                 <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" strokeWidth={1.75} />
-                                <p className="text-xs font-medium">
-                                    {proprietario.nome} — código {proprietario.codPessoa}
-                                    {proprietario.tipo === 'juridica' ? ' (empresa)' : ' (pessoa física)'}
-                                </p>
-                            </div>
-                        )}
-
-                        {pjNova && (
-                            <div className="mt-3 border-2 border-amber-300 rounded-lg p-4 bg-amber-50/40">
-                                <p className="text-xs font-semibold text-[#92400e] mb-3">
-                                    Empresa não encontrada. Preencha para cadastrá-la como proprietária.
-                                </p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <input value={pjNova.razaoSocial} placeholder="Razão social"
-                                        onChange={e => setPjNova({ ...pjNova, razaoSocial: e.target.value })} className={classeNormal} />
-                                    <input value={pjNova.nomeFantasia} placeholder="Nome fantasia"
-                                        onChange={e => setPjNova({ ...pjNova, nomeFantasia: e.target.value })} className={classeNormal} />
-                                    <div>
-                                        <input value={pjNova.rntrc} placeholder="RNTRC"
-                                            onChange={e => setPjNova({ ...pjNova, rntrc: e.target.value })}
-                                            className={`w-full px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pjNova.rntrc
-                                                ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
-                                        <p className="text-[10px] font-medium text-[#92400e] mt-1">
-                                            Não vem no CRLV. Sem ele o cadastro não grava.
-                                        </p>
-                                    </div>
-                                    <select value={pjNova.enquadramento}
-                                        onChange={e => setPjNova({ ...pjNova, enquadramento: e.target.value })} className={classeNormal}>
-                                        {ENQUADRAMENTOS.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
-                                    </select>
+                                <div>
+                                    <p className="text-xs font-semibold">
+                                        Proprietário: {nomeMotorista?.trim() || 'o motorista desta tela'}
+                                    </p>
+                                    <p className="text-xs font-medium opacity-90 mt-0.5">
+                                        Ele é cadastrado primeiro e o código dele entra aqui automaticamente.
+                                        Não precisa buscar nada.
+                                    </p>
+                                    <button type="button"
+                                        onClick={() => { setRef(null); setQuerTrocarDono(true); }}
+                                        className="text-xs font-semibold underline mt-1.5">
+                                        Trocar proprietário
+                                    </button>
                                 </div>
-                                <button type="button" onClick={criarPj}
-                                    disabled={criandoPj || !pjNova.razaoSocial.trim() || !pjNova.nomeFantasia.trim() || !pjNova.rntrc.trim()}
-                                    className="mt-3 px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] transition-colors">
-                                    {criandoPj ? 'Cadastrando…' : 'Cadastrar empresa e vincular'}
-                                </button>
                             </div>
-                        )}
+                        ) : (
+                            <>
+                                {crlv.proprietario_nome && (
+                                    <p className="text-xs font-medium text-[#6b7280] mb-2">
+                                        Documento em nome de <strong className="text-[#111827]">{crlv.proprietario_nome}</strong>.
+                                        Esse é o dono <em>legal</em> — quem responde pela ANTT pode ser outro.
+                                    </p>
+                                )}
+                                {motoristaEhDono && (
+                                    <button type="button"
+                                        onClick={() => { setRef({ tipo: 'motorista' }); setQuerTrocarDono(false); setPjNova(null); setErroProp(null); }}
+                                        className="text-xs font-semibold text-[#1d6fb8] hover:underline mb-3 block">
+                                        ← Usar o motorista desta tela como proprietário
+                                    </button>
+                                )}
+                                <div className="flex flex-wrap items-end gap-3">
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
+                                            CPF/CNPJ do proprietário<span className="text-red-500 ml-0.5">*</span>
+                                            {tipoProp !== 'indefinido' && (
+                                                <span className="ml-1 normal-case text-[#1d6fb8] font-semibold">
+                                                    · {tipoProp === 'fisica' ? 'pessoa física' : 'empresa'}
+                                                </span>
+                                            )}
+                                        </label>
+                                        <input value={docProp}
+                                            onChange={e => { setDocProp(formatarDocumento(e.target.value)); setProprietario(null); setPjNova(null); setRef(null); setQuerTrocarDono(true); }}
+                                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); procurarProprietario(); } }}
+                                            className={`w-56 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${ref
+                                                ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
+                                                : 'bg-amber-50 border-amber-300 focus:border-amber-500'}`} />
+                                    </div>
+                                    <button type="button" onClick={procurarProprietario}
+                                        disabled={buscandoProp || tipoProp === 'indefinido'}
+                                        className="px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+                                        {buscandoProp ? <><Loader2 className="w-4 h-4 animate-spin" /> Buscando…</> : <><Search className="w-4 h-4" strokeWidth={1.75} /> Buscar proprietário</>}
+                                    </button>
+                                </div>
 
-                        {erroProp && (
-                            <div className="mt-3 bg-amber-50 border border-amber-300 text-amber-900 px-4 py-2.5 rounded-lg flex items-start gap-2">
-                                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
-                                <p className="text-xs font-medium">{erroProp}</p>
-                            </div>
+                                {ref?.tipo === 'existente' && (
+                                    <div className="mt-3 bg-emerald-50 border border-emerald-300 text-emerald-900 px-4 py-2.5 rounded-lg flex items-start gap-2">
+                                        <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" strokeWidth={1.75} />
+                                        <p className="text-xs font-medium">{ref.nome} — código {ref.codPessoa}</p>
+                                    </div>
+                                )}
+
+                                {pjNova && (
+                                    <div className="mt-3 border-2 border-amber-300 rounded-lg p-4 bg-amber-50/40">
+                                        <p className="text-xs font-semibold text-[#92400e] mb-1">
+                                            Empresa não encontrada. Preencha e siga — ela é cadastrada junto com o conjunto.
+                                        </p>
+                                        <p className="text-[11px] font-normal text-[#92400e] mb-3">
+                                            Nada é gravado agora. Se você desistir do conjunto, a empresa não é criada.
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <input value={pjNova.razaoSocial} placeholder="Razão social"
+                                                onChange={e => atualizarPj('razaoSocial', e.target.value)} className={classeNormal} />
+                                            <input value={pjNova.nomeFantasia} placeholder="Nome fantasia"
+                                                onChange={e => atualizarPj('nomeFantasia', e.target.value)} className={classeNormal} />
+                                            <div>
+                                                <input value={pjNova.rntrc} placeholder="RNTRC"
+                                                    onChange={e => atualizarPj('rntrc', e.target.value)}
+                                                    className={`w-full px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pjNova.rntrc
+                                                        ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
+                                                <p className="text-[10px] font-medium text-[#92400e] mt-1">
+                                                    Não vem no CRLV. Sem ele o cadastro não grava.
+                                                </p>
+                                            </div>
+                                            <select value={pjNova.enquadramento}
+                                                onChange={e => atualizarPj('enquadramento', e.target.value)} className={classeNormal}>
+                                                {ENQUADRAMENTOS.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {erroProp && (
+                                    <div className="mt-3 bg-amber-50 border border-amber-300 text-amber-900 px-4 py-2.5 rounded-lg flex items-start gap-2">
+                                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
+                                        <p className="text-xs font-medium">{erroProp}</p>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 </>

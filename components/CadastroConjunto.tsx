@@ -11,7 +11,7 @@ import {
 import { buscarCep, formatarCep } from '../services/cep';
 import {
     CATEGORIAS_COM_IMPLEMENTO, IMPLEMENTOS_VISIVEIS, PassoResultado,
-    VinculoAtual, consultarVinculos, gravarConjunto,
+    VinculoAtual, consultarVinculos, descreverProprietario, gravarConjunto,
 } from '../services/conjunto';
 
 // ============================================================================
@@ -34,7 +34,7 @@ const soDigitos = (s: string) => (s || '').replace(/\D/g, '');
 const semAcento = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 
 const PECA_VAZIA: EstadoPeca = {
-    form: {} as any, placa: '', categoriaNome: '', pronto: false, vazio: true, proprietarioNome: '',
+    form: {} as any, placa: '', categoriaNome: '', pronto: false, vazio: true, ref: null,
 };
 
 const CadastroConjunto: React.FC<Props> = ({ autor }) => {
@@ -73,6 +73,10 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
         () => CATEGORIAS_COM_IMPLEMENTO.some(c => semAcento(principal.categoriaNome) === semAcento(c)),
         [principal.categoriaNome],
     );
+
+    const nomeMotorista = `${cnh.nome} ${cnh.sobrenome}`.trim();
+    /** O motorista só pode ser dono se estiver sendo cadastrado E marcado como tal. */
+    const motoristaEhDono = temMotorista && fiscais.proprietario;
 
     const implementosUsados = useMemo(
         () => [impl1, impl2].filter(p => !p.vazio && p.placa),
@@ -165,8 +169,8 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                     ? { dados: cnh, fiscais, endereco, anexo: anexoCnh ?? undefined }
                     : undefined,
                 motoristaCpf: cnh.cpf,
-                principal: { rotulo: 'principal', form: principal.form, placa: principal.placa },
-                implementos: implementosUsados.map(p => ({ rotulo: 'implemento', form: p.form, placa: p.placa })),
+                principal: { rotulo: 'principal', form: principal.form, placa: principal.placa, ref: principal.ref },
+                implementos: implementosUsados.map(p => ({ rotulo: 'implemento', form: p.form, placa: p.placa, ref: p.ref })),
                 removerVinculacoes: removerAnteriores && confirmouRemocao ? 'S' : 'N',
             });
             setPassos(r.passos);
@@ -321,7 +325,8 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                             </div>
                             {fiscais.proprietario && (
                                 <p className="text-[11px] font-normal text-[#6b7280] mt-2">
-                                    Depois de gravar, use o CPF dele como proprietário do veículo abaixo.
+                                    O veículo principal já assume ele como proprietário — não precisa buscar
+                                    CPF nenhum. Se alguma peça for de outro dono, dá para trocar no bloco dela.
                                 </p>
                             )}
                         </div>
@@ -369,6 +374,9 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
             <BlocoVeiculoCRLV
                 titulo="2 · Veículo principal"
                 subtitulo="Anexe o CRLV da tração. Se for cavalo, os blocos de carreta abrem sozinhos."
+                motoristaEhDono={motoristaEhDono}
+                nomeMotorista={nomeMotorista}
+                assumirMotorista={motoristaEhDono}
                 onChange={setPrincipal}
             />
 
@@ -383,7 +391,8 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                         </p>
                     </div>
 
-                    <BlocoVeiculoCRLV titulo="3 · Implemento 1 (carreta / central)" opcional onChange={setImpl1} />
+                    <BlocoVeiculoCRLV titulo="3 · Implemento 1 (carreta / central)" opcional
+                        motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista} onChange={setImpl1} />
 
                     {!querSegundoImplemento && IMPLEMENTOS_VISIVEIS > 1 && (
                         <button type="button" onClick={() => setQuerSegundoImplemento(true)}
@@ -392,7 +401,8 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                         </button>
                     )}
                     {querSegundoImplemento && (
-                        <BlocoVeiculoCRLV titulo="4 · Implemento 2" opcional onChange={setImpl2} />
+                        <BlocoVeiculoCRLV titulo="4 · Implemento 2" opcional
+                            motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista} onChange={setImpl2} />
                     )}
                 </>
             )}
@@ -500,7 +510,7 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                                 <dt className="text-[#6b7280]">Veículo principal</dt>
                                 <dd className="font-semibold text-right">
                                     {principal.placa} · {principal.categoriaNome}
-                                    <span className="block font-normal text-xs text-[#6b7280]">dono: {principal.proprietarioNome || '—'}</span>
+                                    <span className="block font-normal text-xs text-[#6b7280]">dono: {descreverProprietario(principal.ref, nomeMotorista)}</span>
                                 </dd>
                             </div>
                             {implementosUsados.map((p, i) => (
@@ -508,7 +518,7 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                                     <dt className="text-[#6b7280]">Implemento {i + 1}</dt>
                                     <dd className="font-semibold text-right">
                                         {p.placa} · {p.categoriaNome}
-                                        <span className="block font-normal text-xs text-[#6b7280]">dono: {p.proprietarioNome || '—'}</span>
+                                        <span className="block font-normal text-xs text-[#6b7280]">dono: {descreverProprietario(p.ref, nomeMotorista)}</span>
                                     </dd>
                                 </div>
                             ))}

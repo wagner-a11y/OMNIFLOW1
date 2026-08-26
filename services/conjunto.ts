@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import {
     DadosCNH, DadosEndereco, DadosFiscais, cadastrarMotorista,
 } from './cadastroMotorista';
-import { VeiculoParaGravar, cadastrarVeiculo } from './cadastroVeiculo';
+import { VeiculoParaGravar, cadastrarPessoaJuridica, cadastrarVeiculo } from './cadastroVeiculo';
 
 // ============================================================================
 // Conjunto de veículos — Fase 3C.
@@ -34,6 +34,32 @@ export const CATEGORIAS_COM_IMPLEMENTO = ['CAVALO'];
 export const IMPLEMENTOS_VISIVEIS = 2;
 
 // ----------------------------------------------------------------------------
+
+/**
+ * Quem é o dono de uma peça. O ponto é que o proprietário PODE AINDA NÃO
+ * EXISTIR no Datamex quando o operador está preenchendo — ele é resolvido na
+ * hora de gravar, não antes. Exigir que já existisse era o que travava a tela.
+ *
+ *   motorista  -> o motorista desta mesma tela, que a cascata cria no passo 1
+ *   existente  -> alguém já cadastrado, achado pela busca
+ *   novaPJ     -> empresa que a cascata cria antes dos veículos
+ */
+export type RefProprietario =
+    | { tipo: 'motorista' }
+    | { tipo: 'existente'; codPessoa: string; nome: string }
+    | {
+        tipo: 'novaPJ';
+        cnpj: string; razaoSocial: string; nomeFantasia: string;
+        rntrc: string; enquadramento: string;
+    };
+
+/** Texto curto do dono, para o resumo de conferência. */
+export function descreverProprietario(r: RefProprietario | null, nomeMotorista: string): string {
+    if (!r) return '—';
+    if (r.tipo === 'motorista') return `${nomeMotorista || 'o motorista'} (motorista desta tela)`;
+    if (r.tipo === 'existente') return `${r.nome} — código ${r.codPessoa}`;
+    return `${r.razaoSocial} (empresa nova, será cadastrada)`;
+}
 
 export interface VinculoAtual {
     id: string;
@@ -87,6 +113,8 @@ export interface PecaVeiculo {
     form: VeiculoParaGravar;
     /** Placa normalizada — é por ela que a vinculação identifica o veículo. */
     placa: string;
+    /** Dono desta peça. Resolvido em código só na hora de gravar. */
+    ref: RefProprietario | null;
 }
 
 export interface PedidoConjunto {
@@ -121,11 +149,17 @@ export interface ResultadoConjunto {
 }
 
 /**
- * Executa a cascata na ordem das dependências:
- *   1) motorista  2) veículo principal  3) implementos  4) vinculação
+ * Executa a cascata na ordem das DEPENDÊNCIAS:
+ *   1) motorista            -> vira o proprietarioId de quem for {tipo:'motorista'}
+ *   2) empresas novas       -> uma por CNPJ, mesmo que várias peças apontem para ela
+ *   3) veículo principal    -> com o dono já resolvido
+ *   4) implementos          -> cada um com o SEU dono
+ *   5) vinculação           -> exige o motorista
  *
- * O proprietário de cada veículo já vem resolvido pela tela (busca ou
- * mini-cadastro da 3B), então aqui ele é só um id que acompanha o form.
+ * O proprietário NÃO precisa existir no Datamex quando o operador preenche a
+ * tela: ele é uma referência, e só vira id aqui dentro. Era exigir a existência
+ * antecipada que travava o caso mais comum de todos — o motorista ser o dono do
+ * próprio caminhão.
  */
 export async function gravarConjunto(p: PedidoConjunto): Promise<ResultadoConjunto> {
     const passos: PassoResultado[] = [];
@@ -148,17 +182,58 @@ export async function gravarConjunto(p: PedidoConjunto): Promise<ResultadoConjun
         });
     }
 
-    // ---- 2. Veículo principal ----
-    const rp = await cadastrarVeiculo(p.principal.form);
+    // ---- 2. Empresas novas, uma vez por CNPJ ----
+    // Duas carretas do mesmo terceiro não podem virar dois cadastros. A própria
+    // cadastrar-pessoa-juridica também protege disso, mas resolver aqui evita a
+    // ida e volta e deixa o relato mais limpo.
+    const pecas = [p.principal, ...p.implementos];
+    const porCnpj = new Map<string, string>();
+    for (const peca of pecas) {
+        const ref = peca.ref;
+        if (ref?.tipo !== 'novaPJ') continue;
+        const cnpj = ref.cnpj.replace(/\D/g, '');
+        if (porCnpj.has(cnpj)) continue;
+
+        const r = await cadastrarPessoaJuridica({
+            cnpj, razaoSocial: ref.razaoSocial, nomeFantasia: ref.nomeFantasia,
+            rntrc: ref.rntrc, enquadramento: ref.enquadramento,
+        });
+        if (r.error || !r.codPessoa) {
+            passos.push({ passo: `Empresa ${ref.razaoSocial}`, ok: false, detalhe: r.error });
+            return parar(`Não consegui cadastrar a empresa ${ref.razaoSocial}: ${r.error ?? 'sem código de retorno'}`);
+        }
+        porCnpj.set(cnpj, r.codPessoa);
+        passos.push({
+            passo: `Empresa ${ref.razaoSocial}`, ok: true, codigo: r.codPessoa,
+            detalhe: r.jaExistia ? 'já existia, reaproveitada' : 'criada',
+        });
+    }
+
+    /** Referência -> id de verdade. Só falha se a tela deixou passar algo incompleto. */
+    const resolver = (ref: RefProprietario | null): string | null => {
+        if (!ref) return null;
+        if (ref.tipo === 'existente') return ref.codPessoa;
+        if (ref.tipo === 'motorista') return motoristaId || null;
+        return porCnpj.get(ref.cnpj.replace(/\D/g, '')) ?? null;
+    };
+
+    // ---- 3. Veículo principal ----
+    const donoPrincipal = resolver(p.principal.ref);
+    if (!donoPrincipal) {
+        return parar('O veículo principal ficou sem proprietário resolvido. Nada foi gravado além do que está acima.');
+    }
+    const rp = await cadastrarVeiculo({ ...p.principal.form, proprietarioId: donoPrincipal });
     if (rp.error) {
         passos.push({ passo: `Veículo ${p.principal.placa}`, ok: false, detalhe: rp.error });
         return parar(`O veículo principal não entrou: ${rp.error}`);
     }
     passos.push({ passo: `Veículo ${p.principal.placa}`, ok: true, codigo: rp.codVeiculo });
 
-    // ---- 3. Implementos, um a um e na ordem ----
+    // ---- 4. Implementos, um a um, cada um com o dono dele ----
     for (const imp of p.implementos) {
-        const r = await cadastrarVeiculo(imp.form);
+        const dono = resolver(imp.ref);
+        if (!dono) return parar(`O implemento ${imp.placa} ficou sem proprietário resolvido.`);
+        const r = await cadastrarVeiculo({ ...imp.form, proprietarioId: dono });
         if (r.error) {
             passos.push({ passo: `Implemento ${imp.placa}`, ok: false, detalhe: r.error });
             return parar(`O implemento ${imp.placa} não entrou: ${r.error}`);
@@ -166,7 +241,7 @@ export async function gravarConjunto(p: PedidoConjunto): Promise<ResultadoConjun
         passos.push({ passo: `Implemento ${imp.placa}`, ok: true, codigo: r.codVeiculo });
     }
 
-    // ---- 4. Vinculação: exige motorista, então sem ele é pulada ----
+    // ---- 5. Vinculação: exige motorista, então sem ele é pulada ----
     if (!motoristaId) {
         passos.push({
             passo: 'Vinculação', ok: true,
