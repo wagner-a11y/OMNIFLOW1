@@ -4,7 +4,7 @@ import { extractDataFromDoc } from '../services/geminiService';
 import UploadDocumento from './UploadDocumento';
 import {
     CAMPOS_CRITICOS, CAPM3_POR_CARROCERIA, CampoCritico, ENQUADRAMENTOS,
-    ResultadoVeiculo, TipoPessoa, VEICULO_VAZIO, VeiculoParaGravar,
+    GRUPO_FROTA_PROPRIA, ResultadoVeiculo, TipoPessoa, VEICULO_VAZIO, VeiculoParaGravar,
     buscarPessoaJuridica, buscarProprietario, cadastrarPessoaJuridica,
     cadastrarVeiculo, formatarDocumento, formatarPlaca, placaValida,
     tipoDoDocumento,
@@ -452,6 +452,13 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
                         <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Grupo</label>
                         <Seletor valor={form.grupoVeiculo} onChange={v => setCampo('grupoVeiculo', v)}
                             lista={listaDe('grupo')} className={classeNormal} />
+                        {form.grupoVeiculo === GRUPO_FROTA_PROPRIA && (
+                            <p className="text-[10px] font-medium text-amber-700 mt-1">
+                                Frota própria pode exigir vínculo com equipamento de manutenção no
+                                Datamex, e o cadastro pode ser recusado. Se der erro, cadastre este
+                                veículo manualmente lá.
+                            </p>
+                        )}
                     </div>
 
                     {([

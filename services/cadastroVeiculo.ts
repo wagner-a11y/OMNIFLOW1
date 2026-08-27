@@ -31,8 +31,21 @@ export const CAPM3_POR_CARROCERIA: Record<string, number> = {
     '00': 1,    // Não aplicável (cavalo mecânico) — mínimo, porque zero é recusado
 };
 
-/** Grupo de frota. O padrão é frota própria, que é o caso comum. */
-export const GRUPO_PADRAO = '1';   // 1 = FROTA PROPRIA, 2 = FROTA DE TERCEIROS
+/**
+ * Grupo de frota. O padrão é FROTA DE TERCEIROS porque é o que a operação
+ * cadastra em quase 100% dos casos — frota própria é exceção rara.
+ *
+ * A escolha também tem efeito técnico: FROTA PROPRIA está configurada no
+ * Datamex para criar equipamento no módulo de manutenção, e nesse grupo a API
+ * exige um `tipoEquipamento` REAL — recusa o "0" com 422 "Tipo do equipamento
+ * inválido". FROTA DE TERCEIROS aceita "0" (sem classificação), que é o mesmo
+ * que a tela oficial do Datamex grava. Medido em 27/08/2026, isolando grupo de
+ * categoria: cavalo com grupo 2 passa, carreta com grupo 1 falha.
+ */
+export const GRUPO_PADRAO = '2';   // 1 = FROTA PROPRIA, 2 = FROTA DE TERCEIROS
+
+/** Frota própria: o grupo que pode exigir vínculo com equipamento de manutenção. */
+export const GRUPO_FROTA_PROPRIA = '1';
 
 /**
  * Campos que o operador precisa OLHAR antes de gravar. São os de maior impacto

@@ -8,7 +8,7 @@ import {
     CAMPOS_CRITICOS, CAPM3_POR_CARROCERIA, CampoCritico, ENQUADRAMENTOS,
     TipoPessoa, VEICULO_VAZIO, VeiculoParaGravar, buscarPessoaJuridica,
     buscarProprietario, cadastrarPessoaJuridica, formatarDocumento,
-    formatarPlaca, placaValida, tipoDoDocumento,
+    formatarPlaca, GRUPO_FROTA_PROPRIA, placaValida, tipoDoDocumento,
 } from '../services/cadastroVeiculo';
 import {
     CRLV_VAZIO, DadosCRLV, Dominio, carregarDominio, traduzirCrlv,
@@ -419,6 +419,13 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                         <div className="flex flex-col">
                             <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Grupo</label>
                             <Seletor valor={form.grupoVeiculo} onChange={v => setCampo('grupoVeiculo', v)} lista={listaDe('grupo')} className={classeNormal} />
+                            {form.grupoVeiculo === GRUPO_FROTA_PROPRIA && (
+                                <p className="text-[10px] font-medium text-amber-700 mt-1">
+                                    Frota própria pode exigir vínculo com equipamento de manutenção no
+                                    Datamex, e o cadastro pode ser recusado. Se der erro, cadastre este
+                                    veículo manualmente lá.
+                                </p>
+                            )}
                         </div>
                         {([
                             { k: 'modelo' as const, label: 'Modelo' },
