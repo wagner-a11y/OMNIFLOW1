@@ -132,16 +132,35 @@ Deno.serve(async (req: Request) => {
       }, 400);
     }
 
-    // ---- 3. Proprietário: existe e está no grupo de proprietários? ----
+    // ---- 3. Proprietário existe? ----
+    // Metade da frota é de empresa, e o código de pessoa é uma sequência SÓ:
+    // a Omnicargo é a 1 e o Wagner é a 6, na mesma numeração. Por isso procurar
+    // apenas em pessoas físicas rejeitava TODO veículo de PJ como inexistente —
+    // inclusive os da própria Omnicargo ("Não achei a pessoa 1 no Datamex").
+    // A doc confirma que `proprietarioId` é "um id de pessoa", sem distinção de
+    // tipo, então o POST não precisa saber qual é qual; só a checagem precisa
+    // olhar as duas bases antes de desistir.
     const proprietarioId = String(p.proprietarioId ?? "").trim();
     if (!proprietarioId) return json({ error: "Selecione o proprietário do veículo." }, 400);
 
-    const pessoa = await chamar(`/pessoas/v1/pessoas/fisicas/${encodeURIComponent(proprietarioId)}`);
-    if (pessoa.status === 404 || !pessoa.corpo) {
-      return json({ error: `Não achei a pessoa ${proprietarioId} no Datamex.` }, 400);
-    }
-    if (pessoa.status >= 400) {
-      return json({ error: mensagemDoBsoft(pessoa.corpo, pessoa.texto, pessoa.status) }, 400);
+    const achouEm = async (base: "fisicas" | "juridicas") => {
+      const r = await chamar(`/pessoas/v1/pessoas/${base}/${encodeURIComponent(proprietarioId)}`);
+      if (r.status === 404) return { achou: false as const };
+      if (r.status >= 400) return { achou: false as const, erro: mensagemDoBsoft(r.corpo, r.texto, r.status) };
+      return { achou: !!r.corpo };
+    };
+
+    const comoFisica = await achouEm("fisicas");
+    // Só vai à segunda base quando a primeira não achou — o caso comum (PF)
+    // continua com uma chamada só.
+    const comoJuridica = comoFisica.achou ? { achou: false as const } : await achouEm("juridicas");
+
+    if (!comoFisica.achou && !comoJuridica.achou) {
+      const erroApi = comoFisica.erro ?? comoJuridica.erro;
+      return json({
+        error: erroApi
+          ?? `Não achei a pessoa ${proprietarioId} no Datamex, nem como pessoa física nem como empresa.`,
+      }, 400);
     }
 
     // ---- 4. Anti-duplicação: placa E chassi, antes de qualquer escrita ----
