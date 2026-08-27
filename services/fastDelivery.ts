@@ -365,6 +365,30 @@ export const CLIENTE_SUZANO_FAST = '1785874539063';
 /** Solicitante fixo, em todas as cotações da operação. */
 export const SOLICITANTE_FIXO = 'Operação Fast Delivery';
 
+/** Mercadoria fixa da operação. Valor que já existe no histórico de cotações. */
+export const MERCADORIA_FIXA = 'Papel e derivados diversos';
+
+/**
+ * CONFIG AJUSTÁVEL — de-para do veículo do Fast Delivery para o vocabulário da
+ * CALCULADORA (vehicle_configs). São listas diferentes: a tabela de preço fala
+ * "TRUCK", a calculadora grava "truck"; "VAN" vira "Van". Sem esta ponte a
+ * cotação nasce com um tipo que a calculadora não reconhece e o campo aparece
+ * vazio na tela.
+ *
+ * CARRETA é o único ambíguo: a calculadora tem "Carreta Simples", "carreta ls",
+ * "Carreta 4º eixo" e "vanderleia", e a tabela de preço tem uma CARRETA só, com
+ * um preço só. Fica em "Carreta Simples" por ser a leitura neutra — se a
+ * operação for majoritariamente LS, é esta linha que muda.
+ */
+export const VEICULO_CALCULADORA: Record<string, string> = {
+    FIORINO: 'Fiorino',
+    VAN: 'Van',
+    '3/4': '3/4',
+    TOCO: 'toco',
+    TRUCK: 'truck',
+    CARRETA: 'Carreta Simples',
+};
+
 /**
  * Status com que a cotação nasce. 'pending' de propósito: são fretes vindos do
  * OTM que ainda não passaram pelo fechamento do OmniFlow, e nascer como 'won'
@@ -446,8 +470,11 @@ export async function criarCotacoesFastDelivery(
             cliente_nome_operacao: l.cliente || null,
             origin: ORIGEM_FIXA,
             destination: `${l.cidadeOriginal}${l.uf ? `/${l.uf}` : ''}`,
-            vehicle_type: l.tipoVeiculo ?? '',
+            // A calculadora usa outro vocabulário; sem a ponte o campo fica vazio
+            // na tela de cotação.
+            vehicle_type: (l.tipoVeiculo && VEICULO_CALCULADORA[l.tipoVeiculo]) || l.tipoVeiculo || '',
             veiculo_tipo_operacao: l.tipoVeiculo ?? null,
+            merchandise_type: MERCADORIA_FIXA,
             coleta_date: l.dataColeta,
             peso_carga_operacao: l.peso,
             // Só o volume na observação — peso já tem campo próprio, e motorista

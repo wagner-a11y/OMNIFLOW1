@@ -63,6 +63,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
     const [erroGravacao, setErroGravacao] = useState<string | null>(null);
     const [ramper, setRamper] = useState<Record<string, EstadoEnvio>>({});
     const [pipefy, setPipefy] = useState<Record<string, EstadoEnvio>>({});
+    const [criandoUma, setCriandoUma] = useState<Record<string, boolean>>({});
 
     const { pendentes, prontas } = useMemo(() => ({
         pendentes: (linhas ?? []).filter(l => l.pendencias.length),
@@ -185,10 +186,30 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
         );
     };
 
+    /** Lança UMA linha. Mesma função do lote, com uma linha só. */
+    const criarUma = async (l: LinhaPrevia) => {
+        setCriandoUma(p => ({ ...p, [l.referencia]: true }));
+        try {
+            const r = await criarCotacoesFastDelivery([l], autor);
+            setResultados(p => [...(p ?? []).filter(x => x.dt !== l.referencia), ...r]);
+            if (r.some(x => x.ok && !x.jaExistia)) await aoGravar?.();
+        } finally {
+            setCriandoUma(p => ({ ...p, [l.referencia]: false }));
+        }
+    };
+
     /** O que aconteceu com esta DT depois de gravar, e os envios. */
     const ColunaCotacao: React.FC<{ l: LinhaPrevia }> = ({ l }) => {
         const r = resultados?.find(x => x.dt === l.referencia);
-        if (!r) return <span className="text-[#9ca3af]">—</span>;
+        if (!r) {
+            return (
+                <button type="button" disabled={!!criandoUma[l.referencia]}
+                    onClick={() => criarUma(l)}
+                    className="text-[10px] font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] px-2.5 py-1.5 rounded transition-colors">
+                    {criandoUma[l.referencia] ? 'criando…' : 'Criar cotação'}
+                </button>
+            );
+        }
         if (!r.ok) return <span className="text-red-600 font-medium">falhou: {r.erro}</span>;
         if (r.jaExistia) {
             return (
@@ -233,7 +254,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
                         {l.margemPercent === null ? '' : `${l.margemPercent.toFixed(1)}%`}
                     </span>
                 </td>
-                {resultados && <td className="px-3 py-2 text-xs">{<ColunaCotacao l={l} />}</td>}
+                <td className="px-3 py-2 text-xs">{pendente ? <span className="text-[#9ca3af]">—</span> : <ColunaCotacao l={l} />}</td>
             </tr>
         );
     };
@@ -250,7 +271,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
                 <th className="px-3 py-2 text-right font-medium">Recebido</th>
                 <th className="px-3 py-2 text-right font-medium">A pagar</th>
                 <th className="px-3 py-2 text-right font-medium">Margem</th>
-                {resultados && <th className="px-3 py-2 text-left font-medium">Cotação</th>}
+                <th className="px-3 py-2 text-left font-medium">Cotação</th>
             </tr>
         </thead>
     );
