@@ -11,6 +11,20 @@ import { CarteiraBoard } from './components/CarteiraBoard';
 import { RegistroContatoBoard } from './components/RegistroContatoBoard';
 import { PainelCobrancaBoard } from './components/PainelCobrancaBoard';
 import { NegociacoesBoard } from './components/NegociacoesBoard';
+import { montarMenu, AcaoMenu, ItemMenu } from './menuLateral';
+
+// Ícones da barra lateral, por id. Ficam aqui porque menuLateral.ts não conhece
+// React — é o que permite testar a trava de papel rodando o módulo no node.
+const ICONES_MENU: Record<string, any> = {
+    comercial: TrendingUp, operacional: Activity, cadastros: IdCard, config: Settings,
+    prospeccao: Target, new: PlusCircle, dashboard: BarChart3, history: History,
+    'acoes-comercial': Layers, 'contato-diario': UserCheck, 'cd-cobranca': PieChart,
+    'cd-registro': FileText, negocios: Activity, 'painel-tv': Tv,
+    tracking: Activity, 'fast-delivery': Zap,
+    'cadastro-motorista': IdCard, 'cadastro-veiculo': Truck, 'cadastro-conjunto': Link2,
+    emergencia: AlertTriangle, 'config-sistema': Wrench, 'trocar-senha': Lock,
+    trash: Trash2,
+};
 
 // Interruptor do submenu "Ações do Comercial". REVELADO (true) — visível pro time.
 // A trava por papel é mantida: operador vê só "Contato Diário · Registrar";
@@ -210,7 +224,9 @@ const App: React.FC = () => {
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
     const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery'>('dashboard');
-    const [acoesAbertas, setAcoesAbertas] = useState(true); // submenu "Ações do Comercial" aberto/fechado
+    // Seções da barra lateral. Mapa vazio = TODAS recolhidas, que é como a tela nasce.
+    // A mesma chave serve pro subgrupo "Ações do Comercial" dentro de Comercial.
+    const [secoesAbertas, setSecoesAbertas] = useState<Record<string, boolean>>({});
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -2451,110 +2467,116 @@ Disponibilidade: ${disponibilidade}`;
                     </div>
                     <h1 className="text-lg font-medium tracking-tight leading-none text-[#111827]">Omni<span className="text-[#1d6fb8]">Flow</span></h1>
                 </div>
-                <nav className="flex-1 px-3 space-y-1 mt-2">
-                    {[
-                        { id: 'dashboard', icon: BarChart3, label: 'Dashboard', adminOnly: true },
-                        { id: 'new', icon: PlusCircle, label: 'Nova Cotação' },
-                        { id: 'history', icon: History, label: 'Histórico' },
-                        { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
-                        // Cadastro Rápido (Fase 2): visível a todos os usuários logados.
-                        { id: 'cadastro-motorista', icon: IdCard, label: 'Cadastro Rápido' },
-                        // Cadastro de veículo (3A/3B) e de conjunto (3C), via CRLV.
-                        { id: 'cadastro-veiculo', icon: Truck, label: 'Cadastro Veículo' },
-                        { id: 'cadastro-conjunto', icon: Link2, label: 'Cadastro Conjunto' },
-                        // Fast Delivery: lança as cargas do Excel do OTM.
-                        { id: 'fast-delivery', icon: Zap, label: 'Fast Delivery' },
-                        { id: 'prospeccao', icon: Target, label: 'Meu CRM', adminOnly: true },
-                        // Contato Diário migrou pro submenu "Ações do Comercial" (abaixo).
-                        { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
-                        // CRM ocultado: comercial migrou pro Ramper. Código/dados preservados.
-                        // Reversível: basta descomentar a linha abaixo pra reativar o item de menu.
-                        // { id: 'crm', icon: List, label: 'CRM' },
-                    ].filter(item => !item.adminOnly || currentUser.role === 'master').map(item => (
-                        <button key={item.id} onClick={() => { setActiveTab(item.id as any); if (item.id !== 'history' && item.id !== 'dashboard') resetForm(); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeTab === item.id ? 'bg-[#eff6ff] text-[#1d6fb8]' : 'text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827]'}`}>
-                            <item.icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                            <span className="font-medium text-sm">{item.label}</span>
-                        </button>
-                    ))}
+                {/* ------------------------------------------------------------------
+                    Barra lateral em SEÇÕES recolhíveis.
 
-                    {/* Submenu "Ações do Comercial" — OCULTO por padrão (MOSTRAR_ACOES_COMERCIAL=false).
-                        Só reorganiza/renomeia itens; a trava por papel é preservada: os 3 de gestão
-                        (master) e o Registrar (analista). Reversível: flip do interruptor pra revelar. */}
-                    {MOSTRAR_ACOES_COMERCIAL && (() => {
-                        const filhos = [
-                            { id: 'contato-diario', icon: UserCheck, label: 'Minha Carteira', master: true },
-                            { id: 'cd-cobranca', icon: PieChart, label: 'Contato Diário · Análise', master: true },
-                            { id: 'cd-registro', icon: FileText, label: 'Contato Diário · Registrar', master: false },
-                            // Acompanhamento de Negociações: transparência de time (todos veem), nasce OCULTO.
-                            ...(MOSTRAR_NEGOCIACOES ? [{ id: 'negocios', icon: Activity, label: 'Acompanhamento de Negociações', master: false }] : []),
-                        ].filter(f => !f.master || currentUser.role === 'master');
-                        if (!filhos.length) return null;
-                        return (
-                            <div>
-                                <button onClick={() => setAcoesAbertas(v => !v)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
-                                    <Layers className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                                    <span className="font-medium text-sm flex-1 text-left">Ações do Comercial</span>
-                                    <ChevronDown className={`w-4 h-4 transition-transform ${acoesAbertas ? '' : '-rotate-90'}`} strokeWidth={1.75} />
+                    Quem monta a lista (e aplica a trava de papel) é montarMenu(), em
+                    menuLateral.ts — aqui só se desenha o que ela devolveu. Não existe
+                    filtro de permissão neste JSX: se um item chegou, é porque pode.
+
+                    Seções nascem RECOLHIDAS. Quando a tela aberta está dentro de uma
+                    seção fechada, o título ganha um ponto azul — sem isso a pessoa não
+                    tem como achar onde está.
+                   ------------------------------------------------------------------ */}
+                <nav className="flex-1 px-3 space-y-1 mt-2 pb-4 overflow-y-auto">
+                    {(() => {
+                        const { secoes, soltos } = montarMenu({
+                            master: currentUser.role === 'master',
+                            painelTvToken,
+                            emergenciaLigada,
+                            mostrarAcoesComercial: MOSTRAR_ACOES_COMERCIAL,
+                            mostrarNegociacoes: MOSTRAR_NEGOCIACOES,
+                        });
+
+                        const irPara = (id: string) => {
+                            setActiveTab(id as any);
+                            if (id !== 'history' && id !== 'dashboard') resetForm();
+                        };
+                        const alternar = (id: string) => setSecoesAbertas(s => ({ ...s, [id]: !s[id] }));
+                        const executar = (acao: AcaoMenu) => {
+                            if (acao === 'emergencia') setShowEmergenciaModal(true);
+                            else if (acao === 'config-sistema') setShowConfigModal(true);
+                            else { setNewPassword(''); setShowChangePassword(true); }
+                        };
+
+                        const Botao = (it: ItemMenu, nivel: 1 | 2) => {
+                            const Icone = ICONES_MENU[it.id] ?? Layers;
+                            const ativo = activeTab === it.id;
+                            const tamanho = nivel === 1 ? 'py-2.5 text-sm' : 'py-2 text-[13px]';
+                            const icone = nivel === 1 ? 'w-[18px] h-[18px]' : 'w-4 h-4';
+                            const cor = it.destaque
+                                ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                                : ativo
+                                    ? 'bg-[#eff6ff] text-[#1d6fb8]'
+                                    : 'text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827]';
+                            const classe = `w-full flex items-center gap-3 px-3 ${tamanho} rounded-lg transition-colors ${cor}`;
+                            const miolo = (
+                                <>
+                                    <Icone className={icone} strokeWidth={1.75} />
+                                    <span className="font-medium flex-1 text-left">{it.label}</span>
+                                    {it.destaque && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />}
+                                </>
+                            );
+                            if (it.href) {
+                                return <a key={it.id} href={it.href} target="_blank" rel="noopener noreferrer" className={classe}>{miolo}</a>;
+                            }
+                            return (
+                                <button key={it.id} onClick={() => (it.acao ? executar(it.acao) : irPara(it.id))} className={classe}>
+                                    {miolo}
                                 </button>
-                                {acoesAbertas && (
-                                    <div className="ml-4 pl-2 border-l border-[#e5e7eb] space-y-1 mt-1">
-                                        {filhos.map(f => (
-                                            <button key={f.id} onClick={() => { setActiveTab(f.id as any); resetForm(); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === f.id ? 'bg-[#eff6ff] text-[#1d6fb8]' : 'text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827]'}`}>
-                                                <f.icon className="w-4 h-4" strokeWidth={1.75} />
-                                                <span className="font-medium text-[13px]">{f.label}</span>
+                            );
+                        };
+
+                        return (
+                            <>
+                                {secoes.map(sec => {
+                                    const Icone = ICONES_MENU[sec.id] ?? Layers;
+                                    const aberta = !!secoesAbertas[sec.id];
+                                    const contemAtivo = sec.itens.some(it => it.id === activeTab || it.filhos?.some(f => f.id === activeTab));
+                                    return (
+                                        <div key={sec.id}>
+                                            <button onClick={() => alternar(sec.id)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
+                                                <Icone className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                                                <span className="font-semibold text-sm flex-1 text-left">{sec.titulo}</span>
+                                                {!aberta && contemAtivo && <span className="w-1.5 h-1.5 rounded-full bg-[#1d6fb8] shrink-0" />}
+                                                <ChevronDown className={`w-4 h-4 transition-transform ${aberta ? '' : '-rotate-90'}`} strokeWidth={1.75} />
                                             </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                                            {aberta && (
+                                                <div className="ml-4 pl-2 border-l border-[#e5e7eb] space-y-1 mt-1 mb-1">
+                                                    {sec.itens.map(it => {
+                                                        if (!it.filhos) return Botao(it, 2);
+                                                        const Sub = ICONES_MENU[it.id] ?? Layers;
+                                                        const sub = !!secoesAbertas[it.id];
+                                                        return (
+                                                            <div key={it.id}>
+                                                                <button onClick={() => alternar(it.id)} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
+                                                                    <Sub className="w-4 h-4" strokeWidth={1.75} />
+                                                                    <span className="font-medium text-[13px] flex-1 text-left">{it.label}</span>
+                                                                    {!sub && it.filhos.some(f => f.id === activeTab) && <span className="w-1.5 h-1.5 rounded-full bg-[#1d6fb8] shrink-0" />}
+                                                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sub ? '' : '-rotate-90'}`} strokeWidth={1.75} />
+                                                                </button>
+                                                                {sub && (
+                                                                    <div className="ml-3 pl-2 border-l border-[#e5e7eb] space-y-1 mt-1">
+                                                                        {it.filhos.map(f => Botao(f, 2))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                {soltos.map(it => Botao(it, 1))}
+                            </>
                         );
                     })()}
-
-                    {/* Painel TV: abre o painel público em nova aba. Token vem do banco
-                        (RLS só p/ logado), nunca do bundle. Visível só p/ master, como o Dashboard. */}
-                    {currentUser.role === 'master' && painelTvToken && (
-                        <a
-                            href={`https://omniflow-1-gamma.vercel.app/painel-tv?k=${painelTvToken}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors"
-                        >
-                            <Tv className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                            <span className="font-medium text-sm">Painel TV</span>
-                        </a>
-                    )}
                 </nav>
+                {/* Rodapé: só quem está logado e a saída. Modo emergência, Configurações
+                    do sistema e Trocar senha subiram para a seção "Configurações" da nav,
+                    todos com a mesma trava de master que já tinham aqui. */}
                 <div className="p-3 mt-auto space-y-1 border-t border-[#e5e7eb]">
-                    {/* Chave de emergência: só master. Fica aqui por ser lugar fixo e de
-                        um clique — é para usar com o Qualp fora do ar. O modal de
-                        confirmação protege contra acionamento acidental, e a RLS
-                        protege contra quem não é master chamar a API direto. */}
-                    {currentUser.role === 'master' && (
-                        <button
-                            onClick={() => setShowEmergenciaModal(true)}
-                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${emergenciaLigada
-                                ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
-                                : 'text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827]'}`}
-                        >
-                            <AlertTriangle className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                            <span className="font-medium text-sm flex-1 text-left">
-                                {emergenciaLigada ? 'Emergência LIGADA' : 'Modo emergência'}
-                            </span>
-                            {emergenciaLigada && (
-                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                            )}
-                        </button>
-                    )}
-                    {currentUser.role === 'master' && (
-                        <button onClick={() => setShowConfigModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
-                            <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                            <span className="font-medium text-sm">Configurações</span>
-                        </button>
-                    )}
-                    <button onClick={() => { setNewPassword(''); setShowChangePassword(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#6b7280] hover:bg-[#f9fafb] hover:text-[#111827] transition-colors">
-                        <Lock className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                        <span className="font-medium text-sm">Trocar senha</span>
-                    </button>
                     <div className="flex items-center gap-3 px-3 py-2">
                         <div className="w-8 h-8 rounded-full bg-[#1d6fb8] flex items-center justify-center font-medium text-xs text-white">{currentUser.name.charAt(0)}</div>
                         <div className="flex-1 min-w-0"><p className="text-sm font-medium text-[#111827] truncate">{currentUser.name}</p></div>
@@ -2569,12 +2591,12 @@ Disponibilidade: ${disponibilidade}`;
                         {editingId ? 'Editando Registro' :
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
                                 activeTab === 'crm' ? 'CRM' :
-                                    activeTab === 'tracking' ? 'Acompanhamento de Cargas' :
+                                    activeTab === 'tracking' ? 'Acompanhamento PPFY' :
                                         activeTab === 'prospeccao' ? 'Prospecção · Mini CRM' :
                                         activeTab === 'contato-diario' ? 'Contato Diário · Carteira' :
                                         activeTab === 'trash' ? 'Lixeira' :
-                                        activeTab === 'cadastro-motorista' ? 'Cadastro Rápido · Motorista' :
-                                        activeTab === 'cadastro-veiculo' ? 'Cadastro Rápido · Veículo' :
+                                        activeTab === 'cadastro-motorista' ? 'Cadastro Pessoa' :
+                                        activeTab === 'cadastro-veiculo' ? 'Cadastro Veículo' :
                                         activeTab === 'cadastro-conjunto' ? 'Cadastro de Conjunto' :
                                         activeTab === 'fast-delivery' ? 'Fast Delivery · Prévia' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
@@ -2632,15 +2654,19 @@ Disponibilidade: ${disponibilidade}`;
                         <ProspeccaoBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} />
                     )}
 
-                    {activeTab === 'contato-diario' && currentUser.role === 'master' && (
-                        <CarteiraBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} />
+                    {/* Minha Carteira: todos VEEM, só master EDITA. A tela recebe a trava
+                        em vez de sumir — quem não é master abre em modo leitura. */}
+                    {activeTab === 'contato-diario' && (
+                        <CarteiraBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} somenteLeitura={currentUser.role !== 'master'} />
                     )}
 
                     {activeTab === 'cd-registro' && (
                         <RegistroContatoBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} />
                     )}
 
-                    {activeTab === 'cd-cobranca' && currentUser.role === 'master' && (
+                    {/* Contato Diário · Análise: tela de consulta, não grava nada. Aberta
+                        a todos sem precisar de modo leitura — não há o que travar. */}
+                    {activeTab === 'cd-cobranca' && (
                         <PainelCobrancaBoard currentUser={{ id: currentUser.id, name: currentUser.name }} onFeedback={showFeedback} />
                     )}
 

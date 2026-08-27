@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Users, Plus, X, Trash2, RefreshCw, Check, Link2, Building2 } from 'lucide-react';
+import { Users, Plus, X, Trash2, RefreshCw, Check, Link2, Building2, Eye } from 'lucide-react';
 import {
     SolicitanteCotacao, CdSolicitante, Analista, CdAtribuicao, ClienteRef,
     getSolicitantesCotacao, getCdSolicitantes, createCdSolicitante, updateCdSolicitante, deleteCdSolicitante,
@@ -9,10 +9,18 @@ import {
 interface Props {
     currentUser: { id?: string; name?: string };
     onFeedback?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+    /**
+     * Modo consulta: a tela inteira aparece, mas nada que GRAVA fica acionável.
+     * Quem não é master vê a carteira montada e não a altera.
+     *
+     * É trava de tela, para não oferecer um botão que vai falhar; quem protege
+     * o dado é a RLS do banco, que continua valendo com ou sem isto.
+     */
+    somenteLeitura?: boolean;
 }
 
-export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
-    const [aba, setAba] = useState<'solicitantes' | 'carteira' | 'clientes'>('solicitantes');
+export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback, somenteLeitura }) => {
+    const [aba, setAba] = useState<'solicitantes' | 'carteira' | 'clientes'>(somenteLeitura ? 'carteira' : 'solicitantes');
     const [loading, setLoading] = useState(true);
     const [raw, setRaw] = useState<SolicitanteCotacao[]>([]);
     const [canon, setCanon] = useState<CdSolicitante[]>([]);
@@ -45,6 +53,7 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
         return set.size === 1 ? Array.from(set)[0] : null;
     };
     const associarCliente = async (c: CdSolicitante, clienteId: string) => {
+        if (somenteLeitura) return;
         if (await updateCdSolicitante(c.id, { clienteId: clienteId || null })) { onFeedback?.(clienteId ? 'Cliente vinculado.' : 'Vínculo removido.', 'success'); await carregar(); }
         else onFeedback?.('Erro ao vincular cliente.', 'error');
     };
@@ -58,6 +67,7 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
     const toggle = (nome: string) => setSel(s => { const n = new Set(s); n.has(nome) ? n.delete(nome) : n.add(nome); return n; });
 
     const criarCanon = async () => {
+        if (somenteLeitura) return;
         const aliases = Array.from(sel);
         if (!aliases.length) return;
         const nome = (nomeCanon || aliases.sort((a, b) => b.length - a.length)[0]).trim();
@@ -68,15 +78,18 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
     };
 
     const removerCanon = async (c: CdSolicitante) => {
+        if (somenteLeitura) return;
         if (!confirm(`Remover o solicitante canônico "${c.nomeCanonico}" do cadastro? (não apaga cotações)`)) return;
         if (await deleteCdSolicitante(c.id)) { onFeedback?.('Solicitante removido do cadastro.', 'info'); await carregar(); }
     };
 
     const tirarAlias = async (c: CdSolicitante, alias: string) => {
+        if (somenteLeitura) return;
         if (await updateCdSolicitante(c.id, { aliases: c.aliases.filter(a => a !== alias) })) await carregar();
     };
 
     const atribuir = async (solId: string, analistaId: string) => {
+        if (somenteLeitura) return;
         if (!analistaId) {
             const a = atrib.find(x => x.solicitanteId === solId);
             if (a && await removeCdAtribuicao(a.id)) { onFeedback?.('Removido da carteira.', 'info'); await carregar(); }
@@ -94,8 +107,18 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
                 <button onClick={carregar} title="Recarregar" className="ml-auto p-2 text-[#6b7280] hover:bg-[#f9fafb] rounded-lg"><RefreshCw className="w-4 h-4" /></button>
             </div>
 
+            {somenteLeitura && (
+                <div className="flex items-center gap-2 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg px-3 py-2">
+                    <Eye className="w-4 h-4 text-[#6b7280] shrink-0" />
+                    <p className="text-[12px] text-[#6b7280]">
+                        Modo consulta — quem monta a carteira é o gestor. Você enxerga os solicitantes
+                        da sua carteira; os das carteiras dos colegas não aparecem.
+                    </p>
+                </div>
+            )}
+
             <div className="flex gap-2">
-                {(['solicitantes', 'carteira', 'clientes'] as const).map(t => (
+                {(somenteLeitura ? (['carteira', 'clientes'] as const) : (['solicitantes', 'carteira', 'clientes'] as const)).map(t => (
                     <button key={t} onClick={() => setAba(t)} className={`px-4 py-2 rounded-lg text-sm font-medium ${aba === t ? 'bg-[#1d6fb8] text-white' : 'bg-white border border-[#e5e7eb] text-[#6b7280] hover:bg-[#f9fafb]'}`}>
                         {t === 'solicitantes' ? '1. Cadastro de solicitantes' : t === 'carteira' ? '2. Montar carteira' : '3. Por cliente'}
                     </button>
@@ -110,8 +133,8 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
                         <p className="text-[11px] text-[#6b7280] mb-3">Marque as variações da MESMA pessoa (ex.: os três "Alyson") e agrupe num cadastro único.</p>
                         <div className="space-y-1 max-h-[46vh] overflow-y-auto pr-1">
                             {naoMapeados.map(r => (
-                                <label key={r.nome} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#f9fafb] cursor-pointer">
-                                    <input type="checkbox" checked={sel.has(r.nome)} onChange={() => toggle(r.nome)} />
+                                <label key={r.nome} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#f9fafb] ${somenteLeitura ? '' : 'cursor-pointer'}`}>
+                                    <input type="checkbox" checked={sel.has(r.nome)} onChange={() => toggle(r.nome)} disabled={somenteLeitura} />
                                     <span className="text-sm text-[#111827] flex-1">{r.nome}</span>
                                     {r.pipefyId && <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">pipefy</span>}
                                     <span className="text-[10px] text-[#9ca3af]">{r.cotacoes} cot.</span>
@@ -119,7 +142,7 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
                             ))}
                             {naoMapeados.length === 0 && <p className="text-xs text-[#9ca3af]">Todas as variações já foram cadastradas.</p>}
                         </div>
-                        {sel.size > 0 && (
+                        {sel.size > 0 && !somenteLeitura && (
                             <div className="mt-3 border-t border-[#e5e7eb] pt-3 space-y-2">
                                 <p className="text-[11px] text-[#6b7280]">{sel.size} variação(ões) selecionada(s) → vão virar 1 pessoa:</p>
                                 <input className="inp" placeholder="Nome canônico (oficial)" value={nomeCanon} onChange={e => setNomeCanon(e.target.value)} />
@@ -137,23 +160,23 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
                                     <div className="flex items-center gap-2">
                                         <span className="font-medium text-sm text-[#111827] flex-1">{c.nomeCanonico}</span>
                                         {c.pipefyId && <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">pipefy</span>}
-                                        <button onClick={() => removerCanon(c)} className="p-1 text-[#9ca3af] hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                                        {!somenteLeitura && <button onClick={() => removerCanon(c)} className="p-1 text-[#9ca3af] hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>}
                                     </div>
                                     <div className="flex flex-wrap gap-1 mt-1.5">
                                         {c.aliases.map(a => (
                                             <span key={a} className="text-[10px] bg-[#f3f4f6] text-[#6b7280] px-1.5 py-0.5 rounded flex items-center gap-1">
-                                                {a}{a !== c.nomeCanonico && <button onClick={() => tirarAlias(c, a)} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>}
+                                                {a}{a !== c.nomeCanonico && !somenteLeitura && <button onClick={() => tirarAlias(c, a)} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>}
                                             </span>
                                         ))}
                                     </div>
                                     {/* Vínculo com o cliente (dropdown do cadastro que já existe) + palpite */}
                                     <div className="flex items-center gap-2 mt-2">
                                         <Building2 className="w-3.5 h-3.5 text-[#9ca3af] shrink-0" />
-                                        <select value={c.clienteId || ''} onChange={e => associarCliente(c, e.target.value)} className="inp" style={{ flex: 1 }}>
+                                        <select value={c.clienteId || ''} onChange={e => associarCliente(c, e.target.value)} className="inp" style={{ flex: 1 }} disabled={somenteLeitura}>
                                             <option value="">— sem cliente —</option>
                                             {clientes.map(cl => <option key={cl.id} value={cl.id}>{cl.nome}</option>)}
                                         </select>
-                                        {!c.clienteId && sugestaoCliente(c) && (
+                                        {!c.clienteId && !somenteLeitura && sugestaoCliente(c) && (
                                             <button onClick={() => associarCliente(c, sugestaoCliente(c)!)} title="Aplicar palpite do histórico de cotações" className="text-[10px] whitespace-nowrap text-[#1d6fb8] hover:underline shrink-0">palpite: {nomeCliente(sugestaoCliente(c))} ✓</button>
                                         )}
                                     </div>
@@ -165,8 +188,10 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
                 </div>
             ) : aba === 'carteira' ? (
                 <div className="bg-white border border-[#e5e7eb] rounded-xl p-4">
-                    <h3 className="text-sm font-semibold text-[#111827] mb-1">Montar carteira ({canon.length} solicitantes)</h3>
-                    <p className="text-[11px] text-[#6b7280] mb-3">Atribua cada solicitante canônico a um analista. O analista só verá a própria carteira.</p>
+                    <h3 className="text-sm font-semibold text-[#111827] mb-1">{somenteLeitura ? 'Carteira' : 'Montar carteira'} ({canon.length} solicitantes)</h3>
+                    <p className="text-[11px] text-[#6b7280] mb-3">{somenteLeitura
+                        ? 'Solicitantes da sua carteira e o analista responsável por cada um.'
+                        : 'Atribua cada solicitante canônico a um analista. O analista só verá a própria carteira.'}</p>
                     {canon.length === 0 ? <p className="text-xs text-[#9ca3af]">Cadastre solicitantes na aba 1 primeiro.</p> : (
                         <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
                             {canon.map(c => {
@@ -175,7 +200,7 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback }) => {
                                     <div key={c.id} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#f9fafb]">
                                         <span className="text-sm text-[#111827] flex-1">{c.nomeCanonico}</span>
                                         {aId && <Check className="w-4 h-4 text-emerald-500" />}
-                                        <select value={aId} onChange={e => atribuir(c.id, e.target.value)} className="inp" style={{ width: 220 }}>
+                                        <select value={aId} onChange={e => atribuir(c.id, e.target.value)} className="inp" style={{ width: 220 }} disabled={somenteLeitura}>
                                             <option value="">— sem carteira —</option>
                                             {analistas.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
                                         </select>
