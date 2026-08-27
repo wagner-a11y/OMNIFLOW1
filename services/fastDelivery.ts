@@ -369,6 +369,12 @@ export const SOLICITANTE_FIXO = 'Operação Fast Delivery';
 export const MERCADORIA_FIXA = 'Papel e derivados diversos';
 
 /**
+ * Implemento fixo: no Fast Delivery é sempre baú. "Baú" é a grafia canônica —
+ * 569 cotações usam assim, contra um punhado de "BAU"/"Bau" soltos.
+ */
+export const CARROCERIA_FIXA = 'Baú';
+
+/**
  * Id do registro "Operação Fast Delivery" na tabela Solicitantes DO PIPEFY.
  *
  * Os campos "Cliente" e "Solicitante da Carga" do card são CONEXÕES: eles se
@@ -388,11 +394,23 @@ export const SOLICITANTE_PIPEFY_ID = '1425645566';
  */
 export const ANTECIPACAO_COLETA_MS = 60 * 60 * 1000;
 
+/**
+ * Devolve "AAAA-MM-DDTHH:mm" — hora LOCAL, sem fuso.
+ *
+ * Não é firula de formato, são dois erros de uma vez:
+ *  1. o campo "Coleta" da tela é <input type="datetime-local">, que RECUSA
+ *     valor com fuso ("...+00:00") e aparece vazio — foi o que aconteceu;
+ *  2. toISOString() converte para UTC, então 00:30 em Brasília virava 03:30 e
+ *     a coleta ficava três horas adiantada no banco.
+ * É também o formato que a cotação normal grava, vindo do mesmo input.
+ */
 export function coletaAjustada(iso: string | null): string | null {
     if (!iso) return null;
     const d = new Date(iso);
     if (!Number.isFinite(d.getTime())) return null;
-    return new Date(d.getTime() - ANTECIPACAO_COLETA_MS).toISOString();
+    const m = new Date(d.getTime() - ANTECIPACAO_COLETA_MS);
+    const z = (n: number) => String(n).padStart(2, '0');
+    return `${m.getFullYear()}-${z(m.getMonth() + 1)}-${z(m.getDate())}T${z(m.getHours())}:${z(m.getMinutes())}`;
 }
 
 /**
@@ -517,6 +535,7 @@ export async function criarCotacoesFastDelivery(
             vehicle_type: (l.tipoVeiculo && VEICULO_CALCULADORA[l.tipoVeiculo]) || l.tipoVeiculo || '',
             veiculo_tipo_operacao: l.tipoVeiculo ?? null,
             merchandise_type: MERCADORIA_FIXA,
+            carroceria_tipo_operacao: CARROCERIA_FIXA,
             // Uma hora antes do OTM, por decisão da operação.
             coleta_date: coletaAjustada(l.dataColeta),
             peso_carga_operacao: l.peso,

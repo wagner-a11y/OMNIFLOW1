@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle, FileUp, Info, Loader2, Send, Zap } from 'lucide-react';
 import {
     ApoioFastDelivery, LinhaPrevia, ORIGEM_FIXA, ResultadoCotacao, SOLICITANTE_FIXO,
-    MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID, carregarApoio, clientePipefyId, coletaAjustada,
+    CARROCERIA_FIXA, MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID, carregarApoio, clientePipefyId, coletaAjustada,
     corDaMargem, criarCotacoesFastDelivery, lerExcelOtm,
 } from '../services/fastDelivery';
 import { createPipefyCard } from '../services/pipefy';
@@ -159,6 +159,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
             peso: l.peso ?? undefined,
             veiculo: l.tipoVeiculo ?? undefined,
             mercadoria: MERCADORIA_FIXA,
+            implemento: CARROCERIA_FIXA,
             // Mesma antecipação de uma hora que foi gravada na cotação.
             dataColeta: coletaAjustada(l.dataColeta) ?? undefined,
             localEntrega: l.cliente || undefined,

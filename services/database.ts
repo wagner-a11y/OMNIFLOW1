@@ -345,7 +345,12 @@ const mapFreightRow = (item: any): FreightCalculation => ({
         lostObs: item.lost_obs,
         lostFileUrl: item.lost_file_url,
         otherCosts: item.other_costs || [],
-        coletaDate: item.coleta_date,
+        // O timestamptz volta como "2026-08-27T23:30:00+00:00", e o
+        // <input type="datetime-local"> da tela de informações RECUSA valor com
+        // fuso — o campo aparecia vazio ao reabrir qualquer cotação salva.
+        // Cortar em 16 caracteres devolve "2026-08-27T23:30", que é o formato
+        // que o próprio input grava de volta: a ida e a volta batem.
+        coletaDate: item.coleta_date ? String(item.coleta_date).slice(0, 16) : item.coleta_date,
         entregaDate: item.entrega_date,
         dataFechamento: item.data_fechamento || undefined,
         clienteNomeOperacao: item.cliente_nome_operacao,
