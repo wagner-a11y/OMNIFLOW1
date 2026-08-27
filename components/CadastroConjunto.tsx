@@ -9,6 +9,10 @@ import {
     daIaParaFormulario, fiscaisDaCnh, formatarCelular, registrarLog,
 } from '../services/cadastroMotorista';
 import { buscarCep, formatarCep } from '../services/cep';
+// ANDAIME (modo de teste) — remover antes do merge definitivo.
+import {
+    DadosTestePeca, ENDERECO_TESTE, MODO_TESTE_DISPONIVEL, gerarConjuntoTeste,
+} from '../utils/modoTeste';
 import {
     CATEGORIAS_COM_IMPLEMENTO, IMPLEMENTOS_VISIVEIS, PassoResultado,
     VinculoAtual, consultarVinculos, descreverProprietario, gravarConjunto,
@@ -61,6 +65,11 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
     const [buscandoVinculos, setBuscandoVinculos] = useState(false);
     const [removerAnteriores, setRemoverAnteriores] = useState(false);
     const [confirmouRemocao, setConfirmouRemocao] = useState(false);
+
+    // ANDAIME (modo de teste). REMOVER ANTES DO MERGE.
+    const [testeCavalo, setTesteCavalo] = useState<DadosTestePeca | null>(null);
+    const [testeCarreta, setTesteCarreta] = useState<DadosTestePeca | null>(null);
+    const [emTeste, setEmTeste] = useState(false);
 
     const [confirmando, setConfirmando] = useState(false);
     const [gravando, setGravando] = useState(false);
@@ -139,6 +148,49 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
         } finally { setBuscandoVinculos(false); }
     };
 
+    /**
+     * ANDAIME: preenche o conjunto inteiro com dados fictícios coerentes, para
+     * exercitar a cascata sem CNH nem CRLV. Cada clique gera CPF, placas e
+     * chassis novos — senão a segunda rodada bateria na anti-duplicação e o
+     * teste nunca chegaria na vinculação. REMOVER ANTES DO MERGE.
+     */
+    const preencherTeste = async () => {
+        const d = gerarConjuntoTeste();
+        setEmTeste(true);
+        setTemMotorista(true);
+        setCnh({
+            ...CNH_VAZIA,
+            nome: d.nome, sobrenome: d.sobrenome, cpf: d.cpf,
+            sexo: 'M', data_nascimento: '1985-01-01',
+            rg: '1234567890', orgao_expedidor_rg: 'SSP', uf_rg: 'SP',
+            nome_mae: 'MARIA TESTE', nome_pai: 'JOSE TESTE',
+            registro_cnh: `1${d.cpf.slice(0, 10)}`, codigo_seguranca: `2${d.cpf.slice(0, 10)}`,
+            protocolo: `SP${d.cpf.slice(0, 9)}`, categoria: 'AE', orgao_expedidor_cnh: 'DETRAN-SP',
+            data_validade: '2031-01-01', data_expedicao: '2021-01-01',
+            data_primeira_habilitacao: '2010-01-01', data_validade_toxicologico: '2027-01-01',
+        });
+        setFiscais({
+            ...FISCAIS_PADRAO,
+            naturalidade: 'Taubaté', uf_naturalidade: 'SP',
+            celular: '(12) 99876-5432',
+            // Motorista é o dono do cavalo — o caso que travava antes da correção.
+            proprietario: true, rntrc: '99887766',
+        });
+        setEndereco(prev => ({ ...prev, ...ENDERECO_TESTE, logradouro: '', bairro: '' }));
+        setQuerSegundoImplemento(false);
+        setTesteCavalo(d.cavalo);
+        setTesteCarreta(d.carreta);
+        // O CEP é real: deixa a busca do ViaCEP preencher rua, bairro e município.
+        try {
+            const a = await buscarCep(ENDERECO_TESTE.cep);
+            setEndereco(prev => ({
+                ...prev, cep: a.cep, logradouro: a.logradouro, bairro: a.bairro,
+                cidade: String(a.municipio.codigo), municipioNome: a.municipio.nome,
+                estado: a.municipio.uf, municipioRotulo: a.municipio.rotulo,
+            }));
+        } catch { /* sem rede: o operador preenche */ }
+    };
+
     // ---- O que ainda falta ----
     const faltaMotorista = temMotorista
         ? [
@@ -204,6 +256,36 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                     </p>
                 </div>
             </div>
+
+            {/* ANDAIME — modo de teste. Só existe fora de produção. REMOVER ANTES DO MERGE. */}
+            {MODO_TESTE_DISPONIVEL && (
+                <div className={`px-6 py-4 rounded-xl border-2 border-dashed ${emTeste
+                    ? 'bg-purple-50 border-purple-400' : 'bg-[#f9fafb] border-[#d1d5db]'}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-bold uppercase text-purple-800 tracking-wide">
+                                Modo de teste · só no preview
+                            </p>
+                            <p className="text-xs font-medium text-[#6b7280] mt-1 max-w-2xl">
+                                Preenche motorista, cavalo e carreta com dados fictícios para testar a
+                                cascata sem CNH nem CRLV. <strong>A gravação é real</strong> — o que for
+                                gravado entra no Datamex e precisa ser apagado depois.
+                            </p>
+                        </div>
+                        <button type="button" onClick={preencherTeste}
+                            className="px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-purple-700 hover:bg-purple-800 transition-colors shrink-0">
+                            Preencher com dados de teste
+                        </button>
+                    </div>
+                    {emTeste && (
+                        <p className="text-xs font-semibold text-purple-800 mt-3">
+                            Preenchido. Cavalo {testeCavalo?.placa} (dono: o motorista) + carreta{' '}
+                            {testeCarreta?.placa} (dono: ALUTRANS, que já existe). Confira e grave.
+                            Clique de novo para gerar outro conjunto com placas e CPF novos.
+                        </p>
+                    )}
+                </div>
+            )}
 
             {/* ---- 1. MOTORISTA ---- */}
             <div className="bg-white border border-[#e5e7eb] rounded-xl p-6 space-y-5">
@@ -378,6 +460,7 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                 motoristaEhDono={motoristaEhDono}
                 nomeMotorista={nomeMotorista}
                 assumirMotorista={motoristaEhDono}
+                dadosTeste={testeCavalo}
                 onChange={setPrincipal}
             />
 
@@ -393,7 +476,8 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                     </div>
 
                     <BlocoVeiculoCRLV titulo="3 · Implemento 1 (carreta / central)" opcional
-                        motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista} onChange={setImpl1} />
+                        motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista}
+                        dadosTeste={testeCarreta} onChange={setImpl1} />
 
                     {!querSegundoImplemento && IMPLEMENTOS_VISIVEIS > 1 && (
                         <button type="button" onClick={() => setQuerSegundoImplemento(true)}

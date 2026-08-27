@@ -14,6 +14,7 @@ import {
     CRLV_VAZIO, DadosCRLV, Dominio, carregarDominio, traduzirCrlv,
 } from '../services/traducaoVeiculo';
 import { RefProprietario } from '../services/conjunto';
+import { DadosTestePeca } from '../utils/modoTeste';   // ANDAIME: remover antes do merge
 
 // ============================================================================
 // BlocoVeiculoCRLV — uma peça do conjunto: um CRLV + o proprietário dela.
@@ -52,13 +53,20 @@ interface Props {
     nomeMotorista?: string;
     /** Peça principal já nasce apontando para o motorista, quando ele é o dono. */
     assumirMotorista?: boolean;
+    /**
+     * ANDAIME (modo de teste): preenche a peça sem CRLV. Muda de identidade a
+     * cada clique do botão, e é isso que dispara o preenchimento.
+     * REMOVER ANTES DO MERGE.
+     */
+    dadosTeste?: DadosTestePeca | null;
     onChange: (e: EstadoPeca) => void;
 }
 
 const soDigitos = (s: string) => (s || '').replace(/\D/g, '');
 
 const BlocoVeiculoCRLV: React.FC<Props> = ({
-    titulo, subtitulo, opcional, motoristaEhDono, nomeMotorista, assumirMotorista, onChange,
+    titulo, subtitulo, opcional, motoristaEhDono, nomeMotorista, assumirMotorista,
+    dadosTeste, onChange,
 }) => {
     const [dominio, setDominio] = useState<Dominio>([]);
     const { lista: municipios } = useMunicipios();
@@ -86,6 +94,33 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
     const [pjNova, setPjNova] = useState<{ razaoSocial: string; nomeFantasia: string; rntrc: string; enquadramento: string } | null>(null);
 
     useEffect(() => { carregarDominio().then(setDominio).catch(() => setDominio([])); }, []);
+
+    // ANDAIME (modo de teste): preenche os campos como se o CRLV tivesse sido
+    // lido, inclusive marcando os críticos como conferidos — o que se quer
+    // exercitar aqui é a CASCATA, não a trava de conferência, que já foi
+    // provada. REMOVER ANTES DO MERGE.
+    useEffect(() => {
+        if (!dadosTeste) return;
+        setForm(prev => ({
+            ...prev,
+            descricao: dadosTeste.descricao, modelo: dadosTeste.modelo,
+            placa: dadosTeste.placa, chassi: dadosTeste.chassi, renavam: dadosTeste.renavam,
+            anoModelo: dadosTeste.anoModelo, anoFabricacao: dadosTeste.anoFabricacao,
+            cor: dadosTeste.cor, categoriaVeiculo: dadosTeste.categoriaVeiculo,
+            marcaVeiculo: dadosTeste.marcaVeiculo, tipoRodado: dadosTeste.tipoRodado,
+            tipoCarroceria: dadosTeste.tipoCarroceria, capM3: dadosTeste.capM3,
+            tara: dadosTeste.tara, capacidadeCarga: dadosTeste.capacidadeCarga,
+            quantidadeEixos: dadosTeste.quantidadeEixos,
+            cidade: '3554102', estado: 'SP',
+        }));
+        setConferidos(new Set(CAMPOS_CRITICOS));
+        setLeu(true);
+        if (dadosTeste.documentoProprietario) {
+            setDocProp(dadosTeste.documentoProprietario);
+            setRef(null); setProprietario(null); setPjNova(null); setQuerTrocarDono(true);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dadosTeste]);
 
     // O pai ligou/desligou "motorista é o dono" e esta peça ainda não teve o
     // dono escolhido à mão: acompanha, sem sobrescrever decisão do operador.
