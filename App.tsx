@@ -59,6 +59,7 @@ import MunicipioAutocomplete, { useMunicipios } from './components/MunicipioAuto
 import CadastroMotorista from './components/CadastroMotorista';
 import CadastroVeiculo from './components/CadastroVeiculo';
 import CadastroConjunto from './components/CadastroConjunto';
+import FastDelivery from './components/FastDelivery';
 import { normalizar, resolverMunicipio } from './utils/municipios';
 import { definirEmergencia, lerEmergencia, EstadoEmergencia } from './services/emergencia';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
@@ -208,7 +209,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-veiculo' | 'cadastro-conjunto'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery'>('dashboard');
     const [acoesAbertas, setAcoesAbertas] = useState(true); // submenu "Ações do Comercial" aberto/fechado
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
@@ -2458,10 +2459,11 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
                         // Cadastro Rápido (Fase 2): visível a todos os usuários logados.
                         { id: 'cadastro-motorista', icon: IdCard, label: 'Cadastro Rápido' },
-                        // Fase 3A (veículo): ainda em validação, só existe na branch.
+                        // Cadastro de veículo (3A/3B) e de conjunto (3C), via CRLV.
                         { id: 'cadastro-veiculo', icon: Truck, label: 'Cadastro Veículo' },
-                        // Fase 3C: conjunto (motorista + cavalo + carretas) numa tela só.
                         { id: 'cadastro-conjunto', icon: Link2, label: 'Cadastro Conjunto' },
+                        // Fast Delivery: lança as cargas do Excel do OTM.
+                        { id: 'fast-delivery', icon: Zap, label: 'Fast Delivery' },
                         { id: 'prospeccao', icon: Target, label: 'Meu CRM', adminOnly: true },
                         // Contato Diário migrou pro submenu "Ações do Comercial" (abaixo).
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
@@ -2574,6 +2576,7 @@ Disponibilidade: ${disponibilidade}`;
                                         activeTab === 'cadastro-motorista' ? 'Cadastro Rápido · Motorista' :
                                         activeTab === 'cadastro-veiculo' ? 'Cadastro Rápido · Veículo' :
                                         activeTab === 'cadastro-conjunto' ? 'Cadastro de Conjunto' :
+                                        activeTab === 'fast-delivery' ? 'Fast Delivery · Prévia' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
@@ -2608,6 +2611,17 @@ Disponibilidade: ${disponibilidade}`;
 
                     {activeTab === 'cadastro-veiculo' && (
                         <CadastroVeiculo autor={{ id: currentUser.id, name: currentUser.name }} />
+                    )}
+
+                    {activeTab === 'fast-delivery' && (
+                        <FastDelivery
+                            marginThreshold={marginThreshold}
+                            autor={{ id: currentUser.id, name: currentUser.name }}
+                            // A tela grava direto no banco; sem isto a lista de
+                            // cotações só mostraria o lote novo depois de recarregar
+                            // a página, e parecia que nada tinha sido criado.
+                            aoGravar={async () => setHistory(await getFreightCalculations())}
+                        />
                     )}
 
                     {activeTab === 'cadastro-motorista' && (

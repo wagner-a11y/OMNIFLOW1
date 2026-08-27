@@ -112,6 +112,13 @@ export interface FreightCalculation {
     // valor final digitado e a engine resolvida ao contrário para achar o
     // motorista. Vazio = modo Calcular (custos -> valor final).
     tipoPrecificacao?: 'tabelado';
+    /**
+     * Operação de origem. Vazio = cotação normal. 'FAST_DELIVERY' = lançada pelo
+     * Excel do OTM. Precisa existir aqui para SOBREVIVER ao ciclo de leitura e
+     * gravação — sem isso a cotação perde o marcador ao ser reaberta e salva, e
+     * a anti-duplicação por DT deixa de enxergá-la.
+     */
+    operacao?: string;
     isEdited?: boolean;
     createdBy?: string;       // autor da CRIAÇÃO (gravado uma vez, nunca sobrescrito)
     createdByName?: string;
