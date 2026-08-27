@@ -57,6 +57,7 @@ import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
 import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor } from './utils/antt';
 import MunicipioAutocomplete, { useMunicipios } from './components/MunicipioAutocomplete';
 import CadastroMotorista from './components/CadastroMotorista';
+import FastDelivery from './components/FastDelivery';
 import { normalizar, resolverMunicipio } from './utils/municipios';
 import { definirEmergencia, lerEmergencia, EstadoEmergencia } from './services/emergencia';
 import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
@@ -206,7 +207,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'fast-delivery'>('dashboard');
     const [acoesAbertas, setAcoesAbertas] = useState(true); // submenu "Ações do Comercial" aberto/fechado
     const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
@@ -2456,6 +2457,8 @@ Disponibilidade: ${disponibilidade}`;
                         { id: 'tracking', icon: Activity, label: 'Acompanhamento' },
                         // Cadastro Rápido (Fase 2): visível a todos os usuários logados.
                         { id: 'cadastro-motorista', icon: IdCard, label: 'Cadastro Rápido' },
+                        // Fast Delivery (Bloco 2): só prévia, nada é gravado ainda.
+                        { id: 'fast-delivery', icon: Zap, label: 'Fast Delivery' },
                         { id: 'prospeccao', icon: Target, label: 'Meu CRM', adminOnly: true },
                         // Contato Diário migrou pro submenu "Ações do Comercial" (abaixo).
                         { id: 'trash', icon: Trash2, label: 'Lixeira', adminOnly: true },
@@ -2566,6 +2569,7 @@ Disponibilidade: ${disponibilidade}`;
                                         activeTab === 'contato-diario' ? 'Contato Diário · Carteira' :
                                         activeTab === 'trash' ? 'Lixeira' :
                                         activeTab === 'cadastro-motorista' ? 'Cadastro Rápido · Motorista' :
+                                        activeTab === 'fast-delivery' ? 'Fast Delivery · Prévia' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
@@ -2594,6 +2598,10 @@ Disponibilidade: ${disponibilidade}`;
 
                     {/* Cadastro Rápido — Motorista (Fase 2). Isolado: não toca em cotação,
                         faturamento nem Pipefy. Visível a todos os usuários logados. */}
+                    {activeTab === 'fast-delivery' && (
+                        <FastDelivery marginThreshold={marginThreshold} />
+                    )}
+
                     {activeTab === 'cadastro-motorista' && (
                         <CadastroMotorista autor={{ id: currentUser.id, name: currentUser.name }} />
                     )}
