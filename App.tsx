@@ -2599,7 +2599,7 @@ Disponibilidade: ${disponibilidade}`;
                     {/* Cadastro Rápido — Motorista (Fase 2). Isolado: não toca em cotação,
                         faturamento nem Pipefy. Visível a todos os usuários logados. */}
                     {activeTab === 'fast-delivery' && (
-                        <FastDelivery marginThreshold={marginThreshold} />
+                        <FastDelivery marginThreshold={marginThreshold} autor={{ id: currentUser.id, name: currentUser.name }} />
                     )}
 
                     {activeTab === 'cadastro-motorista' && (

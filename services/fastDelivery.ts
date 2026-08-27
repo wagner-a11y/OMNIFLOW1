@@ -348,3 +348,137 @@ export function corDaMargem(percent: number | null, limiar: number): 'verde' | '
     if (percent > 0) return 'ambar';
     return 'vermelho';
 }
+
+// ============================================================================
+// GRAVAÇÃO (Bloco 3)
+//
+// Reusa a tabela de cotação que já existe (freight_calculations), marcada com
+// operacao='FAST_DELIVERY'. Nada de estrutura paralela.
+// ============================================================================
+
+/** Marcador da operação. É por ele que a anti-duplicação por DT se orienta. */
+export const OPERACAO = 'FAST_DELIVERY';
+
+/** Cliente fixo da operação — existe no OmniFlow, nunca é criado aqui. */
+export const CLIENTE_SUZANO_FAST = '1785874539063';
+
+/** Solicitante fixo, em todas as cotações da operação. */
+export const SOLICITANTE_FIXO = 'Operação Fast Delivery';
+
+/**
+ * Status com que a cotação nasce. 'pending' de propósito: são fretes vindos do
+ * OTM que ainda não passaram pelo fechamento do OmniFlow, e nascer como 'won'
+ * inflaria o painel de ganhos sem ninguém ter decidido isso.
+ */
+export const STATUS_INICIAL = 'pending';
+
+/** DTs desta operação que já viraram cotação. Consulta em bloco, não uma a uma. */
+export async function dtsJaLancadas(dts: string[]): Promise<Map<string, string>> {
+    const jaTem = new Map<string, string>();
+    if (!dts.length) return jaTem;
+    const { data, error } = await supabase
+        .from('freight_calculations')
+        .select('id, client_reference, proposal_number')
+        .eq('operacao', OPERACAO)
+        .in('client_reference', dts);
+    if (error) throw new Error(`Não consegui checar as DTs já lançadas: ${error.message}`);
+    for (const r of data ?? []) {
+        if (r.client_reference) jaTem.set(String(r.client_reference), String(r.proposal_number ?? r.id));
+    }
+    return jaTem;
+}
+
+/** Próximo número de proposta, no formato CT-AAAA-NNNN que o projeto já usa. */
+async function proximoNumeroBase(): Promise<number> {
+    const { data } = await supabase
+        .from('freight_calculations')
+        .select('proposal_number')
+        .like('proposal_number', 'CT-%')
+        .order('proposal_number', { ascending: false })
+        .limit(1);
+    const ultimo = data?.[0]?.proposal_number as string | undefined;
+    const n = ultimo ? Number(String(ultimo).split('-')[2]) : 0;
+    return Number.isFinite(n) ? n : 0;
+}
+
+export interface ResultadoCotacao {
+    dt: string;
+    ok: boolean;
+    id?: string;
+    proposta?: string;
+    jaExistia?: boolean;
+    erro?: string;
+}
+
+/**
+ * Cria as cotações em lote. Uma por vez, de propósito: assim uma falha isolada
+ * não derruba o resto e o relato diz exatamente qual entrou e qual não.
+ * NÃO reverte o que já entrou — sem delete seguro, desfazer às cegas seria pior.
+ */
+export async function criarCotacoesFastDelivery(
+    linhas: LinhaPrevia[],
+    autor: { id?: string; name?: string },
+): Promise<ResultadoCotacao[]> {
+    const prontas = linhas.filter(l => !l.pendencias.length);
+    const jaTem = await dtsJaLancadas(prontas.map(l => l.referencia));
+    let seq = await proximoNumeroBase();
+    const ano = new Date().getFullYear();
+    const resultados: ResultadoCotacao[] = [];
+
+    for (const l of prontas) {
+        // Anti-duplicação por DT: a mesma planilha reenviada não relança nada.
+        const existente = jaTem.get(l.referencia);
+        if (existente) {
+            resultados.push({ dt: l.referencia, ok: true, jaExistia: true, proposta: existente });
+            continue;
+        }
+
+        seq += 1;
+        const proposta = `CT-${ano}-${String(seq).padStart(4, '0')}`;
+        const id = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+        const linha = {
+            id,
+            proposal_number: proposta,
+            client_reference: l.referencia,
+            customer_id: CLIENTE_SUZANO_FAST,
+            solicitante: SOLICITANTE_FIXO,
+            cliente_nome_operacao: l.cliente || null,
+            origin: ORIGEM_FIXA,
+            destination: `${l.cidadeOriginal}${l.uf ? `/${l.uf}` : ''}`,
+            vehicle_type: l.tipoVeiculo ?? '',
+            veiculo_tipo_operacao: l.tipoVeiculo ?? null,
+            coleta_date: l.dataColeta,
+            peso_carga_operacao: l.peso,
+            // Só o volume na observação — peso já tem campo próprio, e motorista
+            // e placa são ignorados por decisão do Wagner.
+            observacoes_gerais: l.volume !== null ? `Volume: ${l.volume} m³` : null,
+            nosso_frete: l.valorRecebido,
+            frete_terceiro: l.valorAPagar,
+            operacao: OPERACAO,
+            status: STATUS_INICIAL,
+            // Obrigatórios da tabela. O preço aqui é contratado: não há engine de
+            // custo por trás, então imposto e seguro ficam zerados e o total é o
+            // que o OTM paga.
+            distance_km: l.km ?? 0,
+            weight: l.peso ?? 0,
+            base_freight: l.valorAPagar ?? 0,
+            tolls: l.pedagio ?? 0,
+            goods_value: 0,
+            insurance_percent: 0,
+            ad_valorem: 0,
+            profit_margin: l.margemPercent ?? 0,
+            icms_percent: 0, pis_percent: 0, cofins_percent: 0, csll_percent: 0, irpj_percent: 0,
+            total_freight: l.valorRecebido ?? 0,
+            real_profit: l.margem,
+            real_margin_percent: l.margemPercent,
+            created_by: autor.id ?? null,
+            created_by_name: autor.name ?? null,
+        };
+
+        const { error } = await supabase.from('freight_calculations').insert([linha]);
+        if (error) resultados.push({ dt: l.referencia, ok: false, erro: error.message });
+        else resultados.push({ dt: l.referencia, ok: true, id, proposta });
+    }
+    return resultados;
+}
