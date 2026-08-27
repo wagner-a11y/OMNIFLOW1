@@ -216,6 +216,10 @@ export interface LinhaPrevia {
     margemPercent: number | null;
     /** Vazio = linha pronta. Com item = precisa de gente antes de virar cotação. */
     pendencias: Array<{ motivo: MotivoPendencia; texto: string }>;
+    /** Número da proposta, quando esta DT já virou cotação antes. */
+    jaLancada?: string | null;
+    /** A MESMA DT apareceu antes NESTE arquivo. Só a primeira ocorrência vale. */
+    repetidaNoArquivo?: boolean;
 }
 
 function pegar(linha: Record<string, unknown>, mapa: Record<string, string>, campo: string): unknown {
@@ -476,6 +480,30 @@ export async function dtsJaLancadas(dts: string[]): Promise<Map<string, string>>
     return jaTem;
 }
 
+/**
+ * Marca cada linha com o que já se sabe sobre a DT dela, ANTES de gravar:
+ * se já virou cotação antes, e se repete outra linha do mesmo arquivo.
+ *
+ * Roda no upload, e não só na hora de gravar, porque descobrir que metade do
+ * lote já estava lançada DEPOIS de mandar criar é tarde: o operador precisa ver
+ * isso enquanto ainda está decidindo.
+ */
+export async function marcarJaLancadas(linhas: LinhaPrevia[]): Promise<LinhaPrevia[]> {
+    const dts = linhas.map(l => l.referencia).filter(Boolean);
+    const jaTem = await dtsJaLancadas(dts);
+    const vistas = new Set<string>();
+    return linhas.map((l) => {
+        // Repetida = a segunda em diante. A primeira segue lançável.
+        const repetida = !!l.referencia && vistas.has(l.referencia);
+        if (l.referencia) vistas.add(l.referencia);
+        return {
+            ...l,
+            jaLancada: (l.referencia && jaTem.get(l.referencia)) || null,
+            repetidaNoArquivo: repetida,
+        };
+    });
+}
+
 /** Próximo número de proposta, no formato CT-AAAA-NNNN que o projeto já usa. */
 async function proximoNumeroBase(): Promise<number> {
     const { data } = await supabase
@@ -588,8 +616,15 @@ export async function criarCotacoesFastDelivery(
         };
 
         const { error } = await supabase.from('freight_calculations').insert([linha]);
-        if (error) resultados.push({ dt: l.referencia, ok: false, erro: error.message });
-        else resultados.push({ dt: l.referencia, ok: true, id, proposta });
+        if (error) {
+            resultados.push({ dt: l.referencia, ok: false, erro: error.message });
+        } else {
+            // Registra a DT como lançada JÁ, dentro do laço. Sem isto, a mesma DT
+            // repetida no mesmo arquivo criava duas cotações: a segunda consultava
+            // um mapa montado antes da primeira existir.
+            jaTem.set(l.referencia, proposta);
+            resultados.push({ dt: l.referencia, ok: true, id, proposta });
+        }
     }
     return resultados;
 }

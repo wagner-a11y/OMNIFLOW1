@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle, FileUp, Info, Loader2, Send, Zap } from 'lu
 import {
     ApoioFastDelivery, LinhaPrevia, ORIGEM_FIXA, ResultadoCotacao, SOLICITANTE_FIXO,
     CARROCERIA_FIXA, MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID, carregarApoio, clientePipefyId, coletaAjustada,
-    corDaMargem, criarCotacoesFastDelivery, lerExcelOtm,
+    corDaMargem, criarCotacoesFastDelivery, lerExcelOtm, marcarJaLancadas,
 } from '../services/fastDelivery';
 import { createPipefyCard } from '../services/pipefy';
 import { createRamperCard } from '../services/ramper';
@@ -65,12 +65,27 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
     const [ramper, setRamper] = useState<Record<string, EstadoEnvio>>({});
     const [pipefy, setPipefy] = useState<Record<string, EstadoEnvio>>({});
     const [criandoUma, setCriandoUma] = useState<Record<string, boolean>>({});
+    /** Filtro da lista. 'novas' e o padrao: e o que o operador quer lancar. */
+    const [filtro, setFiltro] = useState<'todas' | 'novas' | 'lancadas'>('novas');
 
-    const { pendentes, prontas } = useMemo(() => ({
-        pendentes: (linhas ?? []).filter(l => l.pendencias.length),
-        prontas: (linhas ?? []).filter(l => !l.pendencias.length),
-    }), [linhas]);
+    const { pendentes, prontas, lancadas } = useMemo(() => {
+        const todas = linhas ?? [];
+        const semPendencia = todas.filter(l => !l.pendencias.length);
+        // "Já lançada" cobre os dois casos: a DT que virou cotação num lote
+        // anterior, e a que se repete dentro DESTE arquivo.
+        const ehLancada = (l: LinhaPrevia) => !!l.jaLancada || !!l.repetidaNoArquivo;
+        return {
+            pendentes: todas.filter(l => l.pendencias.length),
+            prontas: semPendencia.filter(l => !ehLancada(l)),
+            lancadas: semPendencia.filter(ehLancada),
+        };
+    }, [linhas]);
 
+    /** O que a tabela de baixo mostra, conforme o filtro. */
+    const visiveis = filtro === 'novas' ? prontas : filtro === 'lancadas' ? lancadas : [...prontas, ...lancadas];
+
+    // Totais do que está À VISTA, não do arquivo inteiro: somar linhas já
+    // lançadas contaria de novo dinheiro que já entrou noutro lote.
     const totais = useMemo(() => {
         const r = prontas.reduce((a, l) => ({
             recebido: a.recebido + (l.valorRecebido ?? 0),
@@ -90,7 +105,9 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
             const buffer = await file.arrayBuffer();
             const r = lerExcelOtm(buffer, a);
             if (!r.totalLinhas) { setErro('A planilha não tem linhas de dados.'); return; }
-            setLinhas(r.linhas);
+            // Consulta as DTs já lançadas AQUI, no upload: descobrir isso só na
+            // hora de gravar seria tarde para quem ainda está decidindo.
+            setLinhas(await marcarJaLancadas(r.linhas));
             setColunasFaltando(r.colunasFaltando);
         } catch (err) {
             setErro((err as Error).message);
@@ -211,6 +228,15 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
 
     /** O que aconteceu com esta DT depois de gravar, e os envios. */
     const ColunaCotacao: React.FC<{ l: LinhaPrevia }> = ({ l }) => {
+        // DT já lançada não ganha botão: relançar criaria a segunda cotação da
+        // mesma carga, que é o erro que a operação não pode cometer.
+        if (l.jaLancada || l.repetidaNoArquivo) {
+            return (
+                <span className="text-amber-700 font-medium text-[11px]">
+                    {l.jaLancada ? `já lançada · ${l.jaLancada}` : 'repetida nesta planilha'}
+                </span>
+            );
+        }
         const r = resultados?.find(x => x.dt === l.referencia);
         if (!r) {
             return (
@@ -317,7 +343,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
                 </span>
                 {linhas && (
                     <span className="ml-auto text-xs font-medium text-[#6b7280]">
-                        {linhas.length} linha(s) · {prontas.length} pronta(s) · {pendentes.length} com pendência
+                        {linhas.length} linha(s) · {prontas.length} nova(s) · {lancadas.length} já lançada(s) · {pendentes.length} com pendência
                     </span>
                 )}
             </div>
@@ -378,14 +404,24 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
                 </div>
             )}
 
-            {/* prontas */}
-            {!!prontas.length && (
+            {/* prontas e já lançadas, com filtro */}
+            {!!(prontas.length + lancadas.length) && (
                 <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-[#e5e7eb] flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-sm font-semibold text-[#111827] flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-emerald-600" strokeWidth={1.75} />
-                            {prontas.length} linha(s) prontas
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {([
+                                ['novas', `Novas (${prontas.length})`],
+                                ['lancadas', `Já lançadas (${lancadas.length})`],
+                                ['todas', `Todas (${prontas.length + lancadas.length})`],
+                            ] as Array<['novas' | 'lancadas' | 'todas', string]>).map(([id, rotulo]) => (
+                                <button key={id} type="button" onClick={() => setFiltro(id)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${filtro === id
+                                        ? 'bg-[#1d6fb8] border-[#1d6fb8] text-white'
+                                        : 'bg-white border-[#e5e7eb] text-[#6b7280] hover:bg-[#f9fafb]'}`}>
+                                    {rotulo}
+                                </button>
+                            ))}
+                        </div>
                         <div className="flex flex-wrap gap-5 text-xs">
                             <span className="text-[#6b7280]">Recebido <strong className="text-[#111827]">{brl(totais.recebido)}</strong></span>
                             <span className="text-[#6b7280]">A pagar <strong className="text-[#111827]">{brl(totais.pagar)}</strong></span>
@@ -401,7 +437,17 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
                         <table className="w-full">
                             <Cabecalho />
                             <tbody className="divide-y divide-[#f3f4f6]">
-                                {prontas.map(l => <Linha key={l.linhaExcel} l={l} />)}
+                                {visiveis.length
+                                    ? visiveis.map(l => <Linha key={l.linhaExcel} l={l} />)
+                                    : (
+                                        <tr>
+                                            <td colSpan={10} className="px-6 py-6 text-center text-xs text-[#6b7280]">
+                                                {filtro === 'novas'
+                                                    ? 'Nenhuma linha nova: todas as DTs desta planilha já foram lançadas.'
+                                                    : 'Nenhuma linha neste filtro.'}
+                                            </td>
+                                        </tr>
+                                    )}
                             </tbody>
                         </table>
                     </div>
