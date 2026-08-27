@@ -54,14 +54,44 @@ export const normalizarDestino = (s: string): string =>
         .replace(/\s+/g, ' ')
         .trim();
 
+/**
+ * Normaliza o nome da coluna para comparação, PRESERVANDO o "%".
+ *
+ * O "%" não é decoração: o Excel do OTM tem "Peso" (o peso real, em kg) e
+ * "% Peso" (a ocupação, em porcentagem) lado a lado. Removendo a pontuação,
+ * as duas viravam "PESO" e a segunda sobrescrevia a primeira no mapa — a tela
+ * mostrava 37 kg onde o frete pesava 739,84 kg. Um caractere de diferença
+ * separava o peso do percentual.
+ */
 const normalizarCabecalho = (s: string): string =>
-    (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9%]/g, '');
 
-/** Número vindo de planilha: aceita 1.234,56, R$ e o número puro do XLSX. */
+/**
+ * Número vindo de PLANILHA. Aceita o número puro do XLSX, "1.234,56", "R$ ..."
+ * e valor com unidade colada ("2.056,53 KG").
+ *
+ * O ponto sozinho é ambíguo: em "2.056" é milhar, em "739.84" é decimal. A
+ * regra é a do formato pt-BR — ponto só é separador de milhar quando vem
+ * seguido de exatamente três dígitos. Chutar errado aqui multiplica ou divide
+ * o peso por mil.
+ */
 export function numero(v: unknown): number | null {
     if (v === null || v === undefined || v === '') return null;
     if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-    const t = String(v).replace(/R\$/gi, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+
+    // Fora dígitos, separadores e sinal, o resto é rótulo: "KG", "R$", "un".
+    let t = String(v).replace(/[^0-9.,-]/g, '').trim();
+    if (!t || t === '-') return null;
+
+    const temVirgula = t.includes(',');
+    if (temVirgula) {
+        // pt-BR clássico: ponto é milhar, vírgula é decimal.
+        t = t.replace(/\./g, '').replace(',', '.');
+    } else {
+        // Só pontos: milhar apenas quando cada um é seguido de 3 dígitos.
+        const soMilhar = /^-?\d{1,3}(\.\d{3})+$/.test(t);
+        if (soMilhar) t = t.replace(/\./g, '');
+    }
     const n = Number(t);
     return Number.isFinite(n) ? n : null;
 }
@@ -198,8 +228,14 @@ function pegar(linha: Record<string, unknown>, mapa: Record<string, string>, cam
  * normalizado. Devolve campo -> nome real da coluna no arquivo.
  */
 export function mapearColunas(cabecalhos: string[]): { mapa: Record<string, string>; faltando: string[] } {
+    // A PRIMEIRA coluna com um dado nome vence. Se o arquivo trouxer duas que
+    // normalizem igual, sobrescrever silenciosamente é o que causou o bug do
+    // peso — melhor ficar com a primeira e previsível do que com a última.
     const porNormalizado = new Map<string, string>();
-    for (const c of cabecalhos) porNormalizado.set(normalizarCabecalho(c), c);
+    for (const c of cabecalhos) {
+        const n = normalizarCabecalho(c);
+        if (!porNormalizado.has(n)) porNormalizado.set(n, c);
+    }
 
     const mapa: Record<string, string> = {};
     const faltando: string[] = [];
