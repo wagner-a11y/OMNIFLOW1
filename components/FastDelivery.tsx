@@ -26,13 +26,6 @@ interface Props {
     autor: { id?: string; name?: string };
     /** Recarrega a lista de cotações do App depois do lote. */
     aoGravar?: () => Promise<void> | void;
-    /**
-     * Margem, "a pagar" e totais são informação COMERCIAL: só master vê.
-     * A tela inteira segue aberta a todos — o que muda é o que aparece nela.
-     * O "a pagar" some junto com a margem de propósito: mantê-lo revelaria o
-     * lucro por subtração, já que o recebido fica visível.
-     */
-    ehMaster: boolean;
 }
 
 /** Estado de envio de uma linha já gravada, por destino de integração. */
@@ -56,7 +49,7 @@ const CORES = {
     neutro: 'text-[#9ca3af]',
 } as const;
 
-const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMaster }) => {
+const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => {
     const [apoio, setApoio] = useState<ApoioFastDelivery | null>(null);
     const [linhas, setLinhas] = useState<LinhaPrevia[] | null>(null);
     const [colunasFaltando, setColunasFaltando] = useState<string[]>([]);
@@ -268,25 +261,13 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 <td className="px-3 py-2 text-xs">{l.placa || '—'}</td>
                 <td className="px-3 py-2 text-xs text-right">{l.peso !== null ? `${l.peso} kg` : '—'}</td>
                 <td className="px-3 py-2 text-xs text-right font-medium">{brl(l.valorRecebido)}</td>
-                {ehMaster && <td className="px-3 py-2 text-xs text-right font-medium">{brl(l.valorAPagar)}</td>}
-                {ehMaster && (
-                    <td className={`px-3 py-2 text-xs text-right font-semibold ${cor}`}>
-                        {brl(l.margem)}
-                        <span className="block text-[10px] font-medium">
-                            {l.margemPercent === null ? '' : `${l.margemPercent.toFixed(1)}%`}
-                        </span>
-                    </td>
-                )}
-                {/* Operador não vê número, mas VÊ o alerta: um frete no prejuízo
-                    não pode passar despercebido só porque quem lança não é master. */}
-                {!ehMaster && (
-                    <td className="px-3 py-2 text-xs text-center">
-                        {l.margemPercent === null ? <span className="text-[#9ca3af]">—</span>
-                            : l.margemPercent <= 0
-                                ? <span className="text-red-600 font-semibold">revisar com o gestor</span>
-                                : <span className="text-emerald-600 font-medium">ok</span>}
-                    </td>
-                )}
+                <td className="px-3 py-2 text-xs text-right font-medium">{brl(l.valorAPagar)}</td>
+                <td className={`px-3 py-2 text-xs text-right font-semibold ${cor}`}>
+                    {brl(l.margem)}
+                    <span className="block text-[10px] font-medium">
+                        {l.margemPercent === null ? '' : `${l.margemPercent.toFixed(1)}%`}
+                    </span>
+                </td>
                 <td className="px-3 py-2 text-xs">{pendente ? <span className="text-[#9ca3af]">—</span> : <ColunaCotacao l={l} />}</td>
             </tr>
         );
@@ -302,9 +283,8 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 <th className="px-3 py-2 text-left font-medium">Placa</th>
                 <th className="px-3 py-2 text-right font-medium">Peso</th>
                 <th className="px-3 py-2 text-right font-medium">Recebido</th>
-                {ehMaster && <th className="px-3 py-2 text-right font-medium">A pagar</th>}
-                {ehMaster && <th className="px-3 py-2 text-right font-medium">Margem</th>}
-                {!ehMaster && <th className="px-3 py-2 text-center font-medium">Situação</th>}
+                <th className="px-3 py-2 text-right font-medium">A pagar</th>
+                <th className="px-3 py-2 text-right font-medium">Margem</th>
                 <th className="px-3 py-2 text-left font-medium">Cotação</th>
             </tr>
         </thead>
@@ -408,15 +388,13 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                         </p>
                         <div className="flex flex-wrap gap-5 text-xs">
                             <span className="text-[#6b7280]">Recebido <strong className="text-[#111827]">{brl(totais.recebido)}</strong></span>
-                            {ehMaster && <span className="text-[#6b7280]">A pagar <strong className="text-[#111827]">{brl(totais.pagar)}</strong></span>}
-                            {ehMaster && (
-                                <span className="text-[#6b7280]">
-                                    Margem{' '}
-                                    <strong className={CORES[corDaMargem(totais.percent, marginThreshold)]}>
-                                        {brl(totais.margem)}{totais.percent !== null ? ` (${totais.percent.toFixed(1)}%)` : ''}
-                                    </strong>
-                                </span>
-                            )}
+                            <span className="text-[#6b7280]">A pagar <strong className="text-[#111827]">{brl(totais.pagar)}</strong></span>
+                            <span className="text-[#6b7280]">
+                                Margem{' '}
+                                <strong className={CORES[corDaMargem(totais.percent, marginThreshold)]}>
+                                    {brl(totais.margem)}{totais.percent !== null ? ` (${totais.percent.toFixed(1)}%)` : ''}
+                                </strong>
+                            </span>
                         </div>
                     </div>
                     <div className="overflow-x-auto">
@@ -475,10 +453,8 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                                 ['Cliente', 'Suzano Fast'],
                                 ['Solicitante', SOLICITANTE_FIXO],
                                 ['Total recebido', brl(totais.recebido)],
-                                ...(ehMaster ? [
-                                    ['Total a pagar', brl(totais.pagar)],
-                                    ['Margem', `${brl(totais.margem)}${totais.percent !== null ? ` (${totais.percent.toFixed(1)}%)` : ''}`],
-                                ] as Array<[string, string]> : []),
+                                ['Total a pagar', brl(totais.pagar)],
+                                ['Margem', `${brl(totais.margem)}${totais.percent !== null ? ` (${totais.percent.toFixed(1)}%)` : ''}`],
                             ] as Array<[string, string]>).map(([k, v]) => (
                                 <div key={k} className="flex justify-between gap-4">
                                     <dt className="text-[#6b7280] font-normal">{k}</dt>
@@ -529,9 +505,8 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 <p className="text-[11px] font-normal text-[#9ca3af] flex items-start gap-2">
                     <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" strokeWidth={1.75} />
                     Isto é só prévia — nada foi gravado. A criação das cotações é o próximo passo.
-                    {ehMaster
-                        ? `A margem usa o mesmo limiar da cotação (${marginThreshold}%): verde acima dele, âmbar entre zero e ele, vermelho em zero ou negativo.`
-                        : 'Os valores de custo e margem são visíveis apenas para o gestor.'}
+                    A margem usa o mesmo limiar da cotação ({marginThreshold}%): verde acima dele,
+                    âmbar entre zero e ele, vermelho em zero ou negativo.
                 </p>
             )}
         </div>

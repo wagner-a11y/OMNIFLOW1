@@ -2606,7 +2606,6 @@ Disponibilidade: ${disponibilidade}`;
                             // cotações só mostraria o lote novo depois de recarregar
                             // a página, e parecia que nada tinha sido criado.
                             aoGravar={async () => setHistory(await getFreightCalculations())}
-                            ehMaster={currentUser.role === 'master'}
                         />
                     )}
 
