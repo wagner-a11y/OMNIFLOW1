@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle, FileUp, Info, Loader2, Send, Zap } from 'lucide-react';
 import {
     ApoioFastDelivery, LinhaPrevia, ORIGEM_FIXA, ResultadoCotacao, SOLICITANTE_FIXO,
-    carregarApoio, corDaMargem, criarCotacoesFastDelivery, lerExcelOtm,
+    MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID, carregarApoio, clientePipefyId, coletaAjustada,
+    corDaMargem, criarCotacoesFastDelivery, lerExcelOtm,
 } from '../services/fastDelivery';
 import { createPipefyCard } from '../services/pipefy';
 import { createRamperCard } from '../services/ramper';
@@ -142,21 +143,30 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
         if (!r) return;
         setPipefy(p => ({ ...p, [l.referencia]: { enviando: true } }));
         // Card em fase e campos que JÁ EXISTEM. Nada de estrutura é tocado.
-        // Payload EXATO do PipefyCardPayload que a cotação normal usa — campos e
-        // fase que já existem. Nada de estrutura é criado ou alterado.
+        // Os campos "Cliente" e "Solicitante da Carga" são CONEXÕES: preenchem
+        // pelo ID do registro no Pipefy, não pelo nome. Sem os ids os dois ficam
+        // vazios no card — e o título, que sai do nome do cliente, sai errado
+        // junto. Por isso os dois vão sempre em par: nome e id.
+        const idCliente = await clientePipefyId();
         const res = await createPipefyCard({
-            titulo: `${r.proposta} · ${l.cliente || l.cidadeOriginal}`,
+            // Título = só o nome do cliente. O Wagner filtra pela DT, que já vai
+            // no campo de solicitação — DT e destino no título só poluiriam.
+            titulo: 'Suzano Fast',
             rota: `${ORIGEM_FIXA} > ${l.cidadeOriginal}${l.uf ? `/${l.uf}` : ''}`,
             receita: l.valorRecebido ?? 0,
             freteTerceiro: l.valorAPagar ?? 0,
             valorCarga: 0,
             peso: l.peso ?? undefined,
             veiculo: l.tipoVeiculo ?? undefined,
-            dataColeta: l.dataColeta ?? undefined,
+            mercadoria: MERCADORIA_FIXA,
+            // Mesma antecipação de uma hora que foi gravada na cotação.
+            dataColeta: coletaAjustada(l.dataColeta) ?? undefined,
             localEntrega: l.cliente || undefined,
             referencia: l.referencia,
             cliente: 'Suzano Fast',
+            clienteId: idCliente ?? undefined,
             solicitante: SOLICITANTE_FIXO,
+            solicitanteId: SOLICITANTE_PIPEFY_ID,
             observacoes: l.volume !== null ? `Volume: ${l.volume} m³` : undefined,
         });
         setPipefy(p => ({
@@ -235,7 +245,10 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
         return (
             <tr className={pendente ? 'bg-amber-50/60' : 'hover:bg-[#f9fafb]'}>
                 <td className="px-3 py-2 font-mono text-xs">{l.referencia || '—'}</td>
-                <td className="px-3 py-2 text-xs">{dataCurta(l.dataColeta)}</td>
+                <td className="px-3 py-2 text-xs">
+                    {dataCurta(coletaAjustada(l.dataColeta))}
+                    <span className="block text-[10px] text-[#9ca3af]">OTM {dataCurta(l.dataColeta)}</span>
+                </td>
                 <td className="px-3 py-2 text-xs">
                     {l.cidadeOriginal || '—'}{l.uf ? `/${l.uf}` : ''}
                     <span className="block text-[10px] text-[#9ca3af]">{l.cliente}</span>
@@ -263,7 +276,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
         <thead className="bg-[#f9fafb] text-[10px] uppercase text-[#6b7280]">
             <tr>
                 <th className="px-3 py-2 text-left font-medium">DT</th>
-                <th className="px-3 py-2 text-left font-medium">Coleta</th>
+                <th className="px-3 py-2 text-left font-medium">Coleta (−1h)</th>
                 <th className="px-3 py-2 text-left font-medium">Destino / cliente</th>
                 <th className="px-3 py-2 text-left font-medium">Veículo</th>
                 <th className="px-3 py-2 text-left font-medium">Placa</th>

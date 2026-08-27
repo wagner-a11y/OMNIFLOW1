@@ -369,6 +369,33 @@ export const SOLICITANTE_FIXO = 'Operação Fast Delivery';
 export const MERCADORIA_FIXA = 'Papel e derivados diversos';
 
 /**
+ * Id do registro "Operação Fast Delivery" na tabela Solicitantes DO PIPEFY.
+ *
+ * Os campos "Cliente" e "Solicitante da Carga" do card são CONEXÕES: eles se
+ * preenchem pelo id do registro, não pelo nome. Mandar só o texto deixa os dois
+ * vazios — foi exatamente o que aconteceu. O id do cliente vem da tabela
+ * `customers` (pipefy_client_id), que é a nossa fonte; o do solicitante não tem
+ * onde morar do nosso lado, então fica aqui, confirmado por busca em 27/08/2026.
+ */
+export const SOLICITANTE_PIPEFY_ID = '1425645566';
+
+/**
+ * Coleta gravada UMA HORA ANTES do que o OTM informa, para o veículo se
+ * apresentar com folga. Vale para todas, sem exceção.
+ *
+ * A subtração é feita no instante (milissegundos), então a virada de dia se
+ * resolve sozinha: 00:30 do dia 5 vira 23:30 do dia 4, com a data junto.
+ */
+export const ANTECIPACAO_COLETA_MS = 60 * 60 * 1000;
+
+export function coletaAjustada(iso: string | null): string | null {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return null;
+    return new Date(d.getTime() - ANTECIPACAO_COLETA_MS).toISOString();
+}
+
+/**
  * CONFIG AJUSTÁVEL — de-para do veículo do Fast Delivery para o vocabulário da
  * CALCULADORA (vehicle_configs). São listas diferentes: a tabela de preço fala
  * "TRUCK", a calculadora grava "truck"; "VAN" vira "Van". Sem esta ponte a
@@ -395,6 +422,21 @@ export const VEICULO_CALCULADORA: Record<string, string> = {
  * inflaria o painel de ganhos sem ninguém ter decidido isso.
  */
 export const STATUS_INICIAL = 'pending';
+
+/**
+ * Id do cliente na tabela Clientes do Pipefy. Lido de `customers`, que é onde o
+ * OmniFlow guarda esse vínculo — não fica fixo no código para não descolar do
+ * dia em que o cadastro for reapontado.
+ */
+export async function clientePipefyId(): Promise<string | null> {
+    const { data } = await supabase
+        .from('customers')
+        .select('pipefy_client_id')
+        .eq('id', CLIENTE_SUZANO_FAST)
+        .maybeSingle();
+    const id = data?.pipefy_client_id;
+    return id ? String(id) : null;
+}
 
 /** DTs desta operação que já viraram cotação. Consulta em bloco, não uma a uma. */
 export async function dtsJaLancadas(dts: string[]): Promise<Map<string, string>> {
@@ -475,7 +517,8 @@ export async function criarCotacoesFastDelivery(
             vehicle_type: (l.tipoVeiculo && VEICULO_CALCULADORA[l.tipoVeiculo]) || l.tipoVeiculo || '',
             veiculo_tipo_operacao: l.tipoVeiculo ?? null,
             merchandise_type: MERCADORIA_FIXA,
-            coleta_date: l.dataColeta,
+            // Uma hora antes do OTM, por decisão da operação.
+            coleta_date: coletaAjustada(l.dataColeta),
             peso_carga_operacao: l.peso,
             // Só o volume na observação — peso já tem campo próprio, e motorista
             // e placa são ignorados por decisão do Wagner.
