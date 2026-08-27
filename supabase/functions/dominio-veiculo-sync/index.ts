@@ -60,6 +60,16 @@ const ENDPOINTS = {
   marca: "/transporte/v1/marcaVeiculos",
   categoria: "/transporte/v1/categoriasVeiculos",
   grupo: "/transporte/v1/gruposVeiculos",
+  // Fase 3A: tipoRodado, tipoCarroceria e cor são listas fixas (MDF-e /
+  // Bsoft) semeadas por migration — não há endpoint que as sirva.
+  //
+  // tipoEquipamento NÃO é sincronizado, e não por esquecimento:
+  //   /transporte/v1/tiposEquipamento  -> HTTP 501, não existe
+  //   /manutencao/v1/equipamentos      -> existe, mas devolve os EQUIPAMENTOS
+  //     cadastrados (nomes são placas: "PPR-5G88/ES"), não os TIPOS.
+  // Não existe tabela de domínio de tipo de equipamento nesta API. Medido por
+  // probe em 22/08/2026. O campo é opcional no POST de veículo — a própria doc
+  // diz "somente se a área possuir o projeto manutencao ativo".
 } as const;
 
 type Tipo = keyof typeof ENDPOINTS;

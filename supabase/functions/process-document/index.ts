@@ -49,8 +49,60 @@ Deno.serve(async (req) => {
       {
         "tipo_documento": "CRLV",
         "placa": str, "renavam": str, "chassi": str, "cor": str,
-        "ano_fab": str, "ano_mod": str, "marca": str, "modelo": str
+        "ano_fabricacao": str, "ano_modelo": str,
+        "marca_texto": str, "modelo": str,
+        "especie_texto": str,
+        "tipo_veiculo_inferido": "cavalo"|"carreta"|"truck"|"toco"|"vuc"|"outro",
+        "carroceria_texto": str,
+        "local_texto": str,
+        "proprietario_nome": str, "proprietario_documento": str,
+        "tara": num, "capacidade_carga": num, "eixos": num
       }
+
+      ONDE PROCURAR no CRLV:
+      - "placa", "renavam", "chassi": ficam no alto do documento. O chassi tem
+        17 caracteres. Confira dígito por dígito — são os campos que ninguém
+        consegue corrigir depois sem refazer o cadastro.
+      - "marca_texto": copie EXATAMENTE como está impresso, inclusive a barra
+        e o modelo junto (ex.: "M.BENZ/ATEGO 2426", "VW/24.280 CRM 6X2").
+        Não normalize, não expanda a abreviação: quem traduz é outra etapa.
+      - "modelo": a parte do campo "MARCA / MODELO / VERSÃO" que vem DEPOIS da
+        barra, sem a marca. Em "VW/CONSTELLATION 24.280" o modelo é
+        "CONSTELLATION 24.280"; em "M.BENZ/ATEGO 2426" é "ATEGO 2426". É campo
+        próprio no cadastro e não pode vir vazio nem repetir a marca.
+      - "especie_texto": o campo ESPÉCIE/TIPO (ex.: "CAMINHAO TRATOR",
+        "SEMI-REBOQUE", "CAMINHAO", "CAMIONETA").
+      - "tipo_veiculo_inferido": deduza da espécie e do modelo, usando SÓ um
+        destes valores. Guia: "CAMINHAO TRATOR" -> "cavalo"; "SEMI-REBOQUE" ou
+        "REBOQUE" -> "carreta"; "CAMINHAO" com 3 ou mais eixos -> "truck";
+        "CAMINHAO" de 2 eixos -> "toco"; utilitário/furgão urbano leve ->
+        "vuc". Se não der para decidir com segurança, devolva "outro" — é
+        melhor o operador escolher do que receber um palpite errado.
+      - "carroceria_texto": o tipo de carroceria, quando impresso
+        (ex.: "BAU", "GRANELEIRA", "SIDER", "ABERTA", "PORTA CONTAINER").
+        Nem todo CRLV traz — devolva null se não houver.
+      - "local_texto": o campo "LOCAL", que fica no bloco da DIREITA do CRLV,
+        perto da DATA. É o município e a UF onde o veículo está registrado, e
+        vem numa linha só, sem vírgula: "VITORIA ES", "SAO PAULO SP",
+        "BELO HORIZONTE MG". Copie exatamente como está impresso, com o
+        município e a sigla de 2 letras, sem reescrever nem acentuar.
+      - "proprietario_nome": o nome de quem consta como PROPRIETÁRIO do veículo,
+        rótulo "NOME" ou "PROPRIETÁRIO". Pode ser nome de pessoa ou razão social
+        de empresa ("OMNICARGO TRANSPORTES LTDA"). Copie como está impresso.
+      - "proprietario_documento": o "CPF/CNPJ" que aparece junto do nome do
+        proprietário. Devolva SÓ OS DÍGITOS, sem ponto, barra ou traço — 11
+        dígitos se for CPF, 14 se for CNPJ. Não complete nem corte zeros: a
+        quantidade de dígitos é o que diz se é pessoa física ou jurídica, e
+        errar isso manda o cadastro para o caminho errado. Se não conseguir ler
+        com certeza, devolva null em vez de um número incompleto.
+      - "tara", "capacidade_carga", "eixos": números, sem unidade nem ponto de
+        milhar. Tara e capacidade em QUILOS (o CRLV às vezes traz CMT em
+        toneladas — nesse caso não converta, devolva null e deixe o operador
+        preencher, em vez de arriscar um fator 1000 errado).
+
+      REGRAS DO CRLV:
+      - Todo campo não encontrado é null. Nunca deduza placa, chassi ou renavam.
+      - Não devolva markdown, só o JSON.
 
       ONDE PROCURAR na CNH (os rótulos mudam conforme o modelo/estado):
       - "sexo": rótulo "SEXO", geralmente ao lado da data de nascimento ou da

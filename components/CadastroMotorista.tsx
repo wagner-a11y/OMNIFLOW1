@@ -83,6 +83,7 @@ const CadastroMotorista: React.FC<Props> = ({ autor }) => {
                 logradouro: achado.logradouro || prev.logradouro,
                 bairro: achado.bairro || prev.bairro,
                 cidade: String(achado.municipio.codigo),
+                municipioNome: achado.municipio.nome,
                 estado: achado.municipio.uf,
                 municipioRotulo: achado.municipio.rotulo,
             }));
