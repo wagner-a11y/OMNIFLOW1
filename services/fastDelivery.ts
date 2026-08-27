@@ -460,10 +460,14 @@ export async function clientePipefyId(): Promise<string | null> {
 export async function dtsJaLancadas(dts: string[]): Promise<Map<string, string>> {
     const jaTem = new Map<string, string>();
     if (!dts.length) return jaTem;
+    // Procura pela DT em QUALQUER cotação do cliente da operação, não só nas
+    // marcadas. Uma cotação Fast Delivery que perdeu o marcador (por ter sido
+    // salva pelo fluxo normal) continuaria invisível aqui, e a DT seria lançada
+    // duas vezes — foi o que aconteceu com as DTs 1429723 e 1429725.
     const { data, error } = await supabase
         .from('freight_calculations')
-        .select('id, client_reference, proposal_number')
-        .eq('operacao', OPERACAO)
+        .select('id, client_reference, proposal_number, operacao')
+        .eq('customer_id', CLIENTE_SUZANO_FAST)
         .in('client_reference', dts);
     if (error) throw new Error(`Não consegui checar as DTs já lançadas: ${error.message}`);
     for (const r of data ?? []) {

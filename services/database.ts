@@ -335,6 +335,7 @@ const mapFreightRow = (item: any): FreightCalculation => ({
         elaborationSeconds: item.elaboration_seconds ? Number(item.elaboration_seconds) : undefined,
         origemDados: item.origem_dados || undefined,
         tipoPrecificacao: item.tipo_precificacao || undefined,
+        operacao: item.operacao || undefined,
         isEdited: item.is_edited,
         createdBy: item.created_by,
         createdByName: item.created_by_name,
@@ -504,6 +505,10 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         elaboration_seconds: calc.elaborationSeconds || 0,
         origem_dados: calc.origemDados || null,
         tipo_precificacao: calc.tipoPrecificacao || null,
+        // Só entra quando existe. Escrever `|| null` aqui APAGARIA o marcador de
+        // uma cotação Fast Delivery salva pelo fluxo normal — que foi como duas
+        // DTs acabaram duplicadas, invisíveis para a anti-duplicação.
+        ...(calc.operacao ? { operacao: calc.operacao } : {}),
         other_costs: calc.otherCosts || [],
         coleta_date: calc.coletaDate || null,
         entrega_date: calc.entregaDate || null,
@@ -622,6 +627,10 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         elaboration_seconds: sanitize(calc.elaborationSeconds) || 0,
         origem_dados: calc.origemDados || null,
         tipo_precificacao: calc.tipoPrecificacao || null,
+        // Só entra quando existe. Escrever `|| null` aqui APAGARIA o marcador de
+        // uma cotação Fast Delivery salva pelo fluxo normal — que foi como duas
+        // DTs acabaram duplicadas, invisíveis para a anti-duplicação.
+        ...(calc.operacao ? { operacao: calc.operacao } : {}),
         other_costs: calc.otherCosts || [],
         coleta_date: calc.coletaDate || null,
         entrega_date: calc.entregaDate || null,

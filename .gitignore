@@ -13,3 +13,7 @@ dist-ssr
 
 # Base de prospeccao com dados pessoais — NUNCA commitar (repo publico)
 crm_base_omniflow.json
+
+# Tabela de preco do Fast Delivery: dado comercial (margens por destino).
+# Fica so na maquina de quem carrega, nunca no repositorio.
+*.csv
