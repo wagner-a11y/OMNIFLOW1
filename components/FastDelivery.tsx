@@ -23,6 +23,8 @@ interface Props {
     /** Limiar de margem do system_config — o mesmo que a cotação já usa. */
     marginThreshold: number;
     autor: { id?: string; name?: string };
+    /** Recarrega a lista de cotações do App depois do lote. */
+    aoGravar?: () => Promise<void> | void;
 }
 
 /** Estado de envio de uma linha já gravada, por destino de integração. */
@@ -46,7 +48,7 @@ const CORES = {
     neutro: 'text-[#9ca3af]',
 } as const;
 
-const FastDelivery: React.FC<Props> = ({ marginThreshold, autor }) => {
+const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => {
     const [apoio, setApoio] = useState<ApoioFastDelivery | null>(null);
     const [linhas, setLinhas] = useState<LinhaPrevia[] | null>(null);
     const [colunasFaltando, setColunasFaltando] = useState<string[]>([]);
@@ -99,7 +101,11 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor }) => {
     const gravar = async () => {
         setConfirmando(false); setGravando(true); setErroGravacao(null);
         try {
-            setResultados(await criarCotacoesFastDelivery(prontas, autor));
+            const r = await criarCotacoesFastDelivery(prontas, autor);
+            setResultados(r);
+            // Sem isto, a lista de cotações do OmniFlow continuaria mostrando o
+            // estado anterior e o operador acharia que nada foi criado.
+            if (r.some(x => x.ok && !x.jaExistia)) await aoGravar?.();
         } catch (e) {
             setErroGravacao((e as Error).message);
         } finally {

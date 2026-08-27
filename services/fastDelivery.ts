@@ -457,13 +457,31 @@ export async function criarCotacoesFastDelivery(
             frete_terceiro: l.valorAPagar,
             operacao: OPERACAO,
             status: STATUS_INICIAL,
+            /**
+             * TABELADO — e este campo é o que impede o Qualp.
+             *
+             * A cotação Fast Delivery nasce PRONTA: o valor final é o que o OTM
+             * paga, não algo a calcular. O OmniFlow já tem exatamente esse modo
+             * ('tabelado', frete fechado por contrato) e ele curto-circuita a
+             * consulta de rota — sem ele, abrir a cotação dispara o Qualp e a
+             * engine refaz o preço por cima, mostrando "Frete Final" inflado e
+             * "Desatualizado". Zero token do Qualp é gasto nesta operação.
+             */
+            tipo_precificacao: 'tabelado',
             // Obrigatórios da tabela. O preço aqui é contratado: não há engine de
             // custo por trás, então imposto e seguro ficam zerados e o total é o
             // que o OTM paga.
             distance_km: l.km ?? 0,
             weight: l.peso ?? 0,
             base_freight: l.valorAPagar ?? 0,
-            tolls: l.pedagio ?? 0,
+            /**
+             * ZERO, e não o pedágio da tabela. O `a_pagar` já é o valor cheio
+             * acertado com o terceiro — o pedágio está dentro dele. Lançar o
+             * pedágio à parte contaria duas vezes e quebraria a identidade que
+             * mantém a engine tabelada coerente:
+             *     final × (1 − margem%) = a pagar
+             */
+            tolls: 0,
             goods_value: 0,
             insurance_percent: 0,
             ad_valorem: 0,
