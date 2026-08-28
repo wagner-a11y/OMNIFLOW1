@@ -185,8 +185,10 @@ function grupoAtivo(item: Record<string, unknown>): boolean {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  // Escreve na tabela e consome a API do Bsoft: não pode aceitar anônimo.
-  const porta = conferirPorta(req);
+  // Escreve na tabela e consome a API do Bsoft: manutenção, não cadastro.
+  // permitirLink:false porque o portador do link não tem por que reconstruir o
+  // dicionário — para o fluxo dele basta dominio-veiculo-ler.
+  const porta = conferirPorta(req, { permitirLink: false });
   if (!porta.ok) return json({ error: porta.erro }, porta.status);
 
   if (!BSOFT_API_URL || !BSOFT_API_USER || !BSOFT_API_PASS) {

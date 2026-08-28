@@ -74,8 +74,16 @@ export type Entrada =
  * link simplesmente não existe — nunca vira "deixa passar". Um segredo ausente
  * não pode ser mais permissivo que um segredo presente.
  */
-export function conferirPorta(req: Request): Entrada {
+export function conferirPorta(req: Request, opcoes?: { permitirLink?: boolean }): Entrada {
     if (papelDoJwt(req) === 'authenticated') return { ok: true, via: 'sessao' };
+
+    // Nem toda função guardada faz parte do fluxo do link. Sincronizar o
+    // dicionário com o Bsoft, por exemplo, é operação de manutenção: o link
+    // precisa LER o dicionário, nunca reconstruí-lo. Quanto menos o portador do
+    // link alcança, menos custa um link vazado.
+    if (opcoes?.permitirLink === false) {
+        return { ok: false, status: 401, erro: 'Esta função exige usuário autenticado.' };
+    }
 
     const esperado = Deno.env.get('CADASTRO_EXTERNO_TOKEN') || '';
     const recebido = req.headers.get('x-cadastro-token') || '';
