@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { conferirPorta, HEADER_TOKEN } from "../_shared/porta.ts";
 
 // ============================================================================
 // cadastrar-pessoa-juridica — Fase 3B.
@@ -32,7 +33,7 @@ const BSOFT_API_PASS = Deno.env.get("BSOFT_API_PASS") || "";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform",
+  "Access-Control-Allow-Headers": `authorization, x-client-info, apikey, content-type, x-supabase-client-platform, ${HEADER_TOKEN}`,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -103,6 +104,12 @@ const TIPO_TRANSPORTADORA_PADRAO = TIPO_TRANSPORTADORA.ETC;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Porta de entrada: usuário logado ou token do link de cadastro externo.
+  // A anon key sozinha NÃO passa — ela é pública (vai no bundle) e nunca foi
+  // credencial. Ver supabase/functions/_shared/porta.ts.
+  const porta = conferirPorta(req);
+  if (!porta.ok) return json({ error: porta.erro }, porta.status);
   if (!BSOFT_API_USER || !BSOFT_API_PASS) {
     return json({ error: "Credencial do Bsoft não configurada." }, 500);
   }

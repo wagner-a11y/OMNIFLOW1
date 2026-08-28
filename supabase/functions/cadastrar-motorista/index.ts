@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { conferirPorta, HEADER_TOKEN } from "../_shared/porta.ts";
 
 // ============================================================================
 // cadastrar-motorista — Fase 2 do Cadastro Automático.
@@ -30,7 +31,7 @@ const DATAMEX_SENHA = Deno.env.get("DATAMEX_SENHA") || "";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform",
+  "Access-Control-Allow-Headers": `authorization, x-client-info, apikey, content-type, x-supabase-client-platform, ${HEADER_TOKEN}`,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -128,6 +129,12 @@ function comoLista(payload: unknown): Record<string, unknown>[] {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Porta de entrada: usuário logado ou token do link de cadastro externo.
+  // A anon key sozinha NÃO passa — ela é pública (vai no bundle) e nunca foi
+  // credencial. Ver supabase/functions/_shared/porta.ts.
+  const porta = conferirPorta(req);
+  if (!porta.ok) return json({ error: porta.erro }, porta.status);
 
   const creds = credenciais();
   if (!creds.length) return json({ error: "Nenhuma credencial do Bsoft configurada." }, 500);

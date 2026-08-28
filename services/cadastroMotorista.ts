@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cabecalhoCadastro } from './tokenCadastro';
 
 // ============================================================================
 // Cadastro de motorista no Bsoft — Fase 2.
@@ -234,6 +235,7 @@ export async function cadastrarMotorista(
 ): Promise<ResultadoCadastro> {
     try {
         const { data, error } = await supabase.functions.invoke('cadastrar-motorista', {
+            headers: cabecalhoCadastro(),
             body: {
                 ...dados,
                 ...fiscais,

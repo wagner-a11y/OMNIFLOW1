@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cabecalhoCadastro } from './tokenCadastro';
 
 // ============================================================================
 // Cadastro de veículo no Bsoft — Fase 3A.
@@ -119,7 +120,7 @@ export interface ResultadoVeiculo {
 /** Grava o veículo. A Edge Function revalida tudo do lado do servidor. */
 export async function cadastrarVeiculo(v: VeiculoParaGravar): Promise<ResultadoVeiculo> {
     try {
-        const { data, error } = await supabase.functions.invoke('cadastrar-veiculo', { body: v });
+        const { data, error } = await supabase.functions.invoke('cadastrar-veiculo', { body: v, headers: cabecalhoCadastro() });
         if (error) {
             // invoke só expõe "non-2xx"; o motivo real vem no corpo.
             let msg = error.message;
@@ -140,6 +141,7 @@ export async function cadastrarVeiculo(v: VeiculoParaGravar): Promise<ResultadoV
 export async function buscarProprietario(cpf: string): Promise<{ codPessoa?: string; nome?: string; error?: string }> {
     try {
         const { data, error } = await supabase.functions.invoke('cadastrar-motorista', {
+            headers: cabecalhoCadastro(),
             body: { consultarCpf: cpf },
         });
         if (error) {
@@ -209,7 +211,7 @@ export async function cadastrarPessoaJuridica(dados: {
 /** invoke só expõe "non-2xx"; o motivo real vem no corpo. */
 async function chamarFuncao(nome: string, body: unknown): Promise<PessoaJuridica> {
     try {
-        const { data, error } = await supabase.functions.invoke(nome, { body });
+        const { data, error } = await supabase.functions.invoke(nome, { body, headers: cabecalhoCadastro() });
         if (error) {
             let msg = error.message;
             try {

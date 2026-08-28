@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { conferirPorta, HEADER_TOKEN } from "../_shared/porta.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 // ============================================================================
@@ -28,7 +29,7 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": `authorization, x-client-info, apikey, content-type, ${HEADER_TOKEN}`,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -183,6 +184,10 @@ function grupoAtivo(item: Record<string, unknown>): boolean {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Escreve na tabela e consome a API do Bsoft: não pode aceitar anônimo.
+  const porta = conferirPorta(req);
+  if (!porta.ok) return json({ error: porta.erro }, porta.status);
 
   if (!BSOFT_API_URL || !BSOFT_API_USER || !BSOFT_API_PASS) {
     return json({ error: "Secrets do Bsoft ausentes (BSOFT_API_URL/USER/PASS)." }, 500);

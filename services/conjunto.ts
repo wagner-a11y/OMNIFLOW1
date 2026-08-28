@@ -3,6 +3,7 @@ import {
     DadosCNH, DadosEndereco, DadosFiscais, cadastrarMotorista,
 } from './cadastroMotorista';
 import { VeiculoParaGravar, cadastrarPessoaJuridica, cadastrarVeiculo } from './cadastroVeiculo';
+import { cabecalhoCadastro } from './tokenCadastro';
 
 // ============================================================================
 // Conjunto de veículos — Fase 3C.
@@ -88,7 +89,7 @@ export async function vincularConjunto(v: PedidoVinculo): Promise<{ ok?: boolean
 
 async function invocar(nome: string, body: unknown): Promise<any> {
     try {
-        const { data, error } = await supabase.functions.invoke(nome, { body });
+        const { data, error } = await supabase.functions.invoke(nome, { body, headers: cabecalhoCadastro() });
         if (error) {
             let msg = error.message;
             try {
