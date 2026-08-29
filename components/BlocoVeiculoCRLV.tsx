@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle, Loader2, Search } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle, Loader2, Search } from 'lucide-react';
 import { extractDataFromDoc } from '../services/geminiService';
 import UploadDocumento from './UploadDocumento';
 import MunicipioAutocomplete, { useMunicipios } from './MunicipioAutocomplete';
@@ -182,10 +182,32 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
 
     const setCampo = (k: keyof VeiculoParaGravar, v: string) => {
         setForm(prev => ({ ...prev, [k]: v }));
+        // Editar um crítico DESFAZ a conferência: o valor conferido não é mais
+        // o valor que está na tela. Antes, digitar valia como conferido — o que
+        // confundia "mexi no campo" com "olhei e está certo", e deixava passar
+        // justamente o erro de digitação que a conferência existe para pegar.
         if ((CAMPOS_CRITICOS as readonly string[]).includes(k)) {
-            setConferidos(prev => new Set(prev).add(k as CampoCritico));
+            setConferidos(prev => {
+                if (!prev.has(k as CampoCritico)) return prev;
+                const n = new Set(prev); n.delete(k as CampoCritico); return n;
+            });
         }
     };
+
+    /**
+     * Marca/desmarca um crítico como conferido.
+     *
+     * É um ato deliberado: o operador olha o valor e afirma que está certo. Não
+     * exige editar nada — o caso comum é o OCR ter acertado, e obrigar a mexer
+     * num valor correto para "provar" que olhou fazia o operador digitar por
+     * cima do que já estava bom.
+     */
+    const alternarConferido = (k: CampoCritico) =>
+        setConferidos(prev => {
+            const n = new Set(prev);
+            n.has(k) ? n.delete(k) : n.add(k);
+            return n;
+        });
 
     const aoAnexar = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -396,14 +418,23 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
             : conferidos.has(chave)
                 ? 'bg-white border-emerald-300 focus:border-emerald-500'
                 : 'bg-amber-50 border-amber-400 focus:border-amber-500'}`;
-    const rotuloCritico = (texto: string, chave: CampoCritico) => (
-        <label className="text-[10px] font-medium uppercase text-[#92400e] mb-1.5 flex items-center gap-1.5">
-            {texto}<span className="text-red-500">*</span>
-            {!conferidos.has(chave) && (
-                <span className="normal-case text-[9px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">confira</span>
-            )}
-        </label>
-    );
+    const rotuloCritico = (texto: string, chave: CampoCritico) => {
+        const ok = conferidos.has(chave);
+        return (
+            <div className="flex items-center gap-1.5 mb-1.5">
+                <label className="text-[10px] font-medium uppercase text-[#92400e] flex items-center gap-1">
+                    {texto}<span className="text-red-500">*</span>
+                </label>
+                <button type="button" onClick={() => alternarConferido(chave)}
+                    title={ok ? 'Conferido — clique para desmarcar' : 'Confira o valor e clique para marcar'}
+                    className={`ml-auto normal-case text-[9px] font-semibold px-1.5 py-0.5 rounded border transition-colors flex items-center gap-1 ${ok
+                        ? 'bg-emerald-100 border-emerald-300 text-emerald-800 hover:bg-emerald-200'
+                        : 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200'}`}>
+                    {ok ? <><Check className="w-2.5 h-2.5" strokeWidth={3} /> conferido</> : 'confere'}
+                </button>
+            </div>
+        );
+    };
     const Seletor: React.FC<{ valor: string; onChange: (v: string) => void; lista: Array<{ codigo: string; rotulo: string }>; className: string }> =
         ({ valor, onChange: oc, lista, className }) => (
             <select value={valor} onChange={e => oc(e.target.value)} className={className}>
@@ -470,7 +501,9 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                     {/* críticos */}
                     <div className="border-2 border-amber-300 rounded-lg p-4">
                         <p className="text-xs font-semibold text-[#92400e] mb-3">
-                            Confira estes cinco — o botão de gravar só libera depois de passar por todos.
+                            Confira estes cinco e clique em <strong>confere</strong> em cada um. Não
+                            precisa editar: se o valor está certo, basta marcar. Corrigiu algum? Ele
+                            volta a pedir conferência. O gravar libera com os cinco marcados.
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="flex flex-col">
@@ -507,57 +540,6 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                         </div>
                     </div>
 
-                    {/* -------------------------------------------------------------
-                        Campos que só o CRLV preenchia. Sem eles a leitura manual
-                        gerava um cadastro pela metade: `modelo` vai para o
-                        modeloVeiculo do Bsoft e, sem ele, o veículo entra sem modelo
-                        e o CT-e não emite — foi bug já corrigido uma vez, não pode
-                        voltar pela porta do preenchimento à mão.
-
-                        Ficam sempre visíveis, não só no modo manual: depois do OCR
-                        servem para corrigir o que a leitura errou.
-                       ------------------------------------------------------------- */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div className="flex flex-col">
-                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
-                                Modelo{!form.modelo && <span className="text-amber-600 ml-1 normal-case font-normal">· sem ele o CT-e não emite</span>}
-                            </label>
-                            <input value={form.modelo} onChange={e => setCampo('modelo', e.target.value)}
-                                placeholder="ex.: FH 460"
-                                className={form.modelo ? classeNormal : `${classeNormal} border-amber-400 bg-amber-50`} />
-                        </div>
-                        <div className="flex flex-col">
-                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Renavam</label>
-                            <input value={form.renavam} onChange={e => setCampo('renavam', soDigitos(e.target.value))}
-                                inputMode="numeric" className={classeNormal} />
-                        </div>
-                        <div className="flex flex-col">
-                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Ano fabricação</label>
-                            <input value={form.anoFabricacao} onChange={e => setCampo('anoFabricacao', soDigitos(e.target.value).slice(0, 4))}
-                                inputMode="numeric" placeholder="2020" className={classeNormal} />
-                        </div>
-                        <div className="flex flex-col">
-                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Ano modelo</label>
-                            <input value={form.anoModelo} onChange={e => setCampo('anoModelo', soDigitos(e.target.value).slice(0, 4))}
-                                inputMode="numeric" placeholder="2020" className={classeNormal} />
-                        </div>
-                        <div className="flex flex-col">
-                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Eixos</label>
-                            <input value={form.quantidadeEixos} onChange={e => setCampo('quantidadeEixos', soDigitos(e.target.value))}
-                                inputMode="numeric" className={classeNormal} />
-                        </div>
-                        <div className="flex flex-col">
-                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Tara (kg)</label>
-                            <input value={form.tara} onChange={e => setCampo('tara', soDigitos(e.target.value))}
-                                inputMode="numeric" className={classeNormal} />
-                        </div>
-                        <div className="flex flex-col">
-                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Capacidade (kg)</label>
-                            <input value={form.capacidadeCarga} onChange={e => setCampo('capacidadeCarga', soDigitos(e.target.value))}
-                                inputMode="numeric" className={classeNormal} />
-                        </div>
-                    </div>
-
                     {/* demais */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                         <div className="flex flex-col">
@@ -583,20 +565,30 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                                 </p>
                             )}
                         </div>
+                        {/* `modelo` vai para o modeloVeiculo do Bsoft; sem ele o veículo
+                            entra sem modelo e o CT-e não emite. Por isso ele — e só ele —
+                            fica marcado quando está vazio. */}
                         {([
-                            { k: 'modelo' as const, label: 'Modelo' },
+                            { k: 'modelo' as const, label: 'Modelo', destacarVazio: true },
                             { k: 'renavam' as const, label: 'Renavam' },
                             { k: 'anoFabricacao' as const, label: 'Ano fab.' },
                             { k: 'anoModelo' as const, label: 'Ano mod.' },
                             { k: 'tara' as const, label: 'Tara (kg)' },
                             { k: 'capacidadeCarga' as const, label: 'Cap. carga (kg)' },
                             { k: 'quantidadeEixos' as const, label: 'Eixos' },
-                        ]).map(({ k, label }) => (
-                            <div key={k} className="flex flex-col">
-                                <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">{label}</label>
-                                <input value={form[k]} onChange={e => setCampo(k, e.target.value)} className={classeNormal} />
-                            </div>
-                        ))}
+                        ] as Array<{ k: keyof VeiculoParaGravar; label: string; destacarVazio?: boolean }>).map(({ k, label, destacarVazio }) => {
+                            const faltando = destacarVazio && !String(form[k] ?? '').trim();
+                            return (
+                                <div key={k} className="flex flex-col">
+                                    <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
+                                        {label}
+                                        {faltando && <span className="ml-1 normal-case text-[#b45309] font-semibold">· sem ele o CT-e não emite</span>}
+                                    </label>
+                                    <input value={String(form[k] ?? '')} onChange={e => setCampo(k, e.target.value)}
+                                        className={faltando ? `${classeNormal} border-amber-400 bg-amber-50` : classeNormal} />
+                                </div>
+                            );
+                        })}
                         <div className="flex flex-col md:col-span-2">
                             <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
                                 Município / UF
