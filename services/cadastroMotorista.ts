@@ -226,6 +226,64 @@ export interface ResultadoCadastro {
     error?: string;
 }
 
+/**
+ * Cria (ou reaproveita) uma pessoa física que é SÓ PROPRIETÁRIA de veículo —
+ * não dirige e não tem CNH. O caso concreto é o caminhão registrado no nome de
+ * quem não é motorista, tipicamente a mãe ou o cônjuge.
+ *
+ * Nenhum campo de CNH é enviado. Isso é o oposto de enviá-los em branco: uma
+ * CNH vazia afirmaria no Datamex que a pessoa tem habilitação sem número, e
+ * depois ninguém saberia separar isso de um cadastro mal preenchido.
+ *
+ * O RNTRC é exigido pela TELA, não pela API. Proprietário que responde perante
+ * a ANTT precisa dele, e o cadastro sem RNTRC só cobra o preço mais tarde, na
+ * emissão do CT-e.
+ */
+export async function cadastrarProprietarioPF(p: {
+    cpf: string;
+    nome: string;
+    sobrenome: string;
+    rntrc: string;
+    endereco: DadosEndereco;
+}): Promise<ResultadoCadastro> {
+    try {
+        const { data, error } = await supabase.functions.invoke('cadastrar-motorista', {
+            headers: cabecalhoCadastro(),
+            body: {
+                apenasProprietario: true,
+                cpf: p.cpf,
+                nome: p.nome,
+                sobrenome: p.sobrenome,
+                rntrc: p.rntrc,
+                // Obrigatórios do grupo proprietariosVeiculos, medidos na API.
+                matricula_inss: '0.000.000.000-0',
+                dependentes_irrf: 0,
+                // "T" = TAC, transportador autônomo de carga: é o enquadramento
+                // da pessoa física dona de veículo.
+                tipo_transportadora: 'T',
+                endereco: {
+                    cep: p.endereco.cep,
+                    logradouro: p.endereco.logradouro,
+                    numero: p.endereco.numero,
+                    complemento: p.endereco.complemento,
+                    bairro: p.endereco.bairro,
+                    cidade: p.endereco.municipioNome,
+                    codIBGE: p.endereco.cidade,
+                    estado: p.endereco.estado,
+                },
+            },
+        });
+        if (error) {
+            let msg = error.message;
+            try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* noop */ }
+            return { error: msg };
+        }
+        return data as ResultadoCadastro;
+    } catch (e) {
+        return { error: (e as Error).message || 'Falha ao cadastrar o proprietário.' };
+    }
+}
+
 /** Cria (ou reaproveita) o motorista no Bsoft, com endereço e anexo. */
 export async function cadastrarMotorista(
     dados: DadosCNH,

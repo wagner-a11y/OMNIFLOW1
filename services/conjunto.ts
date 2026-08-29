@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import {
-    DadosCNH, DadosEndereco, DadosFiscais, cadastrarMotorista,
+    DadosCNH, DadosEndereco, DadosFiscais, cadastrarMotorista, cadastrarProprietarioPF,
 } from './cadastroMotorista';
 import { VeiculoParaGravar, cadastrarPessoaJuridica, cadastrarVeiculo } from './cadastroVeiculo';
 import { cabecalhoCadastro } from './tokenCadastro';
@@ -44,6 +44,14 @@ export const IMPLEMENTOS_VISIVEIS = 2;
  *   motorista  -> o motorista desta mesma tela, que a cascata cria no passo 1
  *   existente  -> alguém já cadastrado, achado pela busca
  *   novaPJ     -> empresa que a cascata cria antes dos veículos
+ *   novaPF     -> pessoa física SEM CNH, criada antes dos veículos
+ *
+ * `novaPF` é o caso do caminhão no nome de quem não dirige — a mãe do
+ * motorista, tipicamente. A API sempre aceitou pessoa física sem CNH (provado
+ * em 29/08/2026: POST com cpf, nome, sobrenome, grupos, matriculaINSS, RNTRC,
+ * dependentesIRRF e tipoTransportadora devolveu 201, e o veículo criado com ela
+ * como proprietária foi aceito). Quem exigia CNH era a nossa tela, que só tinha
+ * formulário de motorista.
  */
 export type RefProprietario =
     | { tipo: 'motorista' }
@@ -52,6 +60,17 @@ export type RefProprietario =
         tipo: 'novaPJ';
         cnpj: string; razaoSocial: string; nomeFantasia: string;
         rntrc: string; enquadramento: string;
+    }
+    | {
+        tipo: 'novaPF';
+        cpf: string; nome: string; sobrenome: string;
+        /**
+         * Obrigatório NA TELA, ainda que a API aceite sem: proprietário que
+         * responde perante a ANTT precisa de RNTRC, e um cadastro sem ele volta
+         * como pendência na emissão do CT-e.
+         */
+        rntrc: string;
+        endereco: DadosEndereco;
     };
 
 /** Texto curto do dono, para o resumo de conferência. */
@@ -59,6 +78,7 @@ export function descreverProprietario(r: RefProprietario | null, nomeMotorista: 
     if (!r) return '—';
     if (r.tipo === 'motorista') return `${nomeMotorista || 'o motorista'} (motorista desta tela)`;
     if (r.tipo === 'existente') return `${r.nome} — código ${r.codPessoa}`;
+    if (r.tipo === 'novaPF') return `${r.nome} ${r.sobrenome} (pessoa nova, será cadastrada)`.trim();
     return `${r.razaoSocial} (empresa nova, será cadastrada)`;
 }
 
@@ -210,11 +230,39 @@ export async function gravarConjunto(p: PedidoConjunto): Promise<ResultadoConjun
         });
     }
 
+    // ---- 2b. Pessoas físicas novas (proprietárias sem CNH), uma por CPF ----
+    // Mesmo lugar da cascata que as empresas: antes dos veículos, porque o
+    // veículo precisa do código do dono. Duas carretas da mesma pessoa não
+    // podem virar dois cadastros.
+    const porCpf = new Map<string, string>();
+    for (const peca of pecas) {
+        const ref = peca.ref;
+        if (ref?.tipo !== 'novaPF') continue;
+        const cpf = ref.cpf.replace(/\D/g, '');
+        if (porCpf.has(cpf)) continue;
+
+        const nomeCompleto = `${ref.nome} ${ref.sobrenome}`.trim();
+        const r = await cadastrarProprietarioPF({
+            cpf, nome: ref.nome, sobrenome: ref.sobrenome,
+            rntrc: ref.rntrc, endereco: ref.endereco,
+        });
+        if (r.error || !r.codPessoa) {
+            passos.push({ passo: `Proprietário ${nomeCompleto}`, ok: false, detalhe: r.error });
+            return parar(`Não consegui cadastrar o proprietário ${nomeCompleto}: ${r.error ?? 'sem código de retorno'}`);
+        }
+        porCpf.set(cpf, r.codPessoa);
+        passos.push({
+            passo: `Proprietário ${nomeCompleto}`, ok: true, codigo: r.codPessoa,
+            detalhe: r.jaExistia ? 'já existia, reaproveitado' : 'criado sem CNH (só proprietário)',
+        });
+    }
+
     /** Referência -> id de verdade. Só falha se a tela deixou passar algo incompleto. */
     const resolver = (ref: RefProprietario | null): string | null => {
         if (!ref) return null;
         if (ref.tipo === 'existente') return ref.codPessoa;
         if (ref.tipo === 'motorista') return motoristaId || null;
+        if (ref.tipo === 'novaPF') return porCpf.get(ref.cpf.replace(/\D/g, '')) ?? null;
         return porCnpj.get(ref.cnpj.replace(/\D/g, '')) ?? null;
     };
 
