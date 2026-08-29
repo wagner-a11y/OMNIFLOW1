@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cabecalhoCadastro, temTokenCadastro } from './tokenCadastro';
 
 // ============================================================================
 // Tradução CRLV -> códigos do Bsoft (Fase 3A).
@@ -244,8 +245,27 @@ export function traduzirCrlv(dominio: Dominio, crlv: DadosCRLV): Traducao {
     };
 }
 
-/** Carrega o dicionário inteiro. A RLS já libera SELECT para authenticated. */
+/**
+ * Carrega o dicionário inteiro.
+ *
+ * Dois caminhos, porque são dois contextos:
+ *   com sessão  -> direto na tabela; a RLS libera SELECT para authenticated.
+ *   por link    -> Edge Function, que lê com service_role atrás do mesmo token.
+ *
+ * A tela por link NÃO tem sessão, e a RLS de dominio_veiculo responderia 401 —
+ * a tradução do CRLV ficaria sem dicionário. Abrir a tabela para `anon` seria o
+ * atalho, mas publicaria a tabela para qualquer um com a chave pública.
+ */
 export async function carregarDominio(): Promise<Dominio> {
+    if (temTokenCadastro()) {
+        const { data, error } = await supabase.functions.invoke('dominio-veiculo-ler', {
+            body: {}, headers: cabecalhoCadastro(),
+        });
+        if (error || !data?.dominio) {
+            throw new Error('Não consegui carregar o dicionário de veículos. Confira o link de acesso.');
+        }
+        return data.dominio as Dominio;
+    }
     const { data, error } = await supabase
         .from('dominio_veiculo')
         .select('tipo, codigo, nome, categoria_ref, nome_interno');

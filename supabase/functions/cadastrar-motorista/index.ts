@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { conferirPorta, HEADER_TOKEN } from "../_shared/porta.ts";
 
 // ============================================================================
 // cadastrar-motorista — Fase 2 do Cadastro Automático.
@@ -30,7 +31,7 @@ const DATAMEX_SENHA = Deno.env.get("DATAMEX_SENHA") || "";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform",
+  "Access-Control-Allow-Headers": `authorization, x-client-info, apikey, content-type, x-supabase-client-platform, ${HEADER_TOKEN}`,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -129,6 +130,12 @@ function comoLista(payload: unknown): Record<string, unknown>[] {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  // Porta de entrada: usuário logado ou token do link de cadastro externo.
+  // A anon key sozinha NÃO passa — ela é pública (vai no bundle) e nunca foi
+  // credencial. Ver supabase/functions/_shared/porta.ts.
+  const porta = conferirPorta(req);
+  if (!porta.ok) return json({ error: porta.erro }, porta.status);
+
   const creds = credenciais();
   if (!creds.length) return json({ error: "Nenhuma credencial do Bsoft configurada." }, 500);
 
@@ -212,11 +219,27 @@ Deno.serve(async (req: Request) => {
       avisoGrupo = "Essa pessoa já tinha cadastro no Datamex, então não criei outra nem " +
                    "alterei o que existe. Se ela ainda não estiver no grupo de motoristas, " +
                    "marque isso no Datamex.";
-      if (p.proprietario) {
+      if (p.apenasProprietario) {
+        avisoGrupo = "Essa pessoa já tinha cadastro no Datamex, então não criei outra nem alterei " +
+                     "o que existe. Confira no Datamex se ela está no grupo 'Proprietários Veículos' " +
+                     "e se o RNTRC dela está preenchido — sem isso o veículo não aceita esta pessoa " +
+                     "como proprietária.";
+      } else if (p.proprietario) {
         avisoGrupo += " Como você marcou que ela é proprietária do veículo, marque também o " +
                       "grupo 'Proprietários Veículos' manualmente no Datamex.";
       }
     } else {
+      // PROPRIETÁRIO PURO: pessoa que é dona do veículo e NÃO dirige — o caso do
+      // caminhão no nome da mãe do motorista. Medido em 29/08/2026: a API sempre
+      // aceitou pessoa física sem CNH; quem exigia era a nossa tela.
+      //
+      // Aqui o objeto `cnh` NÃO é enviado. Mandá-lo com campos nulos seria pior
+      // que omiti-lo: a API valida o conteúdo do objeto quando ele existe, e um
+      // cadastro com CNH em branco afirma no Datamex que a pessoa tem
+      // habilitação sem número — o que não é verdade e ninguém depois saberia
+      // distinguir de um erro de digitação.
+      const soProprietario = !!p.apenasProprietario;
+
       // 2) Cria a pessoa física. Nomes conforme a API do Bsoft.
       const novo: Record<string, unknown> = {
         cpf,
@@ -226,7 +249,9 @@ Deno.serve(async (req: Request) => {
         dtNascimento: p.data_nascimento ?? null,
         // O RNTRC é registro do TRANSPORTADOR, não do condutor: só quem também é
         // dono do veículo entra no grupo de proprietários e tem RNTRC.
-        grupos: p.proprietario ? ["motoristas", "proprietariosVeiculos"] : ["motoristas"],
+        grupos: soProprietario
+          ? ["proprietariosVeiculos"]
+          : (p.proprietario ? ["motoristas", "proprietariosVeiculos"] : ["motoristas"]),
         // Campos fiscais que o Bsoft exige na pessoa física. Os padrões vêm da
         // tela (o operador pode trocar); aqui só há rede de segurança.
         //
@@ -251,28 +276,31 @@ Deno.serve(async (req: Request) => {
         // RNTRC não está na CNH: é digitado pelo operador, sem valor automático.
         // Motorista que só dirige não tem RNTRC — nesses casos o campo nem é
         // enviado, em vez de ir vazio.
-        ...(p.proprietario && p.rntrc ? { RNTRC: p.rntrc } : {}),
+        ...((p.proprietario || soProprietario) && p.rntrc ? { RNTRC: p.rntrc } : {}),
         // Campos que a API só cobra de quem entra no grupo de proprietários. O
         // condutor puro passa sem eles (provado no cadastro 11229), então não
         // são enviados nesse caso — não é só economia, é não classificar como
         // transportador quem só dirige.
-        ...(p.proprietario ? {
+        ...((p.proprietario || soProprietario) ? {
           dependentesIRRF: Number(p.dependentes_irrf ?? 0) || 0,
           // "T" = TAC, transportador autônomo de carga: é o que se aplica a
           // motorista-proprietário pessoa física.
           tipoTransportadora: p.tipo_transportadora || "T",
         } : {}),
-        cnh: {
-          numero: p.registro_cnh ?? null,
-          seguro: p.codigo_seguranca ?? null,
-          protocolo: p.protocolo ?? null,
-          categoria: p.categoria ?? null,
-          dtValidade: p.data_validade ?? null,
-          dtExpedicao: p.data_expedicao ?? null,
-          dtPrimeiraExpedicao: p.data_primeira_habilitacao ?? null,
-          dtValidadeExameToxicologico: p.data_validade_toxicologico ?? null,
-          orgaoExpedidor: p.orgao_expedidor_cnh ?? null,
-        },
+        // Só para quem dirige. Ver a nota sobre `soProprietario` acima.
+        ...(soProprietario ? {} : {
+          cnh: {
+            numero: p.registro_cnh ?? null,
+            seguro: p.codigo_seguranca ?? null,
+            protocolo: p.protocolo ?? null,
+            categoria: p.categoria ?? null,
+            dtValidade: p.data_validade ?? null,
+            dtExpedicao: p.data_expedicao ?? null,
+            dtPrimeiraExpedicao: p.data_primeira_habilitacao ?? null,
+            dtValidadeExameToxicologico: p.data_validade_toxicologico ?? null,
+            orgaoExpedidor: p.orgao_expedidor_cnh ?? null,
+          },
+        }),
       };
       // A data de emissão do RG normalmente não está na CNH. Só mandamos quando
       // o operador digitou: mandar vazio já rendeu "[emissaoRG] com conteúdo

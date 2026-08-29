@@ -1,5 +1,6 @@
 // Triggering fresh deploy to verify KM sync
 import { supabase } from './supabase';
+import { cabecalhoCadastro } from './tokenCadastro';
 
 export interface PracaPedagio {
     nome: string; uf: string | null; rodovia: string | null; km: string | null;
@@ -131,6 +132,7 @@ export const extractDataFromDoc = async (fileBase64: string, fileType: string) =
     console.log('--- OCR: extractDataFromDoc started ---', { fileType });
     try {
         const { data, error } = await supabase.functions.invoke('process-document', {
+            headers: cabecalhoCadastro(),
             body: { fileBase64, fileType },
         });
 

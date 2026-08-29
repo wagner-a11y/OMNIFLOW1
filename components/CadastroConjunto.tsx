@@ -392,8 +392,11 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                         </p>
                     </div>
 
+                    {/* refPrincipal habilita o atalho "é o proprietário do cavalo".
+                        Só os implementos recebem: o principal não tem de quem copiar. */}
                     <BlocoVeiculoCRLV titulo="3 · Implemento 1 (carreta / central)" opcional
-                        motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista} onChange={setImpl1} />
+                        motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista}
+                        refPrincipal={principal?.ref ?? null} onChange={setImpl1} />
 
                     {!querSegundoImplemento && IMPLEMENTOS_VISIVEIS > 1 && (
                         <button type="button" onClick={() => setQuerSegundoImplemento(true)}
@@ -403,7 +406,8 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                     )}
                     {querSegundoImplemento && (
                         <BlocoVeiculoCRLV titulo="4 · Implemento 2" opcional
-                            motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista} onChange={setImpl2} />
+                            motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista}
+                            refPrincipal={principal?.ref ?? null} onChange={setImpl2} />
                     )}
                 </>
             )}
