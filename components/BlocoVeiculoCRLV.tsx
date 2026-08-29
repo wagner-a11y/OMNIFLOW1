@@ -83,6 +83,18 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
     const [lendo, setLendo] = useState(false);
     const [leu, setLeu] = useState(false);
     const [erroLeitura, setErroLeitura] = useState<string | null>(null);
+    /**
+     * Formulário aberto sem leitura bem-sucedida.
+     *
+     * Existia um beco aqui: os campos só apareciam depois que o OCR desse
+     * certo, e o único campo de placa ficava dentro desse mesmo bloco. Quando
+     * o Gemini falhava, a tela dizia "você pode preencher à mão" e não havia
+     * onde digitar — o Cadastro Conjunto parava por completo, enquanto as
+     * telas de cadastro avulso seguiam funcionando.
+     */
+    const [manual, setManual] = useState(false);
+    /** Erro de COTA/limite (transitório) x qualquer outro. Muda o que se diz. */
+    const [erroDeCota, setErroDeCota] = useState(false);
     const [conferidos, setConferidos] = useState<Set<CampoCritico>>(new Set());
     const [municipioDoCrlv, setMunicipioDoCrlv] = useState(false);
 
@@ -187,7 +199,15 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                 r.readAsDataURL(file);
             });
             const ocr = await extractDataFromDoc(dataUrl.split(',')[1], file.type);
-            if (!ocr || ocr.error) { setErroLeitura(ocr?.error || 'A leitura não retornou nada.'); return; }
+            if (!ocr || ocr.error) {
+                const bruto = ocr?.error || 'A leitura não retornou nada.';
+                // Cota/limite é transitório: vale tentar de novo daqui a pouco.
+                // Os outros não — insistir com o mesmo arquivo dá no mesmo, e
+                // dizer "tente mais tarde" faria o operador esperar à toa.
+                setErroDeCota(/cota|quota|429|RESOURCE_EXHAUSTED|sobrecarregad/i.test(bruto));
+                setErroLeitura(bruto);
+                return;
+            }
 
             const b = ocr as Record<string, unknown>;
             const t = (...k: string[]) => {
@@ -239,7 +259,9 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
             setDocProp(lido.proprietario_documento ? formatarDocumento(lido.proprietario_documento) : '');
             setProprietario(null); setPjNova(null); setErroProp(null); setTrocando(false);
             setLeu(true);
+            setErroDeCota(false);
         } catch (err) {
+            setErroDeCota(false);
             setErroLeitura((err as Error).message);
         } finally {
             setLendo(false);
@@ -409,13 +431,41 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
             </div>
 
             {erroLeitura && (
-                <div className="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-2.5 rounded-lg flex items-start gap-2">
+                <div className="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-lg flex items-start gap-2">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
-                    <p className="text-xs font-medium">{erroLeitura} Você pode preencher à mão.</p>
+                    <div className="min-w-0">
+                        <p className="text-xs font-semibold">
+                            {erroDeCota
+                                ? 'Leitor ocupado no momento.'
+                                : 'Não consegui ler o documento.'}
+                        </p>
+                        <p className="text-xs font-medium opacity-90 mt-0.5">
+                            {erroDeCota
+                                ? 'Tente de novo em instantes ou preencha os campos à mão — o cadastro segue igual.'
+                                : 'Anexe outra foto do CRLV ou preencha os campos à mão — o cadastro segue igual.'}
+                        </p>
+                        <p className="text-[11px] font-normal opacity-75 mt-1">{erroLeitura}</p>
+                        {!manual && !leu && (
+                            <button type="button" onClick={() => setManual(true)}
+                                className="mt-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] transition-colors">
+                                Preencher à mão
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
 
-            {(leu || form.placa) && (
+            {/* Quem não tem o documento em mãos também precisa de saída: o CRLV
+                nem sempre está com quem cadastra. Sem erro nenhum, o caminho
+                manual fica discreto — a leitura continua sendo o normal. */}
+            {!leu && !manual && !erroLeitura && (
+                <button type="button" onClick={() => setManual(true)}
+                    className="text-xs font-semibold text-[#1d6fb8] hover:underline self-start">
+                    Não tenho o documento — preencher à mão
+                </button>
+            )}
+
+            {(leu || manual || form.placa) && (
                 <>
                     {/* críticos */}
                     <div className="border-2 border-amber-300 rounded-lg p-4">
@@ -454,6 +504,57 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                                     }}
                                     lista={listaDe('tipoCarroceria')} className={classeCritica('tipoCarroceria')} />
                             </div>
+                        </div>
+                    </div>
+
+                    {/* -------------------------------------------------------------
+                        Campos que só o CRLV preenchia. Sem eles a leitura manual
+                        gerava um cadastro pela metade: `modelo` vai para o
+                        modeloVeiculo do Bsoft e, sem ele, o veículo entra sem modelo
+                        e o CT-e não emite — foi bug já corrigido uma vez, não pode
+                        voltar pela porta do preenchimento à mão.
+
+                        Ficam sempre visíveis, não só no modo manual: depois do OCR
+                        servem para corrigir o que a leitura errou.
+                       ------------------------------------------------------------- */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="flex flex-col">
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">
+                                Modelo{!form.modelo && <span className="text-amber-600 ml-1 normal-case font-normal">· sem ele o CT-e não emite</span>}
+                            </label>
+                            <input value={form.modelo} onChange={e => setCampo('modelo', e.target.value)}
+                                placeholder="ex.: FH 460"
+                                className={form.modelo ? classeNormal : `${classeNormal} border-amber-400 bg-amber-50`} />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Renavam</label>
+                            <input value={form.renavam} onChange={e => setCampo('renavam', soDigitos(e.target.value))}
+                                inputMode="numeric" className={classeNormal} />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Ano fabricação</label>
+                            <input value={form.anoFabricacao} onChange={e => setCampo('anoFabricacao', soDigitos(e.target.value).slice(0, 4))}
+                                inputMode="numeric" placeholder="2020" className={classeNormal} />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Ano modelo</label>
+                            <input value={form.anoModelo} onChange={e => setCampo('anoModelo', soDigitos(e.target.value).slice(0, 4))}
+                                inputMode="numeric" placeholder="2020" className={classeNormal} />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Eixos</label>
+                            <input value={form.quantidadeEixos} onChange={e => setCampo('quantidadeEixos', soDigitos(e.target.value))}
+                                inputMode="numeric" className={classeNormal} />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Tara (kg)</label>
+                            <input value={form.tara} onChange={e => setCampo('tara', soDigitos(e.target.value))}
+                                inputMode="numeric" className={classeNormal} />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5">Capacidade (kg)</label>
+                            <input value={form.capacidadeCarga} onChange={e => setCampo('capacidadeCarga', soDigitos(e.target.value))}
+                                inputMode="numeric" className={classeNormal} />
                         </div>
                     </div>
 
