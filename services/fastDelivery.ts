@@ -185,6 +185,64 @@ export async function carregarApoio(): Promise<ApoioFastDelivery> {
     return { equipamentos, precos, destinos };
 }
 
+/**
+ * Tipos de veículo que EXISTEM na tabela de preço.
+ *
+ * A lista sai dos preços cadastrados, não de uma constante: classificar um
+ * código como um tipo que a tabela não tem produziria uma linha que nunca cota
+ * — o de-para ficaria "resolvido" e a cotação continuaria impossível, agora sem
+ * dizer por quê. Melhor não deixar escolher.
+ */
+export function tiposDaTabela(apoio: ApoioFastDelivery): string[] {
+    const tipos = new Set<string>();
+    for (const p of apoio.precos.values()) tipos.add(p.tipo_veiculo);
+    return Array.from(tipos).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+/**
+ * Grava o de-para de um código do OTM. Permanente: da próxima vez que o código
+ * aparecer, a linha já nasce reconhecida.
+ *
+ * Só master grava — e quem impede é a RLS (`is_master()` em
+ * fast_delivery_equipamento), não a tela. Esconder o botão é conveniência;
+ * a trava é do servidor, e foi simulada em 29/08/2026: operador recebe 42501
+ * no INSERT e zero linhas no UPDATE/DELETE.
+ *
+ * ON CONFLICT no código: o mesmo código classificado duas vezes ATUALIZA em vez
+ * de duplicar. A chave primária já garante isso, mas sem o upsert o segundo
+ * clique viraria erro de chave duplicada na cara do operador.
+ */
+export async function classificarEquipamento(
+    codigoOtm: string,
+    tipoVeiculo: string,
+    apoio: ApoioFastDelivery,
+): Promise<{ ok?: true; error?: string }> {
+    const codigo = String(codigoOtm ?? '').trim();
+    if (!codigo) return { error: 'Código do OTM vazio.' };
+
+    // Recusa aqui também, não só na lista da tela: um tipo fora da tabela de
+    // preço nunca vai cotar, e gravá-lo esconderia o problema.
+    if (!tiposDaTabela(apoio).includes(tipoVeiculo)) {
+        return { error: `"${tipoVeiculo}" não existe na tabela de preço. Cadastre o preço desse veículo antes.` };
+    }
+
+    const { error } = await supabase
+        .from('fast_delivery_equipamento')
+        .upsert(
+            { codigo_otm: codigo, tipo_veiculo: tipoVeiculo, observacao: 'classificado na tela' },
+            { onConflict: 'codigo_otm' },
+        );
+
+    if (error) {
+        // A RLS devolve o erro do Postgres; traduz para quem está na tela.
+        if (/row-level security|permission denied/i.test(error.message)) {
+            return { error: 'Só o master pode classificar códigos de equipamento.' };
+        }
+        return { error: error.message };
+    }
+    return { ok: true };
+}
+
 // ----------------------------------------------------------------------------
 // A prévia
 // ----------------------------------------------------------------------------

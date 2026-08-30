@@ -2639,6 +2639,7 @@ Disponibilidade: ${disponibilidade}`;
                         <FastDelivery
                             marginThreshold={marginThreshold}
                             autor={{ id: currentUser.id, name: currentUser.name }}
+                            ehMaster={currentUser.role === 'master'}
                             // A tela grava direto no banco; sem isto a lista de
                             // cotações só mostraria o lote novo depois de recarregar
                             // a página, e parecia que nada tinha sido criado.

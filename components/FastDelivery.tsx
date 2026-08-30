@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle, FileUp, Info, Loader2, Send, Zap } from 'lucide-react';
 import {
     ApoioFastDelivery, LinhaPrevia, ORIGEM_FIXA, ResultadoCotacao, SOLICITANTE_FIXO,
     CARROCERIA_FIXA, MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID, carregarApoio, clientePipefyId, coletaAjustada,
     corDaMargem, criarCotacoesFastDelivery, lerExcelOtm, marcarJaLancadas,
+    classificarEquipamento, tiposDaTabela,
 } from '../services/fastDelivery';
 import { createPipefyCard } from '../services/pipefy';
 import { createRamperCard } from '../services/ramper';
@@ -24,6 +25,12 @@ interface Props {
     /** Limiar de margem do system_config — o mesmo que a cotação já usa. */
     marginThreshold: number;
     autor: { id?: string; name?: string };
+    /**
+     * Só master classifica código novo. A tela esconde o botão para os demais;
+     * quem realmente impede é a RLS de fast_delivery_equipamento, que exige
+     * is_master(). Aqui é conveniência, não proteção.
+     */
+    ehMaster?: boolean;
     /** Recarrega a lista de cotações do App depois do lote. */
     aoGravar?: () => Promise<void> | void;
 }
@@ -49,7 +56,7 @@ const CORES = {
     neutro: 'text-[#9ca3af]',
 } as const;
 
-const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => {
+const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMaster }) => {
     const [apoio, setApoio] = useState<ApoioFastDelivery | null>(null);
     const [linhas, setLinhas] = useState<LinhaPrevia[] | null>(null);
     const [colunasFaltando, setColunasFaltando] = useState<string[]>([]);
@@ -67,6 +74,18 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
     const [criandoUma, setCriandoUma] = useState<Record<string, boolean>>({});
     /** Filtro da lista. 'novas' e o padrao: e o que o operador quer lancar. */
     const [filtro, setFiltro] = useState<'todas' | 'novas' | 'lancadas'>('novas');
+    /**
+     * O conteúdo da planilha, guardado para reprocessar depois de classificar um
+     * código. Sem isto o operador teria de subir o arquivo de novo só para ver a
+     * linha sair de pendência — e "suba de novo" é o passo que esta tela existe
+     * para eliminar.
+     */
+    const bufferRef = useRef<ArrayBuffer | null>(null);
+    /** Código do OTM que o master está classificando. null = modal fechado. */
+    const [classificando, setClassificando] = useState<string | null>(null);
+    const [tipoEscolhido, setTipoEscolhido] = useState('');
+    const [salvandoTipo, setSalvandoTipo] = useState(false);
+    const [erroTipo, setErroTipo] = useState<string | null>(null);
 
     const { pendentes, prontas, lancadas } = useMemo(() => {
         const todas = linhas ?? [];
@@ -103,6 +122,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
             const a = apoio ?? await carregarApoio();
             if (!apoio) setApoio(a);
             const buffer = await file.arrayBuffer();
+            bufferRef.current = buffer;
             const r = lerExcelOtm(buffer, a);
             if (!r.totalLinhas) { setErro('A planilha não tem linhas de dados.'); return; }
             // Consulta as DTs já lançadas AQUI, no upload: descobrir isso só na
@@ -114,6 +134,38 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
         } finally {
             setLendo(false);
             e.target.value = '';
+        }
+    };
+
+    /**
+     * Grava o de-para e REPROCESSA a planilha que já está na tela.
+     *
+     * Reprocessar é o ponto: sem isso o master classificaria o código e a linha
+     * continuaria em pendência até alguém subir o arquivo de novo. Como o de-para
+     * mudou, o apoio inteiro é relido — a linha volta a ser avaliada do zero e
+     * cai onde tiver de cair: vira cotação se houver preço para o novo tipo, ou
+     * vira a pendência de "destino sem preço", que é informação diferente e
+     * verdadeira, não erro.
+     */
+    const salvarClassificacao = async () => {
+        if (!classificando || !tipoEscolhido || !apoio) return;
+        setSalvandoTipo(true); setErroTipo(null);
+        try {
+            const r = await classificarEquipamento(classificando, tipoEscolhido, apoio);
+            if (r.error) { setErroTipo(r.error); return; }
+
+            const novoApoio = await carregarApoio();
+            setApoio(novoApoio);
+            if (bufferRef.current) {
+                const rel = lerExcelOtm(bufferRef.current, novoApoio);
+                setLinhas(await marcarJaLancadas(rel.linhas));
+                setColunasFaltando(rel.colunasFaltando);
+            }
+            setClassificando(null); setTipoEscolhido('');
+        } catch (e) {
+            setErroTipo((e as Error).message);
+        } finally {
+            setSalvandoTipo(false);
         }
     };
 
@@ -390,8 +442,18 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
                                         <tr className="bg-amber-50/60">
                                             <td colSpan={9} className="px-3 pb-2 pt-0">
                                                 {l.pendencias.map((p, i) => (
-                                                    <span key={i} className="text-[11px] font-medium text-[#92400e] block">
-                                                        linha {l.linhaExcel} · {p.texto}
+                                                    <span key={i} className="text-[11px] font-medium text-[#92400e] flex flex-wrap items-center gap-2">
+                                                        <span>linha {l.linhaExcel} · {p.texto}</span>
+                                                        {/* Só o master classifica. O operador continua vendo a
+                                                            pendência — ele precisa saber que apareceu código novo —,
+                                                            mas quem resolve é quem responde pela tabela de preço. */}
+                                                        {p.motivo === 'equipamento' && ehMaster && !!l.codigoEquipamento && (
+                                                            <button type="button"
+                                                                onClick={() => { setClassificando(l.codigoEquipamento); setTipoEscolhido(''); setErroTipo(null); }}
+                                                                className="px-2 py-0.5 rounded text-[10px] font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] transition-colors">
+                                                                Classificar código
+                                                            </button>
+                                                        )}
                                                     </span>
                                                 ))}
                                             </td>
@@ -405,6 +467,58 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar }) => 
             )}
 
             {/* prontas e já lançadas, com filtro */}
+            {/* -------------------------------------------------------------
+                Classificar um código do OTM que ainda não está no de-para.
+                A lista de tipos vem da TABELA DE PREÇO, não de constante: um
+                tipo sem preço cadastrado deixaria a linha "resolvida" e ainda
+                assim impossível de cotar.
+               ------------------------------------------------------------- */}
+            {classificando && apoio && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                    onClick={() => !salvandoTipo && setClassificando(null)}>
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
+                        <div>
+                            <h3 className="text-lg font-semibold text-[#111827]">Classificar código do OTM</h3>
+                            <p className="text-xs font-medium text-[#6b7280] mt-1">
+                                Código <strong className="text-[#111827]">{classificando}</strong> ainda não tem
+                                tipo de veículo. O que você escolher fica valendo para as próximas planilhas.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
+                                Tipo de veículo
+                            </label>
+                            <select value={tipoEscolhido} onChange={e => setTipoEscolhido(e.target.value)}
+                                className="w-full px-3 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-medium text-[#111827] outline-none focus:border-[#1d6fb8]">
+                                <option value="">— selecione —</option>
+                                {tiposDaTabela(apoio).map(tp => <option key={tp} value={tp}>{tp}</option>)}
+                            </select>
+                            <p className="text-[10px] font-medium text-[#6b7280] mt-1.5">
+                                Só aparecem os tipos que existem na tabela de preço.
+                            </p>
+                        </div>
+
+                        {erroTipo && (
+                            <div className="bg-amber-50 border border-amber-300 text-amber-900 px-3 py-2 rounded-lg">
+                                <p className="text-xs font-medium">{erroTipo}</p>
+                            </div>
+                        )}
+
+                        <div className="flex gap-2 pt-1">
+                            <button onClick={() => setClassificando(null)} disabled={salvandoTipo}
+                                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] bg-[#f9fafb] border border-[#e5e7eb] hover:bg-[#f3f4f6] transition-colors">
+                                Cancelar
+                            </button>
+                            <button onClick={salvarClassificacao} disabled={!tipoEscolhido || salvandoTipo}
+                                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] transition-colors flex items-center justify-center gap-2">
+                                {salvandoTipo ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</> : 'Salvar e recalcular'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {!!(prontas.length + lancadas.length) && (
                 <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-[#e5e7eb] flex flex-wrap items-center justify-between gap-3">
