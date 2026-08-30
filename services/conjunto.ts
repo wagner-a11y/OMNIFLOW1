@@ -60,6 +60,9 @@ export type RefProprietario =
         tipo: 'novaPJ';
         cnpj: string; razaoSocial: string; nomeFantasia: string;
         rntrc: string; enquadramento: string;
+        /** Exigidos pelo CT-e. A empresa nascia sem os dois até 30/08/2026. */
+        celular: string;
+        endereco: DadosEndereco;
     }
     | {
         tipo: 'novaPF';
@@ -70,6 +73,13 @@ export type RefProprietario =
          * como pendência na emissão do CT-e.
          */
         rntrc: string;
+        celular: string;
+        /**
+         * A API grava "0000-00-00" quando não recebe data — `null` e campo
+         * omitido dão no mesmo. Data zerada é inválida, não é ausência, então o
+         * nascimento é pedido em vez de deduzido.
+         */
+        dataNascimento: string;
         endereco: DadosEndereco;
     };
 
@@ -218,6 +228,15 @@ export async function gravarConjunto(p: PedidoConjunto): Promise<ResultadoConjun
         const r = await cadastrarPessoaJuridica({
             cnpj, razaoSocial: ref.razaoSocial, nomeFantasia: ref.nomeFantasia,
             rntrc: ref.rntrc, enquadramento: ref.enquadramento,
+            celular: ref.celular,
+            endereco: {
+                cep: ref.endereco.cep, logradouro: ref.endereco.logradouro,
+                numero: ref.endereco.numero, complemento: ref.endereco.complemento,
+                bairro: ref.endereco.bairro,
+                // `cidade` é o NOME e o código vai em codIBGE — inverso do veículo.
+                cidade: ref.endereco.municipioNome, codIBGE: ref.endereco.cidade,
+                estado: ref.endereco.estado,
+            },
         });
         if (r.error || !r.codPessoa) {
             passos.push({ passo: `Empresa ${ref.razaoSocial}`, ok: false, detalhe: r.error });
@@ -244,7 +263,8 @@ export async function gravarConjunto(p: PedidoConjunto): Promise<ResultadoConjun
         const nomeCompleto = `${ref.nome} ${ref.sobrenome}`.trim();
         const r = await cadastrarProprietarioPF({
             cpf, nome: ref.nome, sobrenome: ref.sobrenome,
-            rntrc: ref.rntrc, endereco: ref.endereco,
+            rntrc: ref.rntrc, celular: ref.celular,
+            dataNascimento: ref.dataNascimento, endereco: ref.endereco,
         });
         if (r.error || !r.codPessoa) {
             passos.push({ passo: `Proprietário ${nomeCompleto}`, ok: false, detalhe: r.error });

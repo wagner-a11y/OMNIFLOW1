@@ -244,6 +244,19 @@ export async function cadastrarProprietarioPF(p: {
     nome: string;
     sobrenome: string;
     rntrc: string;
+    /**
+     * DDD + 9 dígitos, com máscara — mesma regra do motorista. O CT-e cobra
+     * contato do proprietário, e até 30/08/2026 este campo simplesmente não
+     * existia neste fluxo: a pessoa nascia sem telefone nenhum.
+     */
+    celular: string;
+    /**
+     * A API NÃO aceita nascimento vazio: medido em 30/08/2026, tanto `null`
+     * quanto o campo OMITIDO gravam "0000-00-00" — uma data inválida, que não é
+     * o mesmo que ausência e que ninguém depois distingue de erro de digitação.
+     * Por isso o nascimento é pedido, não deduzido.
+     */
+    dataNascimento: string;
     endereco: DadosEndereco;
 }): Promise<ResultadoCadastro> {
     try {
@@ -255,6 +268,8 @@ export async function cadastrarProprietarioPF(p: {
                 nome: p.nome,
                 sobrenome: p.sobrenome,
                 rntrc: p.rntrc,
+                celular: p.celular,
+                data_nascimento: p.dataNascimento,
                 // Obrigatórios do grupo proprietariosVeiculos, medidos na API.
                 matricula_inss: '0.000.000.000-0',
                 dependentes_irrf: 0,
