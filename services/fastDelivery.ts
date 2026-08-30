@@ -147,6 +147,10 @@ export interface PrecoTabela {
 export interface ApoioFastDelivery {
     /** codigo_otm -> tipo_veiculo */
     equipamentos: Map<string, string>;
+    /** tipo_veiculo -> capacidade em m³. Vem do banco, ajustável sem deploy. */
+    capacidades: Map<string, number>;
+    /** Fração da capacidade a partir da qual se avisa. 0.90 = acima de 90%. */
+    limiarVolume: number;
     /** "DESTINO|VEICULO" -> preço */
     precos: Map<string, PrecoTabela>;
     /** Destinos que existem na tabela, para dizer se a cidade é conhecida. */
@@ -154,12 +158,20 @@ export interface ApoioFastDelivery {
 }
 
 export async function carregarApoio(): Promise<ApoioFastDelivery> {
-    const [eq, pr] = await Promise.all([
+    const [eq, pr, cap, cfg] = await Promise.all([
         supabase.from('fast_delivery_equipamento').select('codigo_otm, tipo_veiculo'),
         supabase.from('fast_delivery_tabela').select('destino, tipo_veiculo, nosso_frete, a_pagar, sobra, km, pedagio'),
+        supabase.from('fast_delivery_capacidade').select('tipo_veiculo, capacidade_m3'),
+        supabase.from('fast_delivery_config').select('chave, valor').eq('chave', 'limiar_volume_alerta').maybeSingle(),
     ]);
     if (eq.error) throw new Error(`Não consegui ler o de-para de equipamento: ${eq.error.message}`);
     if (pr.error) throw new Error(`Não consegui ler a tabela de preço: ${pr.error.message}`);
+    // Capacidade e limiar são do ALERTA, não da cotação: se faltarem, a prévia
+    // continua funcionando e apenas não avisa. Derrubar a tela inteira por causa
+    // de um aviso seria trocar um incômodo por uma parada.
+    const capacidades = new Map<string, number>();
+    for (const r of cap.data ?? []) capacidades.set(String(r.tipo_veiculo), numeroDb(r.capacidade_m3) ?? 0);
+    const limiarVolume = numeroDb(cfg.data?.valor) ?? LIMIAR_VOLUME_PADRAO;
 
     const equipamentos = new Map<string, string>();
     for (const r of eq.data ?? []) equipamentos.set(String(r.codigo_otm).trim(), String(r.tipo_veiculo));
@@ -182,7 +194,60 @@ export async function carregarApoio(): Promise<ApoioFastDelivery> {
         precos.set(`${linha.destino}|${linha.tipo_veiculo}`, linha);
         destinos.add(linha.destino);
     }
-    return { equipamentos, precos, destinos };
+    return { equipamentos, precos, destinos, capacidades, limiarVolume };
+}
+
+/**
+ * Só vale se a tabela `fast_delivery_config` estiver vazia ou ilegível. O
+ * número de verdade mora no banco; este é o que evita `undefined` virar
+ * comparação silenciosamente falsa e o alerta simplesmente nunca aparecer.
+ */
+const LIMIAR_VOLUME_PADRAO = 0.90;
+
+export interface AlertaVolume {
+    volumeCarga: number;
+    capacidade: number;
+    tipoVeiculo: string;
+    /** Quanto da capacidade a carga ocupa. 1.05 = 105%, já não cabe. */
+    ocupacao: number;
+    texto: string;
+}
+
+/**
+ * A carga cabe no veículo?
+ *
+ * AVISO, nunca bloqueio: quem conhece a carga é o operador, e há carga que
+ * passa da conta e entra assim mesmo. Por isso o retorno é um alerta, e não uma
+ * pendência — pendência impede de cotar, e não é isso que se quer aqui.
+ *
+ * Devolve null quando NÃO HÁ COMO COMPARAR, que é diferente de "cabe":
+ *   - o OTM não mandou volume
+ *   - o código de equipamento ainda não foi classificado (sem tipo, sem capacidade)
+ *   - o tipo não tem capacidade cadastrada
+ * Nesses casos a linha segue normal, sem aviso — inventar um alerta a partir de
+ * dado que não existe seria pior que não avisar.
+ */
+export function alertaDeVolume(
+    volumeCarga: number | null,
+    tipoVeiculo: string | null,
+    apoio: ApoioFastDelivery,
+): AlertaVolume | null {
+    if (volumeCarga === null || !Number.isFinite(volumeCarga) || volumeCarga <= 0) return null;
+    if (!tipoVeiculo) return null;
+    const capacidade = apoio.capacidades.get(tipoVeiculo);
+    if (!capacidade || capacidade <= 0) return null;
+
+    const limiar = apoio.limiarVolume > 0 ? apoio.limiarVolume : LIMIAR_VOLUME_PADRAO;
+    if (volumeCarga <= capacidade * limiar) return null;
+
+    const ocupacao = volumeCarga / capacidade;
+    const m3 = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+    return {
+        volumeCarga, capacidade, tipoVeiculo, ocupacao,
+        texto: volumeCarga > capacidade
+            ? `carga ${m3(volumeCarga)} m³ > ${tipoVeiculo} ${m3(capacidade)} m³, pode não caber`
+            : `carga ${m3(volumeCarga)} m³ ocupa ${Math.round(ocupacao * 100)}% do ${tipoVeiculo} (${m3(capacidade)} m³)`,
+    };
 }
 
 /**
@@ -274,6 +339,12 @@ export interface LinhaPrevia {
     margemPercent: number | null;
     /** Vazio = linha pronta. Com item = precisa de gente antes de virar cotação. */
     pendencias: Array<{ motivo: MotivoPendencia; texto: string }>;
+    /**
+     * Carga perto ou acima da capacidade do veículo. null = cabe, ou não há
+     * como comparar (sem volume, ou veículo ainda não classificado).
+     * NÃO impede de cotar — é aviso.
+     */
+    alertaVolume?: AlertaVolume | null;
     /** Número da proposta, quando esta DT já virou cotação antes. */
     jaLancada?: string | null;
     /** A MESMA DT apareceu antes NESTE arquivo. Só a primeira ocorrência vale. */
@@ -345,6 +416,8 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
             });
         }
 
+        const volumeCarga = numero(pegar(l, mapa, 'volume'));
+
         const preco = tipoVeiculo ? apoio.precos.get(`${destinoNormalizado}|${tipoVeiculo}`) ?? null : null;
         if (tipoVeiculo && !preco) {
             // Separa os dois casos: cidade desconhecida é diferente de cidade
@@ -385,7 +458,7 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
             motorista: String(pegar(l, mapa, 'motorista') ?? '').trim(),
             cpfMotorista: String(pegar(l, mapa, 'cpfMotorista') ?? '').trim(),
             peso: numero(pegar(l, mapa, 'peso')),
-            volume: numero(pegar(l, mapa, 'volume')),
+            volume: volumeCarga,
             valorRecebido,
             valorAPagar,
             km: preco?.km ?? null,
@@ -393,6 +466,8 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
             margem,
             margemPercent,
             pendencias,
+            // Calculado por último: depende do volume lido E do tipo resolvido.
+            alertaVolume: alertaDeVolume(volumeCarga, tipoVeiculo, apoio),
         } as LinhaPrevia;
     });
 

@@ -322,6 +322,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
     const Linha: React.FC<{ l: LinhaPrevia; pendente?: boolean }> = ({ l, pendente }) => {
         const cor = CORES[corDaMargem(l.margemPercent, marginThreshold)];
         return (
+            <>
             <tr className={pendente ? 'bg-amber-50/60' : 'hover:bg-[#f9fafb]'}>
                 <td className="px-3 py-2 font-mono text-xs">{l.referencia || '—'}</td>
                 <td className="px-3 py-2 text-xs">
@@ -336,7 +337,20 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                     {l.tipoVeiculo ?? <span className="text-amber-700 font-semibold">?</span>}
                     <span className="block text-[10px] text-[#9ca3af]">cód. {l.codigoEquipamento || '—'}</span>
                 </td>
-                <td className="px-3 py-2 text-xs">{l.placa || '—'}</td>
+                {/* A placa saiu: vinha vazia do OTM quase sempre. O volume é o
+                    dado que decide se a carga cabe no veículo. */}
+                <td className="px-3 py-2 text-xs text-right">
+                    {l.volume !== null
+                        ? <span className={l.alertaVolume ? 'font-semibold text-amber-700' : ''}>
+                            {l.volume.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
+                        </span>
+                        : '—'}
+                    {l.alertaVolume && (
+                        <span className="block text-[10px] font-medium text-amber-700">
+                            {Math.round(l.alertaVolume.ocupacao * 100)}% do {l.alertaVolume.tipoVeiculo}
+                        </span>
+                    )}
+                </td>
                 <td className="px-3 py-2 text-xs text-right">{l.peso !== null ? `${l.peso} kg` : '—'}</td>
                 <td className="px-3 py-2 text-xs text-right font-medium">{brl(l.valorRecebido)}</td>
                 <td className="px-3 py-2 text-xs text-right font-medium">{brl(l.valorAPagar)}</td>
@@ -348,6 +362,20 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 </td>
                 <td className="px-3 py-2 text-xs">{pendente ? <span className="text-[#9ca3af]">—</span> : <ColunaCotacao l={l} />}</td>
             </tr>
+            {/* AVISO, não bloqueio: a linha continua cotável e o botão de criar
+                segue ativo. Quem conhece a carga é o operador — há carga que
+                passa da conta e entra assim mesmo. */}
+            {l.alertaVolume && !pendente && (
+                <tr className="bg-amber-50/40">
+                    <td colSpan={10} className="px-3 pb-2 pt-0">
+                        <span className="text-[11px] font-medium text-[#92400e] flex items-center gap-1.5">
+                            <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" strokeWidth={2} />
+                            {l.alertaVolume.texto} — confira antes de fechar. Dá para cotar assim mesmo.
+                        </span>
+                    </td>
+                </tr>
+            )}
+            </>
         );
     };
 
@@ -358,7 +386,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 <th className="px-3 py-2 text-left font-medium">Coleta (−1h)</th>
                 <th className="px-3 py-2 text-left font-medium">Destino / cliente</th>
                 <th className="px-3 py-2 text-left font-medium">Veículo</th>
-                <th className="px-3 py-2 text-left font-medium">Placa</th>
+                <th className="px-3 py-2 text-right font-medium">Volume m³</th>
                 <th className="px-3 py-2 text-right font-medium">Peso</th>
                 <th className="px-3 py-2 text-right font-medium">Recebido</th>
                 <th className="px-3 py-2 text-right font-medium">A pagar</th>
