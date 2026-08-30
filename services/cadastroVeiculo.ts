@@ -204,6 +204,15 @@ export async function buscarPessoaJuridica(cnpj: string): Promise<PessoaJuridica
 export async function cadastrarPessoaJuridica(dados: {
     cnpj: string; razaoSocial: string; nomeFantasia: string;
     rntrc: string; enquadramento?: string;
+    /** DDD + 9 dígitos, com máscara. O CT-e exige contato do proprietário. */
+    celular?: string;
+    /** Endereço completo. Sem ele o CT-e não emite — a empresa nascia sem. */
+    endereco?: {
+        cep: string; logradouro: string; numero: string; complemento: string;
+        bairro: string; cidade: string; codIBGE: string; estado: string;
+    };
+    inscricaoEstadual?: string;
+    inscricaoMunicipal?: string;
 }): Promise<PessoaJuridica> {
     return chamarFuncao('cadastrar-pessoa-juridica', dados);
 }

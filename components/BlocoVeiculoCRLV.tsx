@@ -67,7 +67,7 @@ interface Props {
 }
 
 import { buscarCep, formatarCep } from '../services/cep';
-import { DadosEndereco, ENDERECO_VAZIO } from '../services/cadastroMotorista';
+import { DadosEndereco, ENDERECO_VAZIO, celularValido, formatarCelular } from '../services/cadastroMotorista';
 
 const soDigitos = (s: string) => (s || '').replace(/\D/g, '');
 
@@ -110,13 +110,17 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
     const [querTrocarDono, setQuerTrocarDono] = useState(false);
     const [erroProp, setErroProp] = useState<string | null>(null);
     const [trocando, setTrocando] = useState(false);
-    const [pjNova, setPjNova] = useState<{ razaoSocial: string; nomeFantasia: string; rntrc: string; enquadramento: string } | null>(null);
+    const [pjNova, setPjNova] = useState<
+        { razaoSocial: string; nomeFantasia: string; rntrc: string; enquadramento: string;
+          celular: string; endereco: DadosEndereco } | null
+    >(null);
 
     // Mini-cadastro de pessoa física NOVA. `null` = não está aberto.
     // `ehMotorista` decide entre os dois caminhos: quem dirige vai para o
     // cadastro completo (com CNH), quem só é dono fica aqui.
     const [pfNova, setPfNova] = useState<
-        { ehMotorista: boolean; nome: string; sobrenome: string; rntrc: string; endereco: DadosEndereco } | null
+        { ehMotorista: boolean; nome: string; sobrenome: string; rntrc: string;
+          celular: string; dataNascimento: string; endereco: DadosEndereco } | null
     >(null);
     const [buscandoCep, setBuscandoCep] = useState(false);
     const [erroCep, setErroCep] = useState<string | null>(null);
@@ -160,16 +164,21 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
         // que os campos obrigatórios dela estão preenchidos — ela é criada na
         // cascata, no fim. Exigir que já existisse era o que travava a tela.
         const donoOk = ref !== null
+            // Empresa: além de razão social e RNTRC, agora telefone e endereço —
+            // o CT-e exige os dois, e a empresa nascia sem nenhum deles.
             && (ref.tipo !== 'novaPJ'
-                || (!!ref.razaoSocial.trim() && !!ref.nomeFantasia.trim() && !!ref.rntrc.trim()))
+                || (!!ref.razaoSocial.trim() && !!ref.nomeFantasia.trim() && !!ref.rntrc.trim()
+                    && celularValido(ref.celular) && enderecoOk(ref.endereco)))
             // Pessoa física nova: nome, RNTRC e o endereço com município
             // resolvido pelo CEP. `cidade` é o código IBGE — digitado à mão ele
             // não existe, e sem ele o endereço não é enviado.
             && (ref.tipo !== 'novaPF'
                 || (!!ref.nome.trim() && !!ref.rntrc.trim()
-                    && !!ref.endereco.cep.trim() && !!ref.endereco.logradouro.trim()
-                    && !!ref.endereco.numero.trim() && !!ref.endereco.bairro.trim()
-                    && !!ref.endereco.cidade.trim()));
+                    && celularValido(ref.celular)
+                    // Nascimento é obrigatório porque a API não aceita vazio:
+                    // grava "0000-00-00", que é data inválida, não ausência.
+                    && !!ref.dataNascimento.trim()
+                    && enderecoOk(ref.endereco)));
         const camposOk = placaValida(form.placa) && !!form.categoriaVeiculo
             && !!form.tipoCarroceria && Number(form.capM3) > 0;
         onChange({
@@ -309,18 +318,12 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                     // Antes isto era um beco sem saída: mandava o operador para
                     // outra tela porque "o Datamex exige CNH". Não exige — a
                     // exigência era nossa. Agora abre o mini-cadastro aqui.
-                    setPfNova({
-                        ehMotorista: false,
-                        nome: (crlv.proprietario_nome || '').split(' ')[0] || '',
-                        sobrenome: (crlv.proprietario_nome || '').split(' ').slice(1).join(' '),
-                        rntrc: '', endereco: ENDERECO_VAZIO,
-                    });
-                    setRef({
-                        tipo: 'novaPF', cpf: soDigitos(docProp),
-                        nome: (crlv.proprietario_nome || '').split(' ')[0] || '',
-                        sobrenome: (crlv.proprietario_nome || '').split(' ').slice(1).join(' '),
-                        rntrc: '', endereco: ENDERECO_VAZIO,
-                    });
+                    const primeiro = (crlv.proprietario_nome || '').split(' ')[0] || '';
+                    const resto = (crlv.proprietario_nome || '').split(' ').slice(1).join(' ');
+                    setPfNova({ ehMotorista: false, nome: primeiro, sobrenome: resto,
+                        rntrc: '', celular: '', dataNascimento: '', endereco: ENDERECO_VAZIO });
+                    setRef({ tipo: 'novaPF', cpf: soDigitos(docProp), nome: primeiro, sobrenome: resto,
+                        rntrc: '', celular: '', dataNascimento: '', endereco: ENDERECO_VAZIO });
                     return;
                 }
                 setProprietario({ codPessoa: r.codPessoa, nome: r.nome || '', tipo: 'fisica' });
@@ -350,13 +353,15 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
      * junto com o resto — assim o operador não fica preso a um cadastro que só
      * faz sentido se o conjunto inteiro for adiante.
      */
-    const atualizarPj = (campo: string, valor: string) => {
+    const atualizarPj = (campo: string, valor: string | DadosEndereco) => {
         setPjNova(prev => {
-            const novo = { ...(prev ?? { razaoSocial: '', nomeFantasia: '', rntrc: '', enquadramento: '' }), [campo]: valor };
+            const base = prev ?? { razaoSocial: '', nomeFantasia: '', rntrc: '', enquadramento: '', celular: '', endereco: ENDERECO_VAZIO };
+            const novo = { ...base, [campo]: valor } as typeof base;
             setRef({
                 tipo: 'novaPJ', cnpj: soDigitos(docProp),
                 razaoSocial: novo.razaoSocial, nomeFantasia: novo.nomeFantasia,
                 rntrc: novo.rntrc, enquadramento: novo.enquadramento,
+                celular: novo.celular, endereco: novo.endereco,
             });
             return novo;
         });
@@ -369,26 +374,33 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
      */
     const atualizarPf = (campo: string, valor: string | boolean | DadosEndereco) => {
         setPfNova(prev => {
-            const base = prev ?? { ehMotorista: false, nome: '', sobrenome: '', rntrc: '', endereco: ENDERECO_VAZIO };
+            const base = prev ?? { ehMotorista: false, nome: '', sobrenome: '', rntrc: '', celular: '', dataNascimento: '', endereco: ENDERECO_VAZIO };
             const novo = { ...base, [campo]: valor } as typeof base;
             // Marcou que dirige: o caminho é o cadastro completo, com CNH, que
             // não cabe aqui. A referência sai para não gravar meia pessoa.
             setRef(novo.ehMotorista ? null : {
                 tipo: 'novaPF', cpf: soDigitos(docProp),
                 nome: novo.nome, sobrenome: novo.sobrenome,
-                rntrc: novo.rntrc, endereco: novo.endereco,
+                rntrc: novo.rntrc, celular: novo.celular,
+                dataNascimento: novo.dataNascimento, endereco: novo.endereco,
             });
             return novo;
         });
     };
 
-    /** Busca o CEP do proprietário novo. O código IBGE só nasce aqui. */
-    const procurarCepPf = async () => {
-        const atual = pfNova?.endereco ?? ENDERECO_VAZIO;
+    /**
+     * Busca o CEP do proprietário novo — serve a pessoa física E a empresa. O
+     * código IBGE só nasce aqui: digitado à mão, o município não tem código, e
+     * sem código o endereço não é aceito.
+     */
+    const procurarCepDe = async (
+        atual: DadosEndereco,
+        aplicar: (e: DadosEndereco) => void,
+    ) => {
         setBuscandoCep(true); setErroCep(null);
         try {
             const achado = await buscarCep(atual.cep);
-            atualizarPf('endereco', {
+            aplicar({
                 ...atual,
                 cep: achado.cep,
                 logradouro: achado.logradouro || atual.logradouro,
@@ -400,15 +412,31 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
             });
         } catch (err) {
             setErroCep((err as Error).message);
-            atualizarPf('endereco', { ...atual, cidade: '', estado: '', municipioRotulo: '' });
+            aplicar({ ...atual, cidade: '', estado: '', municipioRotulo: '' });
         } finally {
             setBuscandoCep(false);
         }
     };
 
+    const procurarCepPf = () =>
+        procurarCepDe(pfNova?.endereco ?? ENDERECO_VAZIO, e => atualizarPf('endereco', e));
+    const procurarCepPj = () =>
+        procurarCepDe(pjNova?.endereco ?? ENDERECO_VAZIO, e => atualizarPj('endereco', e));
+
     /** Um campo do endereço da PF nova. */
     const setEndPf = (campo: keyof DadosEndereco, valor: string) =>
         atualizarPf('endereco', { ...(pfNova?.endereco ?? ENDERECO_VAZIO), [campo]: valor });
+    /** Um campo do endereço da PJ nova. */
+    const setEndPj = (campo: keyof DadosEndereco, valor: string) =>
+        atualizarPj('endereco', { ...(pjNova?.endereco ?? ENDERECO_VAZIO), [campo]: valor });
+
+    /**
+     * Endereço completo o bastante para o CT-e. `cidade` é o código IBGE, que
+     * só existe se o CEP foi buscado — é o que impede mandar município no chute.
+     */
+    const enderecoOk = (e: DadosEndereco) =>
+        !!e.cep.trim() && !!e.logradouro.trim() && !!e.numero.trim()
+        && !!e.bairro.trim() && !!e.cidade.trim();
 
     // ---- estilos ----
     const classeNormal = 'w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none border bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8] transition-colors';
@@ -757,6 +785,47 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                                                 {ENQUADRAMENTOS.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
                                             </select>
                                         </div>
+
+                                        {/* Telefone e endereço: até 30/08/2026 a empresa era gravada com
+                                            cinco campos e mais nada — sem contato e sem endereço —, e o
+                                            CT-e não emitia. */}
+                                        <div className="mt-3">
+                                            <label className="text-[10px] font-medium uppercase text-[#92400e] mb-1.5 block">
+                                                Celular<span className="text-red-500 ml-0.5">*</span>
+                                            </label>
+                                            <input value={pjNova.celular} placeholder="(11) 90000-0000"
+                                                onChange={e => atualizarPj('celular', formatarCelular(e.target.value))}
+                                                className={`w-full md:w-56 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${celularValido(pjNova.celular)
+                                                    ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
+                                        </div>
+
+                                        <p className="text-[11px] font-semibold text-[#92400e] mt-4 mb-1.5">Endereço da empresa</p>
+                                        <div className="flex flex-wrap items-end gap-2">
+                                            <input value={pjNova.endereco.cep} placeholder="CEP"
+                                                onChange={e => setEndPj('cep', formatarCep(e.target.value))}
+                                                onBlur={() => { if (soDigitos(pjNova.endereco.cep).length === 8 && !pjNova.endereco.cidade) procurarCepPj(); }}
+                                                className={`w-36 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pjNova.endereco.cidade
+                                                    ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
+                                            <button type="button" onClick={procurarCepPj}
+                                                disabled={buscandoCep || soDigitos(pjNova.endereco.cep).length !== 8}
+                                                className="px-3 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] transition-colors flex items-center gap-1.5">
+                                                {buscandoCep ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando…</> : <><Search className="w-3.5 h-3.5" strokeWidth={1.75} /> Buscar CEP</>}
+                                            </button>
+                                            {pjNova.endereco.municipioRotulo && (
+                                                <span className="text-[11px] font-medium text-emerald-700 pb-2.5">{pjNova.endereco.municipioRotulo}</span>
+                                            )}
+                                        </div>
+                                        {erroCep && <p className="text-[11px] font-medium text-amber-700 mt-1.5">{erroCep}</p>}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                                            <input value={pjNova.endereco.logradouro} placeholder="Endereço"
+                                                onChange={e => setEndPj('logradouro', e.target.value)} className={classeNormal} />
+                                            <input value={pjNova.endereco.numero} placeholder="Número"
+                                                onChange={e => setEndPj('numero', e.target.value)} className={classeNormal} />
+                                            <input value={pjNova.endereco.bairro} placeholder="Bairro"
+                                                onChange={e => setEndPj('bairro', e.target.value)} className={classeNormal} />
+                                            <input value={pjNova.endereco.complemento} placeholder="Complemento (opcional)"
+                                                onChange={e => setEndPj('complemento', e.target.value)} className={classeNormal} />
+                                        </div>
                                     </div>
                                 )}
 
@@ -814,6 +883,33 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                                                             ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
                                                     <input value={pfNova.sobrenome} placeholder="Sobrenome"
                                                         onChange={e => atualizarPf('sobrenome', e.target.value)} className={classeNormal} />
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                                                    <div>
+                                                        <label className="text-[10px] font-medium uppercase text-[#92400e] mb-1.5 block">
+                                                            Celular<span className="text-red-500 ml-0.5">*</span>
+                                                        </label>
+                                                        <input value={pfNova.celular} placeholder="(11) 90000-0000"
+                                                            onChange={e => atualizarPf('celular', formatarCelular(e.target.value))}
+                                                            className={`w-full px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${celularValido(pfNova.celular)
+                                                                ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
+                                                        <p className="text-[10px] font-medium text-[#92400e] mt-1">
+                                                            DDD + 9 dígitos. O CT-e exige contato do proprietário.
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-medium uppercase text-[#92400e] mb-1.5 block">
+                                                            Nascimento<span className="text-red-500 ml-0.5">*</span>
+                                                        </label>
+                                                        <input type="date" value={pfNova.dataNascimento}
+                                                            onChange={e => atualizarPf('dataNascimento', e.target.value)}
+                                                            className={`w-full px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pfNova.dataNascimento
+                                                                ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
+                                                        <p className="text-[10px] font-medium text-[#92400e] mt-1">
+                                                            Sem isto o Datamex grava 00/00/0000, que é data inválida.
+                                                        </p>
+                                                    </div>
                                                 </div>
 
                                                 <div className="mt-3">

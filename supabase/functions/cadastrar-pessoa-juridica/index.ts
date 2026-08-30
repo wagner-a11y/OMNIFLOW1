@@ -162,6 +162,9 @@ Deno.serve(async (req: Request) => {
       nomeFantasia: String(p.nomeFantasia).trim(),
       grupos,
       RNTRC: String(p.rntrc).trim(),
+      // Telefone: o CT-e cobra contato do proprietário. Até 30/08/2026 a empresa
+      // nascia sem nenhum — cinco campos e mais nada —, e a emissão parava.
+      celular: String(p.celular ?? "").trim() || null,
     };
     // Só entra para quem é proprietária de veículo. PJ que é apenas cliente ou
     // fornecedor não é transportadora e não deve ser classificada como uma.
@@ -185,7 +188,58 @@ Deno.serve(async (req: Request) => {
     if (!codPessoa) {
       return json({ error: "O Datamex aceitou o cadastro mas não devolveu o código da empresa." }, 502);
     }
-    return json({ codPessoa, jaExistia: false, razaoSocial: novo.razaoSocial });
+    // ---- Endereço: sub-recurso da pessoa, como na física ----
+    //
+    // Não existia aqui. A empresa entrava sem endereço nenhum e o CT-e não
+    // emitia. Mesmo endpoint e mesmas convenções da pessoa física, INCLUSIVE a
+    // que mais confunde: `cidade` é o NOME do município e o código de 7 dígitos
+    // vai em `codIBGE`, campo separado — o INVERSO do POST de veículo. Trocar
+    // os dois grava endereço sem município nem estado, que foi o que travou a
+    // emissão da pessoa 11298.
+    //
+    // Falha aqui NÃO desfaz a empresa criada: vira aviso, e o operador completa
+    // no Datamex. Não há delete seguro para desfazer.
+    let codEndereco: string | null = null;
+    let avisoEndereco: string | undefined;
+    const end = p.endereco as Record<string, any> | undefined;
+
+    if (end?.cep && codPessoa) {
+      const corpoEnd: Record<string, unknown> = {
+        cep: String(end.cep),
+        logradouro: end.logradouro ?? "",
+        numero: end.numero ?? "",
+        bairro: end.bairro ?? "",
+        cidade: String(end.cidade ?? ""),
+        codIBGE: String(end.codIBGE ?? ""),
+        estado: end.estado ?? "",
+        tipoEndereco: "N",
+        // Empresa CONTRIBUINTE, ao contrário da pessoa física: o proprietário
+        // PJ tem inscrição estadual de verdade. Quando o operador não informa,
+        // vai ISENTO e o Datamex aceita — mas fica registrado que veio da tela,
+        // não de uma afirmação nossa.
+        inscricaoMunicipal: String(p.inscricaoMunicipal ?? "").trim() || "ISENTO",
+        inscricaoEstadual: String(p.inscricaoEstadual ?? "").trim() || "ISENTO",
+        inscricaoEstadualNaoContribuinte: String(p.inscricaoEstadual ?? "").trim() ? "N" : "S",
+        cobrancaPreferencial: "S",
+        enderecoPreferencial: "S",
+      };
+      if (end.complemento) corpoEnd.complemento = end.complemento;
+
+      const criadoEnd = await chamar(`/pessoas/v1/pessoas/${encodeURIComponent(codPessoa)}/enderecos`, {
+        method: "POST",
+        body: corpoEnd,
+      });
+      if (criadoEnd.status >= 400) {
+        avisoEndereco = `A empresa foi criada, mas o endereço não entrou: ${mensagemDoBsoft(criadoEnd.corpo, criadoEnd.texto, criadoEnd.status)}`;
+      } else {
+        const item = Array.isArray(criadoEnd.corpo) ? criadoEnd.corpo[0] : criadoEnd.corpo;
+        codEndereco = String((item as any)?.codEndereco ?? (item as any)?.id ?? "") || null;
+      }
+    } else if (codPessoa) {
+      avisoEndereco = "A empresa foi criada SEM endereço — o CT-e vai exigir. Complete no Datamex.";
+    }
+
+    return json({ codPessoa, jaExistia: false, razaoSocial: novo.razaoSocial, codEndereco, aviso: avisoEndereco });
   } catch (e) {
     console.error("cadastrar-pessoa-juridica:", (e as Error).message);
     return json({ error: (e as Error).message || "Erro inesperado no cadastro da empresa." }, 500);
