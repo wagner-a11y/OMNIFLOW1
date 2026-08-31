@@ -12,6 +12,7 @@ import { RegistroContatoBoard } from './components/RegistroContatoBoard';
 import { PainelCobrancaBoard } from './components/PainelCobrancaBoard';
 import { NegociacoesBoard } from './components/NegociacoesBoard';
 import { montarMenu, AcaoMenu, ItemMenu } from './menuLateral';
+import GuardaDeTela from './components/GuardaDeTela';
 
 // Ícones da barra lateral, por id. Ficam aqui porque menuLateral.ts não conhece
 // React — é o que permite testar a trava de papel rodando o módulo no node.
@@ -2628,11 +2629,15 @@ Disponibilidade: ${disponibilidade}`;
                     {/* Cadastro Rápido — Motorista (Fase 2). Isolado: não toca em cotação,
                         faturamento nem Pipefy. Visível a todos os usuários logados. */}
                     {activeTab === 'cadastro-conjunto' && (
-                        <CadastroConjunto autor={{ id: currentUser.id, name: currentUser.name }} />
+                        <GuardaDeTela onde="Cadastro de Conjunto">
+                            <CadastroConjunto autor={{ id: currentUser.id, name: currentUser.name }} />
+                        </GuardaDeTela>
                     )}
 
                     {activeTab === 'cadastro-veiculo' && (
-                        <CadastroVeiculo autor={{ id: currentUser.id, name: currentUser.name }} />
+                        <GuardaDeTela onde="Cadastro de Veículo">
+                            <CadastroVeiculo autor={{ id: currentUser.id, name: currentUser.name }} />
+                        </GuardaDeTela>
                     )}
 
                     {activeTab === 'fast-delivery' && (
@@ -2647,8 +2652,13 @@ Disponibilidade: ${disponibilidade}`;
                         />
                     )}
 
+                    {/* As telas de cadastro ficam atrás do guarda: um erro de JS
+                        aqui apagava a tela inteira e o operador perdia o CRLV ou a
+                        CNH que já tinha conferido. */}
                     {activeTab === 'cadastro-motorista' && (
-                        <CadastroMotorista autor={{ id: currentUser.id, name: currentUser.name }} />
+                        <GuardaDeTela onde="Cadastro Pessoa">
+                            <CadastroMotorista autor={{ id: currentUser.id, name: currentUser.name }} />
+                        </GuardaDeTela>
                     )}
 
                     {activeTab === 'prospeccao' && currentUser.role === 'master' && (
