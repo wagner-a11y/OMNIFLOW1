@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Truck, Link2, ShieldAlert, IdCard } from 'lucide-react';
+import { Truck, Link2, ShieldAlert, IdCard, RotateCcw, LogOut } from 'lucide-react';
 import CadastroVeiculo from './components/CadastroVeiculo';
 import CadastroConjunto from './components/CadastroConjunto';
-import { temTokenCadastro } from './services/tokenCadastro';
+import { esquecerTokenCadastro, temTokenCadastro } from './services/tokenCadastro';
 
 // ============================================================================
 // CadastroExterno — as telas de cadastro por LINK, sem login.
@@ -37,6 +37,18 @@ import { temTokenCadastro } from './services/tokenCadastro';
 
 const CadastroExterno: React.FC = () => {
     const [aba, setAba] = useState<'veiculo' | 'conjunto'>('veiculo');
+    /**
+     * Muda a cada "fazer outro cadastro" e força o React a remontar a tela do
+     * zero — formulário limpo, sem recarregar a página.
+     *
+     * É a correção do gargalo de verdade: não havia como recomeçar, então o
+     * operador dava F5 ou reabria o link, e o token (já retirado da URL, e até
+     * então só em memória) sumia junto. Guardar o token na sessão da aba
+     * resolveu o sintoma; este botão remove o motivo de recarregar.
+     */
+    const [sessaoForm, setSessaoForm] = useState(0);
+    /** Confirmação do encerrar: sair apaga o token e exige o link de novo. */
+    const [confirmandoSaida, setConfirmandoSaida] = useState(false);
 
     // Sem token na URL não adianta desenhar a tela: toda gravação vai voltar 401.
     // Melhor dizer isso na entrada do que deixar a pessoa preencher um CRLV
@@ -97,10 +109,55 @@ const CadastroExterno: React.FC = () => {
 
                 {/* Mesmos componentes de dentro do sistema. `autor` vem vazio porque não
                     há usuário: é exatamente a informação que este modelo não tem. */}
+                {/* A `key` inclui a aba E a sessão: trocar de aba ou pedir outro
+                    cadastro monta um formulário novo, sem resíduo do anterior. */}
                 {aba === 'veiculo'
-                    ? <CadastroVeiculo autor={{}} />
-                    : <CadastroConjunto autor={{}} />}
+                    ? <CadastroVeiculo key={`v-${sessaoForm}`} autor={{}} />
+                    : <CadastroConjunto key={`c-${sessaoForm}`} autor={{}} />}
+
+                <div className="mt-8 pt-5 border-t border-[#e5e7eb] flex flex-wrap items-center gap-3">
+                    <button type="button"
+                        onClick={() => { setSessaoForm(n => n + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] transition-colors flex items-center gap-2">
+                        <RotateCcw className="w-4 h-4" strokeWidth={1.75} />
+                        Fazer outro cadastro
+                    </button>
+                    <span className="text-[11px] font-medium text-[#6b7280]">
+                        Limpa o formulário e mantém a sessão — não precisa abrir o link de novo.
+                    </span>
+
+                    <button type="button" onClick={() => setConfirmandoSaida(true)}
+                        className="ml-auto text-xs font-semibold text-[#6b7280] hover:text-red-600 transition-colors flex items-center gap-1.5">
+                        <LogOut className="w-3.5 h-3.5" strokeWidth={1.75} />
+                        Encerrar
+                    </button>
+                </div>
             </div>
+
+            {/* Encerrar de propósito, para quem usou um computador compartilhado
+                e não quer deixar a sessão aberta esperando o próximo. */}
+            {confirmandoSaida && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                    onClick={() => setConfirmandoSaida(false)}>
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-semibold text-[#111827]">Encerrar o acesso?</h3>
+                        <p className="text-sm text-[#6b7280]">
+                            O código de acesso é esquecido nesta aba. Para cadastrar de novo será
+                            preciso abrir o link outra vez.
+                        </p>
+                        <div className="flex gap-2">
+                            <button onClick={() => setConfirmandoSaida(false)}
+                                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] bg-[#f9fafb] border border-[#e5e7eb] hover:bg-[#f3f4f6] transition-colors">
+                                Continuar cadastrando
+                            </button>
+                            <button onClick={() => { esquecerTokenCadastro(); window.location.reload(); }}
+                                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors">
+                                Encerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

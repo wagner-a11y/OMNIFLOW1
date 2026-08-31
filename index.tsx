@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import PainelTV from './PainelTV';
 import CadastroExterno from './CadastroExterno';
-import { definirTokenCadastro } from './services/tokenCadastro';
+import { definirTokenCadastro, recuperarTokenDaSessao } from './services/tokenCadastro';
 import './index.css';
 
 // Rotas públicas, que NÃO passam pelo App nem pelo login:
