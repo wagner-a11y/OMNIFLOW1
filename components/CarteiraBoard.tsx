@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Users, Plus, X, Trash2, RefreshCw, Check, Link2, Building2, Eye } from 'lucide-react';
+import { Users, X, Trash2, RefreshCw, Check, Link2, Building2, Eye } from 'lucide-react';
 import {
     SolicitanteCotacao, CdSolicitante, Analista, CdAtribuicao, ClienteRef,
     getSolicitantesCotacao, getCdSolicitantes, createCdSolicitante, updateCdSolicitante, deleteCdSolicitante,
@@ -43,7 +43,6 @@ export const CarteiraBoard: React.FC<Props> = ({ currentUser, onFeedback, soment
     const mapeados = useMemo(() => new Set(canon.flatMap(c => c.aliases)), [canon]);
     const naoMapeados = useMemo(() => raw.filter(r => !mapeados.has(r.nome)), [raw, mapeados]);
     const atribPorSol = useMemo(() => new Map(atrib.map(a => [a.solicitanteId, a.analistaId])), [atrib]);
-    const nomeAnalista = (id?: string) => analistas.find(a => a.id === id)?.nome || '';
     const nomeCliente = (id?: string | null) => clientes.find(c => c.id === id)?.nome || '';
     const normN = (s: string) => (s || '').trim().toLowerCase();
     // Palpite: se todas as variações do solicitante cotaram p/ UM único cliente, sugere.

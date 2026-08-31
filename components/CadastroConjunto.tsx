@@ -375,7 +375,6 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
             <BlocoVeiculoCRLV
                 titulo="2 · Veículo principal"
                 subtitulo="Anexe o CRLV da tração. Se for cavalo, os blocos de carreta abrem sozinhos."
-                motoristaEhDono={motoristaEhDono}
                 nomeMotorista={nomeMotorista}
                 assumirMotorista={motoristaEhDono}
                 onChange={setPrincipal}
@@ -395,7 +394,7 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                     {/* refPrincipal habilita o atalho "é o proprietário do cavalo".
                         Só os implementos recebem: o principal não tem de quem copiar. */}
                     <BlocoVeiculoCRLV titulo="3 · Implemento 1 (carreta / central)" opcional
-                        motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista}
+                        nomeMotorista={nomeMotorista}
                         refPrincipal={principal?.ref ?? null} onChange={setImpl1} />
 
                     {!querSegundoImplemento && IMPLEMENTOS_VISIVEIS > 1 && (
@@ -406,7 +405,7 @@ const CadastroConjunto: React.FC<Props> = ({ autor }) => {
                     )}
                     {querSegundoImplemento && (
                         <BlocoVeiculoCRLV titulo="4 · Implemento 2" opcional
-                            motoristaEhDono={motoristaEhDono} nomeMotorista={nomeMotorista}
+                            nomeMotorista={nomeMotorista}
                             refPrincipal={principal?.ref ?? null} onChange={setImpl2} />
                     )}
                 </>

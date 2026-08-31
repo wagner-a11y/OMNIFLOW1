@@ -6,7 +6,8 @@
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "tipos": "tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters"
     },
     "dependencies": {
         "@supabase/supabase-js": "^2.91.1",

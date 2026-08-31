@@ -71,7 +71,8 @@ export const PipefyBoard: React.FC = () => {
     const [view, setView] = useState<'fase' | 'coleta'>('fase');
     const [loading, setLoading] = useState(false);
     const [now, setNow] = useState(Date.now());
-    const [lastOk, setLastOk] = useState<number | null>(null);
+    // Só o setter tem uso: marca a última sincronização bem-sucedida.
+    const [, setLastOk] = useState<number | null>(null);
     const [stale, setStale] = useState(false); // última leitura falhou (mantém estado anterior)
     const mounted = useRef(true);
 

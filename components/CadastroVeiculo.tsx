@@ -130,6 +130,12 @@ const CadastroVeiculo: React.FC<Props> = ({ autor: _autor }) => {
                 especie_texto: t('especie_texto'), tipo_veiculo_inferido: t('tipo_veiculo_inferido'),
                 carroceria_texto: t('carroceria_texto'), local_texto: t('local_texto'),
                 tara: t('tara'), capacidade_carga: t('capacidade_carga'), eixos: t('eixos'),
+                // Faltavam, e o compilador dizia. Não era só tipo frouxo: a tela
+                // lê crlv.proprietario_nome para sugerir a razão social da
+                // empresa nova, e como o campo nunca era preenchido a sugestão
+                // vinha sempre vazia. O bloco do conjunto sempre leu os dois.
+                proprietario_nome: t('proprietario_nome'),
+                proprietario_documento: t('proprietario_documento'),
             };
             if (lido.tipo_documento && lido.tipo_documento.toUpperCase() !== 'CRLV') {
                 setErroLeitura(`O documento parece ser ${lido.tipo_documento}, não um CRLV. Confira o arquivo.`);

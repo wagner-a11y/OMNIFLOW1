@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { FreightCalculation, QuoteStatus, LOST_REASONS, LostReason, FederalTaxes } from '../types';
-import { MoreVertical, Paperclip, X, Check, FileText, Calendar, DollarSign, Truck, MapPin, AlertCircle, TrendingUp, Target, Activity, BarChart3, Clock, PieChart, ShieldCheck, Zap, ArrowRight, Info, Scale } from 'lucide-react';
+import { Paperclip, X, FileText, Calendar, DollarSign, MapPin, AlertCircle, TrendingUp, Target, Activity, BarChart3, Clock, PieChart, ShieldCheck, Zap, Info, Scale } from 'lucide-react';
 
 interface CRMBoardProps {
     quotes: FreightCalculation[];

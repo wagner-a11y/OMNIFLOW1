@@ -218,7 +218,7 @@ export async function cadastrarPessoaJuridica(dados: {
 }
 
 /** invoke só expõe "non-2xx"; o motivo real vem no corpo. */
-async function chamarFuncao(nome: string, body: unknown): Promise<PessoaJuridica> {
+async function chamarFuncao(nome: string, body: Record<string, unknown>): Promise<PessoaJuridica> {
     try {
         const { data, error } = await supabase.functions.invoke(nome, { body, headers: cabecalhoCadastro() });
         if (error) {
