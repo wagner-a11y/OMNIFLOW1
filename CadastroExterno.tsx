@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Truck, Link2, ShieldAlert, IdCard, RotateCcw, LogOut } from 'lucide-react';
+import { Truck, Link2, ShieldAlert, IdCard, RotateCcw, LogOut, UserCheck } from 'lucide-react';
 import CadastroVeiculo from './components/CadastroVeiculo';
 import CadastroConjunto from './components/CadastroConjunto';
+import CadastroMotorista from './components/CadastroMotorista';
+import CadastroProprietario from './components/CadastroProprietario';
 import GuardaDeTela from './components/GuardaDeTela';
 import { esquecerTokenCadastro, temTokenCadastro } from './services/tokenCadastro';
 
@@ -36,8 +38,22 @@ import { esquecerTokenCadastro, temTokenCadastro } from './services/tokenCadastr
 // o caminho do link em _shared/porta.ts e some o secret CADASTRO_EXTERNO_TOKEN.
 // ============================================================================
 
+/**
+ * As quatro coisas que dá para cadastrar. Motorista e proprietário entraram
+ * depois: nem todo cadastro é de um conjunto inteiro — às vezes só falta a
+ * pessoa, e obrigar a passar pelo fluxo completo para isso era trabalho à toa.
+ */
+type Aba = 'motorista' | 'proprietario' | 'veiculo' | 'conjunto';
+
+const ROTULO: Record<Aba, string> = {
+    motorista: 'Cadastro de motorista',
+    proprietario: 'Cadastro de proprietário',
+    veiculo: 'Cadastro de veículo',
+    conjunto: 'Cadastro de conjunto',
+};
+
 const CadastroExterno: React.FC = () => {
-    const [aba, setAba] = useState<'veiculo' | 'conjunto'>('veiculo');
+    const [aba, setAba] = useState<Aba>('veiculo');
     /**
      * Muda a cada "fazer outro cadastro" e força o React a remontar a tela do
      * zero — formulário limpo, sem recarregar a página.
@@ -69,7 +85,7 @@ const CadastroExterno: React.FC = () => {
         );
     }
 
-    const Aba: React.FC<{ id: 'veiculo' | 'conjunto'; icone: any; texto: string }> = ({ id, icone: Icone, texto }) => (
+    const BotaoAba: React.FC<{ id: Aba; icone: any; texto: string }> = ({ id, icone: Icone, texto }) => (
         <button
             onClick={() => setAba(id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === id
@@ -90,8 +106,10 @@ const CadastroExterno: React.FC = () => {
                         <span className="ml-3 text-sm font-normal text-[#6b7280]">Cadastro</span>
                     </h1>
                     <div className="flex gap-2 ml-auto">
-                        <Aba id="veiculo" icone={Truck} texto="Veículo" />
-                        <Aba id="conjunto" icone={Link2} texto="Conjunto" />
+                        <BotaoAba id="motorista" icone={IdCard} texto="Motorista" />
+                        <BotaoAba id="proprietario" icone={UserCheck} texto="Proprietário" />
+                        <BotaoAba id="veiculo" icone={Truck} texto="Veículo" />
+                        <BotaoAba id="conjunto" icone={Link2} texto="Conjunto" />
                     </div>
                 </div>
             </header>
@@ -112,9 +130,12 @@ const CadastroExterno: React.FC = () => {
                     há usuário: é exatamente a informação que este modelo não tem. */}
                 {/* A `key` inclui a aba E a sessão: trocar de aba ou pedir outro
                     cadastro monta um formulário novo, sem resíduo do anterior. */}
-                <GuardaDeTela onde={aba === 'veiculo' ? 'Cadastro de veículo' : 'Cadastro de conjunto'}>
-                    {aba === 'veiculo'
-                        ? <CadastroVeiculo key={`v-${sessaoForm}`} autor={{}} />
+                {/* Todas as abas usam as MESMAS telas do sistema logado, com as
+                    mesmas validações. Não há versão reduzida para o link. */}
+                <GuardaDeTela onde={ROTULO[aba]}>
+                    {aba === 'motorista' ? <CadastroMotorista key={`m-${sessaoForm}`} autor={{}} />
+                        : aba === 'proprietario' ? <CadastroProprietario key={`p-${sessaoForm}`} ondeCadastrarMotorista="a aba Motorista" />
+                        : aba === 'veiculo' ? <CadastroVeiculo key={`v-${sessaoForm}`} autor={{}} />
                         : <CadastroConjunto key={`c-${sessaoForm}`} autor={{}} />}
                 </GuardaDeTela>
 

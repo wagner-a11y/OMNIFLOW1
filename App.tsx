@@ -13,6 +13,7 @@ import { PainelCobrancaBoard } from './components/PainelCobrancaBoard';
 import { NegociacoesBoard } from './components/NegociacoesBoard';
 import { montarMenu, AcaoMenu, ItemMenu } from './menuLateral';
 import GuardaDeTela from './components/GuardaDeTela';
+import CadastroProprietario from './components/CadastroProprietario';
 
 // Ícones da barra lateral, por id. Ficam aqui porque menuLateral.ts não conhece
 // React — é o que permite testar a trava de papel rodando o módulo no node.
@@ -22,7 +23,8 @@ const ICONES_MENU: Record<string, any> = {
     'acoes-comercial': Layers, 'contato-diario': UserCheck, 'cd-cobranca': PieChart,
     'cd-registro': FileText, negocios: Activity, 'painel-tv': Tv,
     tracking: Activity, 'fast-delivery': Zap,
-    'cadastro-motorista': IdCard, 'cadastro-veiculo': Truck, 'cadastro-conjunto': Link2,
+    'cadastro-motorista': IdCard, 'cadastro-proprietario': UserCheck,
+    'cadastro-veiculo': Truck, 'cadastro-conjunto': Link2,
     emergencia: AlertTriangle, 'config-sistema': Wrench, 'trocar-senha': Lock,
     trash: Trash2,
 };
@@ -2596,7 +2598,8 @@ Disponibilidade: ${disponibilidade}`;
                                         activeTab === 'prospeccao' ? 'Prospecção · Mini CRM' :
                                         activeTab === 'contato-diario' ? 'Contato Diário · Carteira' :
                                         activeTab === 'trash' ? 'Lixeira' :
-                                        activeTab === 'cadastro-motorista' ? 'Cadastro Pessoa' :
+                                        activeTab === 'cadastro-motorista' ? 'Cadastro Motorista' :
+                                        activeTab === 'cadastro-proprietario' ? 'Cadastro Proprietário' :
                                         activeTab === 'cadastro-veiculo' ? 'Cadastro Veículo' :
                                         activeTab === 'cadastro-conjunto' ? 'Cadastro de Conjunto' :
                                         activeTab === 'fast-delivery' ? 'Fast Delivery · Prévia' :
@@ -2655,8 +2658,14 @@ Disponibilidade: ${disponibilidade}`;
                     {/* As telas de cadastro ficam atrás do guarda: um erro de JS
                         aqui apagava a tela inteira e o operador perdia o CRLV ou a
                         CNH que já tinha conferido. */}
+                    {activeTab === 'cadastro-proprietario' && (
+                        <GuardaDeTela onde="Cadastro Proprietário">
+                            <CadastroProprietario ondeCadastrarMotorista="Cadastro Motorista" />
+                        </GuardaDeTela>
+                    )}
+
                     {activeTab === 'cadastro-motorista' && (
-                        <GuardaDeTela onde="Cadastro Pessoa">
+                        <GuardaDeTela onde="Cadastro Motorista">
                             <CadastroMotorista autor={{ id: currentUser.id, name: currentUser.name }} />
                         </GuardaDeTela>
                     )}
