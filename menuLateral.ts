@@ -98,7 +98,12 @@ export function montarMenu(ctx: ContextoMenu): { secoes: SecaoMenu[]; soltos: It
         },
         {
             id: 'cadastros', titulo: 'Cadastros', itens: [
-                { id: 'cadastro-motorista', label: 'Cadastro Pessoa' },
+                // "Cadastro Pessoa" é o motorista, e já cobre o motorista que
+                // TAMBÉM é dono (tem o marcador de proprietário e o RNTRC).
+                { id: 'cadastro-motorista', label: 'Cadastro Motorista' },
+                // Só o dono: pessoa física sem CNH ou empresa. Quem dirige vai
+                // no item de cima.
+                { id: 'cadastro-proprietario', label: 'Cadastro Proprietário' },
                 { id: 'cadastro-veiculo', label: 'Cadastro Veículo' },
                 { id: 'cadastro-conjunto', label: 'Cadastro Conjunto' },
             ],

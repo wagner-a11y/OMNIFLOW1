@@ -5,9 +5,9 @@ import UploadDocumento from './UploadDocumento';
 import MunicipioAutocomplete, { useMunicipios } from './MunicipioAutocomplete';
 import { resolverMunicipio } from '../utils/municipios';
 import {
-    CAMPOS_CRITICOS, CAPM3_POR_CARROCERIA, CampoCritico, ENQUADRAMENTOS,
+    CAMPOS_CRITICOS, CAPM3_POR_CARROCERIA, CampoCritico,
     TipoPessoa, VEICULO_VAZIO, VeiculoParaGravar, buscarPessoaJuridica,
-    buscarProprietario, cadastrarPessoaJuridica, formatarDocumento,
+    buscarProprietario, formatarDocumento,
     formatarPlaca, GRUPO_FROTA_PROPRIA, placaValida, tipoDoDocumento,
 } from '../services/cadastroVeiculo';
 import {
@@ -66,8 +66,11 @@ interface Props {
     onChange: (e: EstadoPeca) => void;
 }
 
-import { buscarCep, formatarCep } from '../services/cep';
-import { DadosEndereco, ENDERECO_VAZIO, celularValido, formatarCelular } from '../services/cadastroMotorista';
+import { celularValido } from '../services/cadastroMotorista';
+import {
+    FormPessoaFisicaNova, FormPessoaJuridicaNova,
+    PessoaFisicaNova, PessoaJuridicaNova, PF_NOVA_VAZIA, PJ_NOVA_VAZIA, enderecoOk,
+} from './FormPessoaNova';
 
 const soDigitos = (s: string) => (s || '').replace(/\D/g, '');
 
@@ -100,7 +103,6 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
 
     const [docProp, setDocProp] = useState('');
     const [buscandoProp, setBuscandoProp] = useState(false);
-    const [proprietario, setProprietario] = useState<{ codPessoa: string; nome: string; tipo: TipoPessoa } | null>(null);
     /**
      * Quem é o dono. Começa apontando para o motorista quando ele foi marcado
      * como proprietário — nesse caso não há o que buscar: ele está sendo criado
@@ -109,21 +111,12 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
     const [ref, setRef] = useState<RefProprietario | null>(assumirMotorista ? { tipo: 'motorista' } : null);
     const [querTrocarDono, setQuerTrocarDono] = useState(false);
     const [erroProp, setErroProp] = useState<string | null>(null);
-    const [trocando, setTrocando] = useState(false);
-    const [pjNova, setPjNova] = useState<
-        { razaoSocial: string; nomeFantasia: string; rntrc: string; enquadramento: string;
-          celular: string; endereco: DadosEndereco } | null
-    >(null);
+    const [pjNova, setPjNova] = useState<PessoaJuridicaNova | null>(null);
 
     // Mini-cadastro de pessoa física NOVA. `null` = não está aberto.
     // `ehMotorista` decide entre os dois caminhos: quem dirige vai para o
     // cadastro completo (com CNH), quem só é dono fica aqui.
-    const [pfNova, setPfNova] = useState<
-        { ehMotorista: boolean; nome: string; sobrenome: string; rntrc: string;
-          celular: string; dataNascimento: string; endereco: DadosEndereco } | null
-    >(null);
-    const [buscandoCep, setBuscandoCep] = useState(false);
-    const [erroCep, setErroCep] = useState<string | null>(null);
+    const [pfNova, setPfNova] = useState<PessoaFisicaNova | null>(null);
 
     useEffect(() => { carregarDominio().then(setDominio).catch(() => setDominio([])); }, []);
 
@@ -287,8 +280,7 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
             }));
             // Documento novo = conferência do zero, e proprietário do zero.
             setConferidos(new Set());
-            setDocProp(lido.proprietario_documento ? formatarDocumento(lido.proprietario_documento) : '');
-            setProprietario(null); setPjNova(null); setErroProp(null); setTrocando(false);
+            setDocProp(lido.proprietario_documento ? formatarDocumento(lido.proprietario_documento) : ''); setPjNova(null); setErroProp(null);
             setLeu(true);
             setErroDeCota(false);
         } catch (err) {
@@ -304,7 +296,7 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
 
     const procurarProprietario = async () => {
         const d = soDigitos(docProp);
-        setErroProp(null); setProprietario(null); setPjNova(null);
+        setErroProp(null); setPjNova(null);
         if (tipoProp === 'indefinido') {
             setErroProp('Documento incompleto: 11 dígitos para CPF, 14 para CNPJ.');
             return;
@@ -320,13 +312,9 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                     // exigência era nossa. Agora abre o mini-cadastro aqui.
                     const primeiro = (crlv.proprietario_nome || '').split(' ')[0] || '';
                     const resto = (crlv.proprietario_nome || '').split(' ').slice(1).join(' ');
-                    setPfNova({ ehMotorista: false, nome: primeiro, sobrenome: resto,
-                        rntrc: '', celular: '', dataNascimento: '', endereco: ENDERECO_VAZIO });
-                    setRef({ tipo: 'novaPF', cpf: soDigitos(docProp), nome: primeiro, sobrenome: resto,
-                        rntrc: '', celular: '', dataNascimento: '', endereco: ENDERECO_VAZIO });
+                    aplicarPf({ ...PF_NOVA_VAZIA, nome: primeiro, sobrenome: resto });
                     return;
                 }
-                setProprietario({ codPessoa: r.codPessoa, nome: r.nome || '', tipo: 'fisica' });
                 setRef({ tipo: 'existente', codPessoa: r.codPessoa, nome: r.nome || '' });
                 return;
             }
@@ -338,16 +326,15 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                 // pjNova nascia com quatro campos e o JSX lia pjNova.endereco.cep,
                 // que é undefined.cep — TypeError, React desmontado, tela branca,
                 // e o operador perdia o CRLV inteiro que já tinha conferido.
-                const inicial = {
-                    razaoSocial: crlv.proprietario_nome || '', nomeFantasia: crlv.proprietario_nome || '',
-                    rntrc: '', enquadramento: '',
-                    celular: '', endereco: ENDERECO_VAZIO,
-                };
-                setPjNova(inicial);
-                setRef({ tipo: 'novaPJ', cnpj: d, ...inicial });
+                // Nasce COMPLETO, do molde compartilhado: foi um objeto pela
+                // metade que derrubou a tela em 31/08.
+                aplicarPj({
+                    ...PJ_NOVA_VAZIA,
+                    razaoSocial: crlv.proprietario_nome || '',
+                    nomeFantasia: crlv.proprietario_nome || '',
+                });
                 return;
             }
-            setProprietario({ codPessoa: r.codPessoa, nome: r.razaoSocial || r.nomeFantasia || '', tipo: 'juridica' });
             setRef({ tipo: 'existente', codPessoa: r.codPessoa, nome: r.razaoSocial || r.nomeFantasia || '' });
         } finally {
             setBuscandoProp(false);
@@ -359,90 +346,34 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
      * junto com o resto — assim o operador não fica preso a um cadastro que só
      * faz sentido se o conjunto inteiro for adiante.
      */
-    const atualizarPj = (campo: string, valor: string | DadosEndereco) => {
-        setPjNova(prev => {
-            const base = prev ?? { razaoSocial: '', nomeFantasia: '', rntrc: '', enquadramento: '', celular: '', endereco: ENDERECO_VAZIO };
-            const novo = { ...base, [campo]: valor } as typeof base;
-            setRef({
-                tipo: 'novaPJ', cnpj: soDigitos(docProp),
-                razaoSocial: novo.razaoSocial, nomeFantasia: novo.nomeFantasia,
-                rntrc: novo.rntrc, enquadramento: novo.enquadramento,
-                celular: novo.celular, endereco: novo.endereco,
-            });
-            return novo;
+    /**
+     * O formulário devolve o objeto inteiro; aqui ele vira estado E referência.
+     *
+     * Pessoa e empresa novas NÃO são gravadas neste ponto: viram referência e a
+     * cascata as cria antes dos veículos. Se o operador desistir do conjunto,
+     * ninguém é criado.
+     */
+    const aplicarPj = (novo: PessoaJuridicaNova) => {
+        setPjNova(novo);
+        setRef({
+            tipo: 'novaPJ', cnpj: soDigitos(docProp),
+            razaoSocial: novo.razaoSocial, nomeFantasia: novo.nomeFantasia,
+            rntrc: novo.rntrc, enquadramento: novo.enquadramento,
+            celular: novo.celular, endereco: novo.endereco,
         });
     };
 
-    /**
-     * Pessoa física nova não é gravada aqui: vira referência e a cascata cria
-     * antes dos veículos, junto das empresas. Mesma regra da PJ — se o operador
-     * desistir do conjunto, ninguém é criado.
-     */
-    const atualizarPf = (campo: string, valor: string | boolean | DadosEndereco) => {
-        setPfNova(prev => {
-            const base = prev ?? { ehMotorista: false, nome: '', sobrenome: '', rntrc: '', celular: '', dataNascimento: '', endereco: ENDERECO_VAZIO };
-            const novo = { ...base, [campo]: valor } as typeof base;
-            // Marcou que dirige: o caminho é o cadastro completo, com CNH, que
-            // não cabe aqui. A referência sai para não gravar meia pessoa.
-            setRef(novo.ehMotorista ? null : {
-                tipo: 'novaPF', cpf: soDigitos(docProp),
-                nome: novo.nome, sobrenome: novo.sobrenome,
-                rntrc: novo.rntrc, celular: novo.celular,
-                dataNascimento: novo.dataNascimento, endereco: novo.endereco,
-            });
-            return novo;
+    const aplicarPf = (novo: PessoaFisicaNova) => {
+        setPfNova(novo);
+        // Marcou que dirige: o caminho é o cadastro completo, com CNH, que não
+        // cabe aqui. A referência sai para não gravar meia pessoa.
+        setRef(novo.ehMotorista ? null : {
+            tipo: 'novaPF', cpf: soDigitos(docProp),
+            nome: novo.nome, sobrenome: novo.sobrenome,
+            rntrc: novo.rntrc, celular: novo.celular,
+            dataNascimento: novo.dataNascimento, endereco: novo.endereco,
         });
     };
-
-    /**
-     * Busca o CEP do proprietário novo — serve a pessoa física E a empresa. O
-     * código IBGE só nasce aqui: digitado à mão, o município não tem código, e
-     * sem código o endereço não é aceito.
-     */
-    const procurarCepDe = async (
-        atual: DadosEndereco,
-        aplicar: (e: DadosEndereco) => void,
-    ) => {
-        setBuscandoCep(true); setErroCep(null);
-        try {
-            const achado = await buscarCep(atual.cep);
-            aplicar({
-                ...atual,
-                cep: achado.cep,
-                logradouro: achado.logradouro || atual.logradouro,
-                bairro: achado.bairro || atual.bairro,
-                cidade: String(achado.municipio.codigo),
-                municipioNome: achado.municipio.nome,
-                estado: achado.municipio.uf,
-                municipioRotulo: achado.municipio.rotulo,
-            });
-        } catch (err) {
-            setErroCep((err as Error).message);
-            aplicar({ ...atual, cidade: '', estado: '', municipioRotulo: '' });
-        } finally {
-            setBuscandoCep(false);
-        }
-    };
-
-    const procurarCepPf = () =>
-        procurarCepDe(pfNova?.endereco ?? ENDERECO_VAZIO, e => atualizarPf('endereco', e));
-    const procurarCepPj = () =>
-        procurarCepDe(pjNova?.endereco ?? ENDERECO_VAZIO, e => atualizarPj('endereco', e));
-
-    /** Um campo do endereço da PF nova. */
-    const setEndPf = (campo: keyof DadosEndereco, valor: string) =>
-        atualizarPf('endereco', { ...(pfNova?.endereco ?? ENDERECO_VAZIO), [campo]: valor });
-    /** Um campo do endereço da PJ nova. */
-    const setEndPj = (campo: keyof DadosEndereco, valor: string) =>
-        atualizarPj('endereco', { ...(pjNova?.endereco ?? ENDERECO_VAZIO), [campo]: valor });
-
-    /**
-     * Endereço completo o bastante para o CT-e. `cidade` é o código IBGE, que
-     * só existe se o CEP foi buscado — é o que impede mandar município no chute.
-     */
-    const enderecoOk = (e: DadosEndereco) =>
-        !!e.cep.trim() && !!e.logradouro.trim() && !!e.numero.trim()
-        && !!e.bairro.trim() && !!e.cidade.trim();
 
     // ---- estilos ----
     const classeNormal = 'w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none border bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8] transition-colors';
@@ -742,7 +673,7 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                                             )}
                                         </label>
                                         <input value={docProp}
-                                            onChange={e => { setDocProp(formatarDocumento(e.target.value)); setProprietario(null); setPjNova(null); setPfNova(null); setRef(null); setQuerTrocarDono(true); }}
+                                            onChange={e => { setDocProp(formatarDocumento(e.target.value)); setPjNova(null); setPfNova(null); setRef(null); setQuerTrocarDono(true); }}
                                             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); procurarProprietario(); } }}
                                             className={`w-56 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border transition-colors ${ref
                                                 ? 'bg-[#f9fafb] border-[#e5e7eb] focus:border-[#1d6fb8]'
@@ -770,202 +701,30 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                                         <p className="text-[11px] font-normal text-[#92400e] mb-3">
                                             Nada é gravado agora. Se você desistir do conjunto, a empresa não é criada.
                                         </p>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <input value={pjNova.razaoSocial} placeholder="Razão social"
-                                                onChange={e => atualizarPj('razaoSocial', e.target.value)} className={classeNormal} />
-                                            <input value={pjNova.nomeFantasia} placeholder="Nome fantasia"
-                                                onChange={e => atualizarPj('nomeFantasia', e.target.value)} className={classeNormal} />
-                                            <div>
-                                                <input value={pjNova.rntrc} placeholder="RNTRC"
-                                                    onChange={e => atualizarPj('rntrc', e.target.value)}
-                                                    className={`w-full px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pjNova.rntrc
-                                                        ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
-                                                <p className="text-[10px] font-medium text-[#92400e] mt-1">
-                                                    Não vem no CRLV. Sem ele o cadastro não grava.
-                                                </p>
-                                            </div>
-                                            <select value={pjNova.enquadramento}
-                                                onChange={e => atualizarPj('enquadramento', e.target.value)} className={classeNormal}>
-                                                {ENQUADRAMENTOS.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
-                                            </select>
-                                        </div>
-
-                                        {/* Telefone e endereço: até 30/08/2026 a empresa era gravada com
-                                            cinco campos e mais nada — sem contato e sem endereço —, e o
-                                            CT-e não emitia. */}
-                                        <div className="mt-3">
-                                            <label className="text-[10px] font-medium uppercase text-[#92400e] mb-1.5 block">
-                                                Celular<span className="text-red-500 ml-0.5">*</span>
-                                            </label>
-                                            <input value={pjNova.celular} placeholder="(11) 90000-0000"
-                                                onChange={e => atualizarPj('celular', formatarCelular(e.target.value))}
-                                                className={`w-full md:w-56 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${celularValido(pjNova.celular)
-                                                    ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
-                                        </div>
-
-                                        <p className="text-[11px] font-semibold text-[#92400e] mt-4 mb-1.5">Endereço da empresa</p>
-                                        <div className="flex flex-wrap items-end gap-2">
-                                            <input value={pjNova.endereco.cep} placeholder="CEP"
-                                                onChange={e => setEndPj('cep', formatarCep(e.target.value))}
-                                                onBlur={() => { if (soDigitos(pjNova.endereco.cep).length === 8 && !pjNova.endereco.cidade) procurarCepPj(); }}
-                                                className={`w-36 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pjNova.endereco.cidade
-                                                    ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
-                                            <button type="button" onClick={procurarCepPj}
-                                                disabled={buscandoCep || soDigitos(pjNova.endereco.cep).length !== 8}
-                                                className="px-3 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] transition-colors flex items-center gap-1.5">
-                                                {buscandoCep ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando…</> : <><Search className="w-3.5 h-3.5" strokeWidth={1.75} /> Buscar CEP</>}
-                                            </button>
-                                            {pjNova.endereco.municipioRotulo && (
-                                                <span className="text-[11px] font-medium text-emerald-700 pb-2.5">{pjNova.endereco.municipioRotulo}</span>
-                                            )}
-                                        </div>
-                                        {erroCep && <p className="text-[11px] font-medium text-amber-700 mt-1.5">{erroCep}</p>}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                                            <input value={pjNova.endereco.logradouro} placeholder="Endereço"
-                                                onChange={e => setEndPj('logradouro', e.target.value)} className={classeNormal} />
-                                            <input value={pjNova.endereco.numero} placeholder="Número"
-                                                onChange={e => setEndPj('numero', e.target.value)} className={classeNormal} />
-                                            <input value={pjNova.endereco.bairro} placeholder="Bairro"
-                                                onChange={e => setEndPj('bairro', e.target.value)} className={classeNormal} />
-                                            <input value={pjNova.endereco.complemento} placeholder="Complemento (opcional)"
-                                                onChange={e => setEndPj('complemento', e.target.value)} className={classeNormal} />
-                                        </div>
+                                        {/* Mesmo formulário da tela de cadastrar só o proprietário. */}
+                                        <FormPessoaJuridicaNova valor={pjNova} onChange={aplicarPj} />
                                     </div>
                                 )}
 
-                                {/* -------------------------------------------------------
-                                    Pessoa física NOVA. O caso que não existia: dono que não
-                                    dirige — o caminhão no nome da mãe do motorista.
-
-                                    A pergunta vem primeiro porque separa dois cadastros
-                                    diferentes. Quem dirige precisa de CNH inteira e vai
-                                    para a tela completa; quem só é dono precisa de muito
-                                    menos, e nada de CNH.
-
-                                    Nenhum campo de CNH é gravado em branco. Uma habilitação
-                                    vazia no Datamex afirmaria que a pessoa tem CNH sem
-                                    número, e ninguém depois distinguiria isso de um erro de
-                                    digitação.
-                                   ------------------------------------------------------- */}
                                 {pfNova && (
                                     <div className="mt-3 border-2 border-amber-300 rounded-lg p-4 bg-amber-50/40">
                                         <p className="text-xs font-semibold text-[#92400e] mb-2">
                                             Não existe pessoa física com esse CPF no Datamex.
                                         </p>
-
-                                        <p className="text-[11px] font-semibold text-[#92400e] mb-1.5">Essa pessoa é motorista?</p>
-                                        <div className="flex gap-2 mb-3">
-                                            {([[false, 'Não — só é dona do veículo'], [true, 'Sim, ela dirige']] as Array<[boolean, string]>).map(([v, rotulo]) => (
-                                                <button key={String(v)} type="button"
-                                                    onClick={() => atualizarPf('ehMotorista', v)}
-                                                    className={`px-3 py-2 rounded-lg text-xs font-semibold border-2 transition-colors ${pfNova.ehMotorista === v
-                                                        ? 'bg-[#eff6ff] border-[#1d6fb8] text-[#1d6fb8]'
-                                                        : 'bg-white border-[#e5e7eb] text-[#6b7280] hover:border-[#1d6fb8]'}`}>
-                                                    {rotulo}
-                                                </button>
-                                            ))}
-                                        </div>
-
-                                        {pfNova.ehMotorista ? (
-                                            <div className="bg-white border border-[#e5e7eb] rounded-lg px-3 py-2.5">
-                                                <p className="text-[11px] font-medium text-[#6b7280]">
-                                                    Quem dirige precisa da CNH inteira — registro, categoria, validade e
-                                                    toxicológico —, e isso não cabe aqui. Se for o motorista deste conjunto,
-                                                    escolha <strong className="text-[#111827]">É o motorista</strong> acima.
-                                                    Se for outro condutor, cadastre-o em Cadastro Pessoa e volte.
-                                                </p>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <p className="text-[11px] font-normal text-[#92400e] mb-3">
-                                                    Nada é gravado agora. Se você desistir do conjunto, a pessoa não é criada.
-                                                </p>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    <input value={pfNova.nome} placeholder="Nome"
-                                                        onChange={e => atualizarPf('nome', e.target.value)}
-                                                        className={`px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pfNova.nome
-                                                            ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
-                                                    <input value={pfNova.sobrenome} placeholder="Sobrenome"
-                                                        onChange={e => atualizarPf('sobrenome', e.target.value)} className={classeNormal} />
-                                                </div>
-
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                                                    <div>
-                                                        <label className="text-[10px] font-medium uppercase text-[#92400e] mb-1.5 block">
-                                                            Celular<span className="text-red-500 ml-0.5">*</span>
-                                                        </label>
-                                                        <input value={pfNova.celular} placeholder="(11) 90000-0000"
-                                                            onChange={e => atualizarPf('celular', formatarCelular(e.target.value))}
-                                                            className={`w-full px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${celularValido(pfNova.celular)
-                                                                ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
-                                                        <p className="text-[10px] font-medium text-[#92400e] mt-1">
-                                                            DDD + 9 dígitos. O CT-e exige contato do proprietário.
-                                                        </p>
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[10px] font-medium uppercase text-[#92400e] mb-1.5 block">
-                                                            Nascimento<span className="text-red-500 ml-0.5">*</span>
-                                                        </label>
-                                                        <input type="date" value={pfNova.dataNascimento}
-                                                            onChange={e => atualizarPf('dataNascimento', e.target.value)}
-                                                            className={`w-full px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pfNova.dataNascimento
-                                                                ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
-                                                        <p className="text-[10px] font-medium text-[#92400e] mt-1">
-                                                            Sem isto o Datamex grava 00/00/0000, que é data inválida.
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                <div className="mt-3">
-                                                    <input value={pfNova.rntrc} placeholder="RNTRC"
-                                                        onChange={e => atualizarPf('rntrc', e.target.value)}
-                                                        className={`w-full md:w-64 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pfNova.rntrc
-                                                            ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
-                                                    <p className="text-[10px] font-medium text-[#92400e] mt-1">
-                                                        Obrigatório aqui. A API aceitaria sem, mas proprietário sem RNTRC
-                                                        volta como pendência na emissão do CT-e.
-                                                    </p>
-                                                </div>
-
-                                                <p className="text-[11px] font-semibold text-[#92400e] mt-4 mb-1.5">Endereço</p>
-                                                <div className="flex flex-wrap items-end gap-2">
-                                                    <input value={pfNova.endereco.cep} placeholder="CEP"
-                                                        onChange={e => setEndPf('cep', formatarCep(e.target.value))}
-                                                        onBlur={() => { if (soDigitos(pfNova.endereco.cep).length === 8 && !pfNova.endereco.cidade) procurarCepPf(); }}
-                                                        className={`w-36 px-3 py-2.5 rounded-lg text-sm font-semibold outline-none border-2 transition-colors ${pfNova.endereco.cidade
-                                                            ? 'bg-white border-emerald-300' : 'bg-amber-50 border-amber-400'}`} />
-                                                    <button type="button" onClick={procurarCepPf}
-                                                        disabled={buscandoCep || soDigitos(pfNova.endereco.cep).length !== 8}
-                                                        className="px-3 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] transition-colors flex items-center gap-1.5">
-                                                        {buscandoCep ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando…</> : <><Search className="w-3.5 h-3.5" strokeWidth={1.75} /> Buscar CEP</>}
-                                                    </button>
-                                                    {pfNova.endereco.municipioRotulo && (
-                                                        <span className="text-[11px] font-medium text-emerald-700 pb-2.5">
-                                                            {pfNova.endereco.municipioRotulo}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                {erroCep && (
-                                                    <p className="text-[11px] font-medium text-amber-700 mt-1.5">{erroCep}</p>
-                                                )}
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                                                    <input value={pfNova.endereco.logradouro} placeholder="Endereço"
-                                                        onChange={e => setEndPf('logradouro', e.target.value)} className={classeNormal} />
-                                                    <input value={pfNova.endereco.numero} placeholder="Número"
-                                                        onChange={e => setEndPf('numero', e.target.value)} className={classeNormal} />
-                                                    <input value={pfNova.endereco.bairro} placeholder="Bairro"
-                                                        onChange={e => setEndPf('bairro', e.target.value)} className={classeNormal} />
-                                                    <input value={pfNova.endereco.complemento} placeholder="Complemento (opcional)"
-                                                        onChange={e => setEndPf('complemento', e.target.value)} className={classeNormal} />
-                                                </div>
-                                                <p className="text-[10px] font-medium text-[#6b7280] mt-2">
-                                                    O município vem da busca de CEP — digitado à mão ele não tem código IBGE,
-                                                    e sem código o endereço não é enviado.
-                                                </p>
-                                            </>
-                                        )}
+                                        <p className="text-[11px] font-normal text-[#92400e] mb-3">
+                                            Nada é gravado agora. Se você desistir do conjunto, a pessoa não é criada.
+                                        </p>
+                                        {/* Mesmo formulário da tela de cadastrar só o proprietário. */}
+                                        <FormPessoaFisicaNova valor={pfNova} onChange={aplicarPf}
+                                            avisoMotorista={<>
+                                                Quem dirige precisa da CNH inteira — registro, categoria, validade e
+                                                toxicológico —, e isso não cabe aqui. Se for o motorista deste conjunto,
+                                                escolha <strong className="text-[#111827]">É o motorista</strong> acima.
+                                                Se for outro condutor, cadastre-o em Cadastro Pessoa e volte.
+                                            </>} />
                                     </div>
                                 )}
+
 
                                 {erroProp && (
                                     <div className="mt-3 bg-amber-50 border border-amber-300 text-amber-900 px-4 py-2.5 rounded-lg flex items-start gap-2">

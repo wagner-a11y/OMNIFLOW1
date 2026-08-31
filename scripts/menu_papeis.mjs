@@ -72,7 +72,7 @@ const DE_TODOS = [
     'Nova Cotação', 'Dashboard', 'Histórico', 'Painel TV',
     'Minha Carteira', 'Contato Diário · Análise', 'Contato Diário · Registrar',
     'Acompanhamento PPFY', 'Fast Delivery',
-    'Cadastro Pessoa', 'Cadastro Veículo', 'Cadastro Conjunto',
+    'Cadastro Motorista', 'Cadastro Veículo', 'Cadastro Conjunto',
 ];
 
 const rotulos = Object.fromEntries(
