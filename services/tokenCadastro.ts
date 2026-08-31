@@ -82,6 +82,38 @@ export function recuperarTokenDaSessao(): boolean {
     return false;
 }
 
+/**
+ * Resolve o token na ENTRADA da tela, na ordem que importa:
+ *   1. o `?k=` da URL — quem acabou de abrir o link;
+ *   2. o sessionStorage — quem já estava cadastrando nesta aba e recarregou.
+ *
+ * A ordem não é detalhe: um link novo, com token trocado, tem de prevalecer
+ * sobre o que a aba guardou. É assim que trocar o secret e reenviar o link surte
+ * efeito sem pedir para o operador fechar a aba.
+ *
+ * Devolve a URL já SEM o `?k=`, para quem chama limpar a barra de endereços.
+ * O link continua valendo (o token já está guardado), mas para de aparecer em
+ * print, em ombro alheio e no histórico.
+ *
+ * Está aqui, e não solta no index.tsx, porque um bloco solto se perde: foi
+ * exatamente o que aconteceu em 31/08 — um merge restaurou a versão antiga do
+ * index.tsx, a leitura do sessionStorage nunca chegou a ser ligada, e o F5
+ * continuou perdendo o token. Como função nomeada, ela é testável e some do
+ * lugar errado com barulho, não em silêncio.
+ */
+export function resolverTokenNoBoot(href: string): { limpar: boolean; url: string } {
+    const url = new URL(href);
+    const daUrl = url.searchParams.get('k');
+    if (daUrl && daUrl.trim()) {
+        definirTokenCadastro(daUrl);
+        url.searchParams.delete('k');
+        return { limpar: true, url: url.pathname + url.search + url.hash };
+    }
+    // Sem `?k=`: pode ser um F5 de quem já estava cadastrando nesta aba.
+    recuperarTokenDaSessao();
+    return { limpar: false, url: url.pathname + url.search + url.hash };
+}
+
 /** Encerra a sessão do link nesta aba. */
 export function esquecerTokenCadastro(): void {
     definirTokenCadastro(null);
