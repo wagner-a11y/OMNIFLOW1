@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, MapPin, Truck, Package, DollarSign, Calendar, Info, User, Phone, CreditCard, ExternalLink, Copy, Check, FileText } from 'lucide-react';
+import { X, MapPin, Truck, DollarSign, Info, User, ExternalLink, Copy, Check, FileText } from 'lucide-react';
 import { FreightCalculation } from '../types';
 import { generateHiringPDF } from '../services/pdfService';
 

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    Activity, AlertCircle, AlertTriangle, ArrowDown, ArrowRight, ArrowRightLeft, ArrowUpDown, Award, BarChart3, Calculator, Calendar, Check, CheckCircle, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy as ClipboardCopy, CopyPlus, CreditCard, DollarSign, Download, Edit3, FileDown, FileText, Filter, Hash, History, IdCard, ImageIcon, Info, Key, Layers, LayoutDashboard, Link2, List, Lock, LogOut, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, Save, Scale, Search, Send, Settings, ShieldCheck, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, User as UserIcon, UserCheck, UserCircle, Users, Wrench, X, XCircle, Zap
+    Activity, AlertTriangle, ArrowDown, ArrowRight, Award, BarChart3, Calendar, Check, CheckCircle, ChevronDown, Clock, Copy as ClipboardCopy, CopyPlus, DollarSign, Download, Edit3, FileDown, FileText, Hash, History, IdCard, ImageIcon, Info, Key, Layers, Link2, Lock, LogOut, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, Save, Scale, Search, Send, Settings, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, UserCheck, Users, Wrench, X, Zap
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
@@ -79,7 +79,7 @@ import CadastroConjunto from './components/CadastroConjunto';
 import FastDelivery from './components/FastDelivery';
 import { normalizar, resolverMunicipio } from './utils/municipios';
 import { definirEmergencia, lerEmergencia, EstadoEmergencia } from './services/emergencia';
-import { estimateDistance, estimateMultiRoute, parseRequest, compileReportText } from './services/geminiService';
+import { estimateDistance, estimateMultiRoute, falhouRota, parseRequest, compileReportText } from './services/geminiService';
 import { createRamperCard } from './services/ramper';
 import { createNegociacaoFromRamper } from './services/negociacoes';
 import { buildQuoteChanges, registrarAlteracao, getAlteracoes, AlteracaoCotacao } from './services/auditoria';
@@ -224,7 +224,8 @@ const App: React.FC = () => {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [fedTaxes, setFedTaxes] = useState<FederalTaxes>({ pis: 0.65, cofins: 3.0, csll: 1.08, irpj: 1.2, insurancePolicyRate: 0.035 });
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
-    const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
+    // Só o setter é usado: o valor alimenta o banco, não a tela.
+    const [, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
     const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-proprietario' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery'>('dashboard');
     // Seções da barra lateral. Mapa vazio = TODAS recolhidas, que é como a tela nasce.
@@ -1517,7 +1518,9 @@ const App: React.FC = () => {
         try {
             const result = await estimateDistance(org, dst, vt, config?.axles, cargoType);
 
-            if (result.error) {
+            // Predicado em vez de `if (result.error)`: só ele estreita o tipo de
+            // verdade. Ver falhouRota() em geminiService.
+            if (falhouRota(result)) {
                 // Frete urbano (origem == destino): NÃO é falha do Qualp. Ele nem
                 // chegou a ser consultado — distância zero é a resposta correta e o
                 // caso ainda não tem cálculo automático. Orienta o preenchimento
@@ -1587,7 +1590,14 @@ const App: React.FC = () => {
         } finally { setLoadingDistance(false); }
     };
 
-    const handleFetchDistance = (overrideVehicle?: string) => consultarQualp(overrideVehicle, false);
+    /**
+     * Usado como onClick E chamado direto com um veículo. O React passa o evento
+     * como primeiro argumento, e consultarQualp já se defende disso conferindo
+     * `typeof === 'string'` — a assinatura agora diz isso em vez de prometer que
+     * só recebe string.
+     */
+    const handleFetchDistance = (overrideVehicle?: string | React.MouseEvent) =>
+        consultarQualp(typeof overrideVehicle === 'string' ? overrideVehicle : undefined, false);
 
     // Cotação já salva: o número antigo fica como está até o operador pedir. Só
     // aqui o Qualp é consultado de novo, e o antes/depois aparece na tela.
@@ -4756,7 +4766,7 @@ Disponibilidade: ${disponibilidade}`;
                                         </div>
                                     )}
                                     {configTab === 'financial' && (
-                                        <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).filter(([k, v]) => typeof v === 'number').map(([key, val]) => {
+                                        <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).filter(([, v]) => typeof v === 'number').map(([key, val]) => {
                                             const labels: Record<string, string> = {
                                                 pis: 'PIS (%)', cofins: 'COFINS (%)', csll: 'CSLL (%)', irpj: 'IRPJ (%)',
                                                 insurancePolicyRate: 'Taxa Apólice / Ad Valorem Custo (%)',
@@ -5196,7 +5206,6 @@ Disponibilidade: ${disponibilidade}`;
                     }}
                     onSubmit={handleWonInfoSubmit}
                     quote={selectedWonQuote}
-                    customers={customers}
                 />
             )}
         </div >

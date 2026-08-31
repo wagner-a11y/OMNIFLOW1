@@ -35,6 +35,23 @@ export interface FalhaRota {
 }
 
 /**
+ * Separa falha de sucesso.
+ *
+ * O `error` sozinho não serve de discriminante para o TypeScript: em RotaSimples
+ * ele é `undefined` opcional e em FalhaRota é `string` — e string vazia é um
+ * valor legítimo de `string`, então `if (r.error)` não elimina FalhaRota. Na
+ * prática a Edge Function nunca devolve erro vazio, mas "na prática" não é o que
+ * o compilador confere, e o resultado eram 14 acessos a campo que ele dava por
+ * inexistentes.
+ *
+ * Com o predicado, quem chama estreita de verdade: depois de `if (falhouRota(r))
+ * return;`, o que sobra É RotaSimples, com todos os campos.
+ */
+export function falhouRota(r: RotaSimples | FalhaRota): r is FalhaRota {
+    return typeof (r as FalhaRota).error === 'string';
+}
+
+/**
  * Rota SIMPLES — fonte única: distância, pedágio e piso ANTT saem todos de uma
  * chamada à Edge Function qualp-rota (Qualp /rotas/v4). O Google saiu daqui.
  *

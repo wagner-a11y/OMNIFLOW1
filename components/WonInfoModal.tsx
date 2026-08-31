@@ -1,7 +1,7 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Calendar, MapPin, Truck, Package, DollarSign, Info, Copy, Check } from 'lucide-react';
-import { FreightCalculation, Customer } from '../types';
+import { FreightCalculation } from '../types';
 import { PipefyAutocomplete } from './PipefyAutocomplete';
 
 interface WonInfoModalProps {
@@ -9,10 +9,9 @@ interface WonInfoModalProps {
     onClose: () => void;
     onSubmit: (data: Partial<FreightCalculation>) => void;
     quote: FreightCalculation;
-    customers: Customer[];
 }
 
-export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onSubmit, quote, customers }) => {
+export const WonInfoModal: React.FC<WonInfoModalProps> = ({ isOpen, onClose, onSubmit, quote }) => {
     const num = (s: string | number | undefined | null) => {
         if (s === undefined || s === null) return 0;
         if (typeof s === 'number') return s;

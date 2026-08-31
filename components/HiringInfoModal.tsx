@@ -1,6 +1,6 @@
 
-import React, { useState, useRef } from 'react';
-import { X, User, Phone, CreditCard, Truck, Link, FileUp, Loader2, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, User, Truck, FileUp, Loader2, CheckCircle2, FileText } from 'lucide-react';
 import { FreightCalculation } from '../types';
 import { extractDataFromDoc } from '../services/geminiService';
 import { supabase } from '../services/supabase';
@@ -87,7 +87,7 @@ export const HiringInfoModal: React.FC<HiringInfoModalProps> = ({ isOpen, onClos
             const fileName = `${quote.id}_${field}_${Math.random().toString(36).substring(7)}.${fileExt}`;
             const filePath = `hiring-docs/${fileName}`;
 
-            const { data: uploadData, error: uploadError } = await supabase.storage
+            const { error: uploadError } = await supabase.storage
                 .from('documents')
                 .upload(filePath, file);
 

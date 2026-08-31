@@ -48,7 +48,6 @@ interface Props {
      * Quando o motorista da tela foi marcado como dono, esta peça pode apontar
      * para ele sem busca nenhuma — ele ainda nem existe no Datamex.
      */
-    motoristaEhDono?: boolean;
     nomeMotorista?: string;
     /** Peça principal já nasce apontando para o motorista, quando ele é o dono. */
     assumirMotorista?: boolean;
@@ -75,7 +74,7 @@ import {
 const soDigitos = (s: string) => (s || '').replace(/\D/g, '');
 
 const BlocoVeiculoCRLV: React.FC<Props> = ({
-    titulo, subtitulo, opcional, motoristaEhDono, nomeMotorista, assumirMotorista,
+    titulo, subtitulo, opcional, nomeMotorista, assumirMotorista,
     refPrincipal, onChange,
 }) => {
     const [dominio, setDominio] = useState<Dominio>([]);

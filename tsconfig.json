@@ -18,16 +18,37 @@
         "jsx": "react-jsx",
         /* Linting */
         "strict": true,
-        "noUnusedLocals": true,
-        "noUnusedParameters": true,
+        /* noUnusedLocals e noUnusedParameters estão FORA daqui de propósito.
+           Não é descuido: sobraram 7 declarações de funcionalidade inacabada
+           (deleteUserAccount, newUserForm, newIcmsRate, newVehicleName) que o
+           Wagner pediu para NÃO apagar até decidir o que fazer com elas. Ligar
+           as flags agora deixaria o build vermelho de forma permanente, e um
+           build que sempre falha é um build que ninguém lê.
+           Elas continuam verificáveis a qualquer momento: `npm run tipos`.
+           Voltam para cá quando essas quatro forem resolvidas. */
         "noFallthroughCasesInSwitch": true
     },
+    /* O `include` apontava para "src", pasta que NUNCA existiu neste projeto —
+       os arquivos estão na raiz. O efeito era que `tsc --noEmit` compilava ZERO
+       arquivos e passava sempre, e como `npm run build` é `tsc && vite build`,
+       o build herdava esse vazio (o vite transpila, não confere tipo).
+       Quatro bugs chegaram em produção por isso numa única semana: campos
+       duplicados, tela branca ao buscar CNPJ, tela que não renderizava e o token
+       que não sobrevivia ao F5. Os quatro o compilador teria apontado.
+       As Edge Functions ficam de fora porque são Deno, com outro runtime e
+       outros tipos globais — não fazem parte deste build. */
     "include": [
-        "src"
+        "*.ts",
+        "*.tsx",
+        "components/**/*.ts",
+        "components/**/*.tsx",
+        "services/**/*.ts",
+        "utils/**/*.ts",
+        "scripts/**/*.ts"
     ],
-    "references": [
-        {
-            "path": "./tsconfig.node.json"
-        }
+    "exclude": [
+        "node_modules",
+        "dist",
+        "supabase"
     ]
 }

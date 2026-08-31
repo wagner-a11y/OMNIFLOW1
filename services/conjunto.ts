@@ -117,7 +117,7 @@ export async function vincularConjunto(v: PedidoVinculo): Promise<{ ok?: boolean
     return invocar('vincular-conjunto', { vincular: v });
 }
 
-async function invocar(nome: string, body: unknown): Promise<any> {
+async function invocar(nome: string, body: Record<string, unknown>): Promise<any> {
     try {
         const { data, error } = await supabase.functions.invoke(nome, { body, headers: cabecalhoCadastro() });
         if (error) {

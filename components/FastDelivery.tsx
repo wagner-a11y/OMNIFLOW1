@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle, FileUp, Info, Loader2, Send, Zap } from 'lucide-react';
+import { AlertTriangle, FileUp, Info, Loader2, Send, Zap } from 'lucide-react';
 import {
     ApoioFastDelivery, LinhaPrevia, ORIGEM_FIXA, ResultadoCotacao, SOLICITANTE_FIXO,
     CARROCERIA_FIXA, MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID, carregarApoio, clientePipefyId, coletaAjustada,
