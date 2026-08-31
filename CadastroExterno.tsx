@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Truck, Link2, ShieldAlert, IdCard, RotateCcw, LogOut } from 'lucide-react';
 import CadastroVeiculo from './components/CadastroVeiculo';
 import CadastroConjunto from './components/CadastroConjunto';
+import GuardaDeTela from './components/GuardaDeTela';
 import { esquecerTokenCadastro, temTokenCadastro } from './services/tokenCadastro';
 
 // ============================================================================
@@ -111,9 +112,11 @@ const CadastroExterno: React.FC = () => {
                     há usuário: é exatamente a informação que este modelo não tem. */}
                 {/* A `key` inclui a aba E a sessão: trocar de aba ou pedir outro
                     cadastro monta um formulário novo, sem resíduo do anterior. */}
-                {aba === 'veiculo'
-                    ? <CadastroVeiculo key={`v-${sessaoForm}`} autor={{}} />
-                    : <CadastroConjunto key={`c-${sessaoForm}`} autor={{}} />}
+                <GuardaDeTela onde={aba === 'veiculo' ? 'Cadastro de veículo' : 'Cadastro de conjunto'}>
+                    {aba === 'veiculo'
+                        ? <CadastroVeiculo key={`v-${sessaoForm}`} autor={{}} />
+                        : <CadastroConjunto key={`c-${sessaoForm}`} autor={{}} />}
+                </GuardaDeTela>
 
                 <div className="mt-8 pt-5 border-t border-[#e5e7eb] flex flex-wrap items-center gap-3">
                     <button type="button"

@@ -333,9 +333,15 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
             const r = await buscarPessoaJuridica(d);
             if (r.error) { setErroProp(r.error); return; }
             if (!r.existe || !r.codPessoa) {
+                // O objeto tem de nascer COMPLETO. Quando o endereço e o celular
+                // foram acrescentados ao formulário, este ponto ficou para trás:
+                // pjNova nascia com quatro campos e o JSX lia pjNova.endereco.cep,
+                // que é undefined.cep — TypeError, React desmontado, tela branca,
+                // e o operador perdia o CRLV inteiro que já tinha conferido.
                 const inicial = {
                     razaoSocial: crlv.proprietario_nome || '', nomeFantasia: crlv.proprietario_nome || '',
                     rntrc: '', enquadramento: '',
+                    celular: '', endereco: ENDERECO_VAZIO,
                 };
                 setPjNova(inicial);
                 setRef({ tipo: 'novaPJ', cnpj: d, ...inicial });
@@ -713,8 +719,6 @@ const BlocoVeiculoCRLV: React.FC<Props> = ({
                                     </div>
                                 )}
 
-                                {/* O dono do cavalo mudou depois da escolha: avisa, não corrige. */}
-                                {ehOutro && podeUsarCavalo && !mesmoRef(ref, refPrincipal) && ref?.tipo !== 'motorista' && null}
                             </>
                         );
                     })()}
