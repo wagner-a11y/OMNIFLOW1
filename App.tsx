@@ -226,7 +226,7 @@ const App: React.FC = () => {
     const [vehicleConfigs, setVehicleConfigs] = useState<Record<string, ANTTCoefficients & { factor?: number; axles?: number; capacity?: number; consumption?: number }>>(VEHICLE_CONFIGS);
     const [spotStats, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-proprietario' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery'>('dashboard');
     // Seções da barra lateral. Mapa vazio = TODAS recolhidas, que é como a tela nasce.
     // A mesma chave serve pro subgrupo "Ações do Comercial" dentro de Comercial.
     const [secoesAbertas, setSecoesAbertas] = useState<Record<string, boolean>>({});
