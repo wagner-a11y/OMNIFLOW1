@@ -22,3 +22,17 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     { id: '1', name: 'LOGISTICA TESTE' },
     { id: '2', name: 'TRANSPORTES WAGNER' }
 ];
+
+/**
+ * Opções de Implemento (carroceria) — grafia IDÊNTICA ao campo "Implemento"
+ * (qual_o_tipo_de_carreta) do Pipefy. Acento e maiúscula importam: o card não
+ * casa "Bau" com "Baú" e deixa o campo vazio, sem erro e sem aviso.
+ *
+ * Mora aqui, e não na tela, porque tem DOIS donos: o select da cotação
+ * (App.tsx) e o de-para de equipamento do Fast Delivery, onde cada código do
+ * OTM guarda a carroceria do seu veículo. Duas cópias divergiriam.
+ *
+ * A CHECK da coluna fast_delivery_equipamento.carroceria repete esta lista no
+ * banco — de propósito: trava só no front não é trava. Mudou aqui, muda lá.
+ */
+export const IMPLEMENTO_OPTIONS = ['Sider', 'Baú', 'Grade Baixa', 'Graneleiro', 'N/A', 'Prancha'];

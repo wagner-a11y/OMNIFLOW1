@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { supabase } from './supabase';
+import { IMPLEMENTO_OPTIONS } from '../constants';
 
 // ============================================================================
 // FAST DELIVERY — leitura do Excel do OTM e montagem da prévia (Bloco 2).
@@ -144,9 +145,25 @@ export interface PrecoTabela {
     pedagio: number | null;
 }
 
+/**
+ * O que um código do OTM significa: que veículo é, e com que carroceria.
+ *
+ * Os dois campos têm pesos MUITO diferentes e é bom não confundir:
+ *   tipo_veiculo — cruza com a tabela de preço. Mexe no dinheiro.
+ *   carroceria   — não cruza com nada. Viaja para a cotação e para o Pipefy,
+ *                  para o veículo certo aparecer na doca. Não toca no valor.
+ *
+ * `carroceria` é null quando o código foi classificado antes desta coluna
+ * existir. Null é "ninguém decidiu ainda", e é diferente de "Baú".
+ */
+export interface EquipamentoDePara {
+    tipo_veiculo: string;
+    carroceria: string | null;
+}
+
 export interface ApoioFastDelivery {
-    /** codigo_otm -> tipo_veiculo */
-    equipamentos: Map<string, string>;
+    /** codigo_otm -> veículo + carroceria */
+    equipamentos: Map<string, EquipamentoDePara>;
     /** tipo_veiculo -> capacidade em m³. Vem do banco, ajustável sem deploy. */
     capacidades: Map<string, number>;
     /** Fração da capacidade a partir da qual se avisa. 0.90 = acima de 90%. */
@@ -159,7 +176,7 @@ export interface ApoioFastDelivery {
 
 export async function carregarApoio(): Promise<ApoioFastDelivery> {
     const [eq, pr, cap, cfg] = await Promise.all([
-        supabase.from('fast_delivery_equipamento').select('codigo_otm, tipo_veiculo'),
+        supabase.from('fast_delivery_equipamento').select('codigo_otm, tipo_veiculo, carroceria'),
         supabase.from('fast_delivery_tabela').select('destino, tipo_veiculo, nosso_frete, a_pagar, sobra, km, pedagio'),
         supabase.from('fast_delivery_capacidade').select('tipo_veiculo, capacidade_m3'),
         supabase.from('fast_delivery_config').select('chave, valor').eq('chave', 'limiar_volume_alerta').maybeSingle(),
@@ -173,8 +190,15 @@ export async function carregarApoio(): Promise<ApoioFastDelivery> {
     for (const r of cap.data ?? []) capacidades.set(String(r.tipo_veiculo), numeroDb(r.capacidade_m3) ?? 0);
     const limiarVolume = numeroDb(cfg.data?.valor) ?? LIMIAR_VOLUME_PADRAO;
 
-    const equipamentos = new Map<string, string>();
-    for (const r of eq.data ?? []) equipamentos.set(String(r.codigo_otm).trim(), String(r.tipo_veiculo));
+    const equipamentos = new Map<string, EquipamentoDePara>();
+    for (const r of eq.data ?? []) {
+        equipamentos.set(String(r.codigo_otm).trim(), {
+            tipo_veiculo: String(r.tipo_veiculo),
+            // Vazio do banco vira null, não "": a tela pergunta "está definida?"
+            // e string vazia responderia que sim.
+            carroceria: r.carroceria ? String(r.carroceria) : null,
+        });
+    }
 
     const precos = new Map<string, PrecoTabela>();
     const destinos = new Set<string>();
@@ -265,6 +289,50 @@ export function tiposDaTabela(apoio: ApoioFastDelivery): string[] {
 }
 
 /**
+ * Carrocerias que o master pode escolher.
+ *
+ * Vem de constants.ts, a MESMA lista do select de Implemento da cotação normal
+ * e do campo "Implemento" do Pipefy. Não é lista nova: se fosse, o valor
+ * gravado aqui chegaria no card e não casaria com opção nenhuma — o campo sairia
+ * vazio, sem erro. O banco repete a lista numa CHECK, para a trava não ser só
+ * de tela.
+ *
+ * Diferente de `tiposDaTabela()`, esta lista NÃO sai da tabela de preço: a
+ * carroceria não cruza com preço, então não há preço para consultar.
+ */
+export const CARROCERIAS = IMPLEMENTO_OPTIONS;
+
+/**
+ * Carroceria usada quando o código do OTM ainda não tem a dele.
+ *
+ * "Baú" é o que a operação vinha mandando em TODA cotação Fast Delivery, e é a
+ * grafia canônica — 569 cotações usam assim, contra um punhado de "BAU"/"Bau"
+ * soltos. Mantido como padrão para não travar o lançamento dos códigos que já
+ * estavam classificados antes desta coluna existir.
+ *
+ * Mas NÃO é silencioso: a linha que cai aqui mostra o aviso de que a carroceria
+ * não foi definida (ver `avisoCarroceria` em LinhaPrevia), e o código aparece
+ * na lista de pendentes para o master completar. O padrão existe para não parar
+ * a operação, não para esconder que falta uma decisão.
+ */
+export const CARROCERIA_PADRAO = 'Baú';
+
+/**
+ * Códigos já classificados que ainda não têm carroceria.
+ *
+ * São os anteriores a esta coluna: têm veículo, cotam normalmente, e por isso
+ * mesmo não aparecem em pendência nenhuma — passariam despercebidos para sempre
+ * mandando "Baú". Esta lista é o que os traz à tona para o master completar.
+ */
+export function codigosSemCarroceria(apoio: ApoioFastDelivery): Array<{ codigo: string; tipoVeiculo: string }> {
+    const faltando: Array<{ codigo: string; tipoVeiculo: string }> = [];
+    for (const [codigo, eq] of apoio.equipamentos) {
+        if (!eq.carroceria) faltando.push({ codigo, tipoVeiculo: eq.tipo_veiculo });
+    }
+    return faltando.sort((a, b) => a.codigo.localeCompare(b.codigo, 'pt-BR'));
+}
+
+/**
  * Grava o de-para de um código do OTM. Permanente: da próxima vez que o código
  * aparecer, a linha já nasce reconhecida.
  *
@@ -280,6 +348,7 @@ export function tiposDaTabela(apoio: ApoioFastDelivery): string[] {
 export async function classificarEquipamento(
     codigoOtm: string,
     tipoVeiculo: string,
+    carroceria: string,
     apoio: ApoioFastDelivery,
 ): Promise<{ ok?: true; error?: string }> {
     const codigo = String(codigoOtm ?? '').trim();
@@ -291,10 +360,25 @@ export async function classificarEquipamento(
         return { error: `"${tipoVeiculo}" não existe na tabela de preço. Cadastre o preço desse veículo antes.` };
     }
 
+    // Carroceria é OBRIGATÓRIA na classificação, mesmo não valendo dinheiro:
+    // gravar sem ela recriaria, código a código, o problema que esta coluna
+    // existe para resolver. Já os códigos antigos, gravados antes da coluna,
+    // continuam válidos com carroceria nula — não é o mesmo caso.
+    if (!carroceria) return { error: 'Escolha a carroceria.' };
+    if (!CARROCERIAS.includes(carroceria)) {
+        // A CHECK do banco recusaria também; aqui a mensagem é legível.
+        return { error: `"${carroceria}" não é uma carroceria conhecida do Pipefy.` };
+    }
+
     const { error } = await supabase
         .from('fast_delivery_equipamento')
         .upsert(
-            { codigo_otm: codigo, tipo_veiculo: tipoVeiculo, observacao: 'classificado na tela' },
+            {
+                codigo_otm: codigo,
+                tipo_veiculo: tipoVeiculo,
+                carroceria,
+                observacao: 'classificado na tela',
+            },
             { onConflict: 'codigo_otm' },
         );
 
@@ -302,6 +386,9 @@ export async function classificarEquipamento(
         // A RLS devolve o erro do Postgres; traduz para quem está na tela.
         if (/row-level security|permission denied/i.test(error.message)) {
             return { error: 'Só o master pode classificar códigos de equipamento.' };
+        }
+        if (/carroceria_valida|check constraint/i.test(error.message)) {
+            return { error: `O banco recusou a carroceria "${carroceria}". Escolha uma da lista.` };
         }
         return { error: error.message };
     }
@@ -324,6 +411,24 @@ export interface LinhaPrevia {
     destinoNormalizado: string;
     codigoEquipamento: string;
     tipoVeiculo: string | null;
+    /**
+     * A carroceria DO DE-PARA daquele código. null = o código ainda não tem
+     * carroceria definida (ou nem foi classificado). É o dado cru, para a tela
+     * saber se há decisão humana por trás.
+     */
+    carroceria: string | null;
+    /**
+     * A que REALMENTE vai para a cotação e para o Pipefy: a do de-para, ou o
+     * padrão quando não há. Separada da de cima de propósito — quem grava usa
+     * esta, quem avisa o operador olha aquela.
+     */
+    carroceriaEfetiva: string;
+    /**
+     * Texto do aviso quando a carroceria caiu no padrão. null = veio do de-para.
+     * NÃO é pendência: a linha continua lançável. Sem isto, o "Baú" de antes
+     * voltaria calado, que é o defeito que esta mudança corrige.
+     */
+    avisoCarroceria?: string | null;
     placa: string;
     motorista: string;
     cpfMotorista: string;
@@ -403,7 +508,23 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
         const destinoNormalizado = normalizarDestino(cidade);
 
         const codigoEquipamento = String(pegar(l, mapa, 'tipoEquipamento') ?? '').trim();
-        const tipoVeiculo = apoio.equipamentos.get(codigoEquipamento) ?? null;
+        const equipamento = apoio.equipamentos.get(codigoEquipamento) ?? null;
+        const tipoVeiculo = equipamento?.tipo_veiculo ?? null;
+
+        // Carroceria: a do código, ou o padrão. O padrão NÃO passa calado —
+        // vira aviso na linha, porque foi exatamente o "Baú" silencioso que
+        // mandou carro errado para o cliente.
+        const carroceria = equipamento?.carroceria ?? null;
+        const carroceriaEfetiva = carroceria ?? CARROCERIA_PADRAO;
+        const avisoCarroceria = carroceria
+            ? null
+            : codigoEquipamento && tipoVeiculo
+                // Código classificado, mas de antes da carroceria existir. Cota
+                // normalmente e o master completa quando puder.
+                ? `Código ${codigoEquipamento} não tem carroceria definida — vai como ${CARROCERIA_PADRAO}.`
+                // Sem código ou sem de-para: já é pendência de equipamento, e
+                // repetir o aviso aqui só empilharia ruído sobre o mesmo fato.
+                : null;
 
         // Equipamento sem de-para: não dá para escolher veículo, e sem veículo
         // não há preço. Classificar é decisão humana — nunca palpite.
@@ -454,6 +575,9 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
             destinoNormalizado,
             codigoEquipamento,
             tipoVeiculo,
+            carroceria,
+            carroceriaEfetiva,
+            avisoCarroceria,
             placa: limparPlaca(pegar(l, mapa, 'placa')),
             motorista: String(pegar(l, mapa, 'motorista') ?? '').trim(),
             cpfMotorista: String(pegar(l, mapa, 'cpfMotorista') ?? '').trim(),
@@ -505,11 +629,15 @@ export const SOLICITANTE_FIXO = 'Operação Fast Delivery';
 /** Mercadoria fixa da operação. Valor que já existe no histórico de cotações. */
 export const MERCADORIA_FIXA = 'Papel e derivados diversos';
 
-/**
- * Implemento fixo: no Fast Delivery é sempre baú. "Baú" é a grafia canônica —
- * 569 cotações usam assim, contra um punhado de "BAU"/"Bau" soltos.
- */
-export const CARROCERIA_FIXA = 'Baú';
+// O IMPLEMENTO NÃO É MAIS FIXO — não procure a constante aqui.
+//
+// Era CARROCERIA_FIXA = 'Baú', em toda cotação Fast Delivery. Mas o código do
+// OTM diz qual carreta é — 10910 pode ser Sider e 10920 Grade Baixa —, e o
+// "Baú" fixo mandava o carro errado para o cliente. Agora sai do de-para do
+// código (LinhaPrevia.carroceriaEfetiva); CARROCERIA_PADRAO, lá em cima, só
+// entra quando o código ainda não tem a sua, e com aviso na tela.
+//
+// Nada disso toca em preço: o valor continua saindo de destino × tipo_veiculo.
 
 /**
  * Id do registro "Operação Fast Delivery" na tabela Solicitantes DO PIPEFY.
@@ -700,7 +828,8 @@ export async function criarCotacoesFastDelivery(
             vehicle_type: (l.tipoVeiculo && VEICULO_CALCULADORA[l.tipoVeiculo]) || l.tipoVeiculo || '',
             veiculo_tipo_operacao: l.tipoVeiculo ?? null,
             merchandise_type: MERCADORIA_FIXA,
-            carroceria_tipo_operacao: CARROCERIA_FIXA,
+            // Do de-para do código do OTM, não mais "Baú" para todo mundo.
+            carroceria_tipo_operacao: l.carroceriaEfetiva,
             // Uma hora antes do OTM, por decisão da operação.
             coleta_date: coletaAjustada(l.dataColeta),
             peso_carga_operacao: l.peso,

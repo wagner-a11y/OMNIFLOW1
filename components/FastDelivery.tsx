@@ -1,10 +1,10 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileUp, Info, Loader2, Send, Zap } from 'lucide-react';
 import {
     ApoioFastDelivery, LinhaPrevia, ORIGEM_FIXA, ResultadoCotacao, SOLICITANTE_FIXO,
-    CARROCERIA_FIXA, MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID, carregarApoio, clientePipefyId, coletaAjustada,
+    MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID, carregarApoio, clientePipefyId, coletaAjustada,
     corDaMargem, criarCotacoesFastDelivery, lerExcelOtm, marcarJaLancadas,
-    classificarEquipamento, tiposDaTabela,
+    classificarEquipamento, tiposDaTabela, CARROCERIAS, CARROCERIA_PADRAO, codigosSemCarroceria,
 } from '../services/fastDelivery';
 import { createPipefyCard } from '../services/pipefy';
 import { createRamperCard } from '../services/ramper';
@@ -84,8 +84,45 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
     /** Código do OTM que o master está classificando. null = modal fechado. */
     const [classificando, setClassificando] = useState<string | null>(null);
     const [tipoEscolhido, setTipoEscolhido] = useState('');
+    const [carroceriaEscolhida, setCarroceriaEscolhida] = useState('');
     const [salvandoTipo, setSalvandoTipo] = useState(false);
     const [erroTipo, setErroTipo] = useState<string | null>(null);
+
+    /**
+     * Abre o modal já preenchido com o que o código tem.
+     *
+     * O mesmo modal serve para os dois casos, e é o pré-preenchimento que os
+     * separa: código novo abre vazio; código antigo abre com o veículo dele e o
+     * master só escolhe a carroceria que falta. Um modal só de "definir
+     * carroceria" seria uma segunda tela para a mesma decisão.
+     */
+    const abrirClassificacao = (codigo: string) => {
+        const atual = apoio?.equipamentos.get(codigo);
+        setClassificando(codigo);
+        setTipoEscolhido(atual?.tipo_veiculo ?? '');
+        setCarroceriaEscolhida(atual?.carroceria ?? '');
+        setErroTipo(null);
+    };
+
+    /** Códigos que já têm veículo mas ainda não têm carroceria. */
+    const semCarroceria = useMemo(() => (apoio ? codigosSemCarroceria(apoio) : []), [apoio]);
+
+    /**
+     * Carrega o apoio ao ABRIR a tela, sem esperar planilha.
+     *
+     * É o que faz a lista de códigos sem carroceria aparecer para o master
+     * assim que ele entra. Amarrada ao upload, ela só existiria depois de subir
+     * um Excel — e completar o de-para é justamente o trabalho que se faz ANTES
+     * de subir, para a planilha já nascer certa.
+     *
+     * Falha em silêncio de propósito: isto alimenta um aviso, e o upload
+     * recarrega o apoio de qualquer jeito e aí sim reporta o erro na cara.
+     */
+    useEffect(() => {
+        let vivo = true;
+        carregarApoio().then(a => { if (vivo) setApoio(p => p ?? a); }).catch(() => {});
+        return () => { vivo = false; };
+    }, []);
 
     const { pendentes, prontas, lancadas } = useMemo(() => {
         const todas = linhas ?? [];
@@ -148,10 +185,10 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
      * verdadeira, não erro.
      */
     const salvarClassificacao = async () => {
-        if (!classificando || !tipoEscolhido || !apoio) return;
+        if (!classificando || !tipoEscolhido || !carroceriaEscolhida || !apoio) return;
         setSalvandoTipo(true); setErroTipo(null);
         try {
-            const r = await classificarEquipamento(classificando, tipoEscolhido, apoio);
+            const r = await classificarEquipamento(classificando, tipoEscolhido, carroceriaEscolhida, apoio);
             if (r.error) { setErroTipo(r.error); return; }
 
             const novoApoio = await carregarApoio();
@@ -161,7 +198,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 setLinhas(await marcarJaLancadas(rel.linhas));
                 setColunasFaltando(rel.colunasFaltando);
             }
-            setClassificando(null); setTipoEscolhido('');
+            setClassificando(null); setTipoEscolhido(''); setCarroceriaEscolhida('');
         } catch (e) {
             setErroTipo((e as Error).message);
         } finally {
@@ -228,7 +265,9 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
             peso: l.peso ?? undefined,
             veiculo: l.tipoVeiculo ?? undefined,
             mercadoria: MERCADORIA_FIXA,
-            implemento: CARROCERIA_FIXA,
+            // Do de-para do código do OTM — a MESMA que foi gravada na cotação.
+            // A grafia já é a das opções do Pipefy, então cai direto no campo.
+            implemento: l.carroceriaEfetiva,
             // Mesma antecipação de uma hora que foi gravada na cotação.
             dataColeta: coletaAjustada(l.dataColeta) ?? undefined,
             localEntrega: l.cliente || undefined,
@@ -335,6 +374,14 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 </td>
                 <td className="px-3 py-2 text-xs">
                     {l.tipoVeiculo ?? <span className="text-amber-700 font-semibold">?</span>}
+                    {/* A carroceria só aparece quando há veículo: sem de-para,
+                        anunciar "Baú" seria informação inventada sobre uma linha
+                        que ainda nem sabe que carro é. */}
+                    {l.tipoVeiculo && (
+                        <span className={l.carroceria ? 'text-[#6b7280]' : 'text-amber-700 font-semibold'}>
+                            {' · '}{l.carroceriaEfetiva}{l.carroceria ? '' : ' ?'}
+                        </span>
+                    )}
                     <span className="block text-[10px] text-[#9ca3af]">cód. {l.codigoEquipamento || '—'}</span>
                 </td>
                 {/* A placa saiu: vinha vazia do OTM quase sempre. O volume é o
@@ -371,6 +418,26 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                         <span className="text-[11px] font-medium text-[#92400e] flex items-center gap-1.5">
                             <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" strokeWidth={2} />
                             {l.alertaVolume.texto} — confira antes de fechar. Dá para cotar assim mesmo.
+                        </span>
+                    </td>
+                </tr>
+            )}
+            {/* Mesma natureza do aviso de volume: informa, não impede. O código
+                está classificado e o preço está certo — o que falta é qual
+                carroceria mandar, e o padrão entra à vista de todos. */}
+            {l.avisoCarroceria && !pendente && (
+                <tr className="bg-amber-50/40">
+                    <td colSpan={10} className="px-3 pb-2 pt-0">
+                        <span className="text-[11px] font-medium text-[#92400e] flex flex-wrap items-center gap-1.5">
+                            <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" strokeWidth={2} />
+                            {l.avisoCarroceria} O preço não muda.
+                            {ehMaster && (
+                                <button type="button"
+                                    onClick={() => abrirClassificacao(l.codigoEquipamento)}
+                                    className="px-2 py-0.5 rounded text-[10px] font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] transition-colors">
+                                    Definir carroceria
+                                </button>
+                            )}
                         </span>
                     </td>
                 </tr>
@@ -477,7 +544,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                                                             mas quem resolve é quem responde pela tabela de preço. */}
                                                         {p.motivo === 'equipamento' && ehMaster && !!l.codigoEquipamento && (
                                                             <button type="button"
-                                                                onClick={() => { setClassificando(l.codigoEquipamento); setTipoEscolhido(''); setErroTipo(null); }}
+                                                                onClick={() => abrirClassificacao(l.codigoEquipamento)}
                                                                 className="px-2 py-0.5 rounded text-[10px] font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] transition-colors">
                                                                 Classificar código
                                                             </button>
@@ -494,6 +561,46 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 </div>
             )}
 
+            {/* -------------------------------------------------------------
+                Códigos JÁ classificados que não têm carroceria.
+                Eles cotam normalmente — não são pendência e não aparecem no
+                bloco de cima. Sem esta lista, ninguém descobriria que estão
+                mandando "Baú" por omissão: a tela não teria por que reclamar de
+                uma linha que está, para todos os efeitos, resolvida.
+               ------------------------------------------------------------- */}
+            {!!semCarroceria.length && (
+                <div className="bg-white border border-amber-200 rounded-xl px-6 py-4">
+                    <p className="text-sm font-semibold text-[#92400e] flex items-center gap-2">
+                        <Info className="w-4 h-4 text-amber-600 shrink-0" strokeWidth={1.75} />
+                        {semCarroceria.length} código(s) sem carroceria definida
+                    </p>
+                    <p className="text-xs font-medium text-[#6b7280] mt-1">
+                        Foram classificados antes da carroceria existir. Continuam cotando normal, com o
+                        preço de sempre — só saem como <strong className="text-[#111827]">{CARROCERIA_PADRAO}</strong>{' '}
+                        até alguém dizer qual é.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        {semCarroceria.map(({ codigo, tipoVeiculo }) => (
+                            <span key={codigo}
+                                className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#f9fafb] border border-[#e5e7eb]">
+                                <span className="text-xs font-medium text-[#111827]">
+                                    <span className="font-mono">{codigo}</span>
+                                    <span className="text-[#6b7280]"> · {tipoVeiculo}</span>
+                                </span>
+                                {/* Mesma regra do resto: o operador VÊ o que falta,
+                                    o master é quem resolve. A trava é a RLS. */}
+                                {ehMaster && (
+                                    <button type="button" onClick={() => abrirClassificacao(codigo)}
+                                        className="text-[10px] font-semibold text-[#1d6fb8] hover:underline">
+                                        definir
+                                    </button>
+                                )}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* prontas e já lançadas, com filtro */}
             {/* -------------------------------------------------------------
                 Classificar um código do OTM que ainda não está no de-para.
@@ -501,15 +608,26 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 tipo sem preço cadastrado deixaria a linha "resolvida" e ainda
                 assim impossível de cotar.
                ------------------------------------------------------------- */}
-            {classificando && apoio && (
+            {classificando && apoio && (() => {
+                // Já classificado = o modal está COMPLETANDO a carroceria de um
+                // código antigo, não classificando um novo. Muda o texto, não a
+                // mecânica: é a mesma gravação.
+                const jaTinha = apoio.equipamentos.get(classificando);
+                return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
                     onClick={() => !salvandoTipo && setClassificando(null)}>
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
                         <div>
-                            <h3 className="text-lg font-semibold text-[#111827]">Classificar código do OTM</h3>
+                            <h3 className="text-lg font-semibold text-[#111827]">
+                                {jaTinha ? 'Completar carroceria do código' : 'Classificar código do OTM'}
+                            </h3>
                             <p className="text-xs font-medium text-[#6b7280] mt-1">
-                                Código <strong className="text-[#111827]">{classificando}</strong> ainda não tem
-                                tipo de veículo. O que você escolher fica valendo para as próximas planilhas.
+                                Código <strong className="text-[#111827]">{classificando}</strong>{' '}
+                                {jaTinha
+                                    ? <>já é <strong className="text-[#111827]">{jaTinha.tipo_veiculo}</strong>, mas ainda
+                                        não tem carroceria. Sem ela a cotação sai como {CARROCERIA_PADRAO}.</>
+                                    : <>ainda não tem tipo de veículo. O que você escolher fica valendo para as
+                                        próximas planilhas.</>}
                             </p>
                         </div>
 
@@ -523,7 +641,26 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                                 {tiposDaTabela(apoio).map(tp => <option key={tp} value={tp}>{tp}</option>)}
                             </select>
                             <p className="text-[10px] font-medium text-[#6b7280] mt-1.5">
-                                Só aparecem os tipos que existem na tabela de preço.
+                                {/* O aviso só aparece para quem PODE trocar algo que já vale.
+                                    Este é o único campo dos dois que mexe em dinheiro. */}
+                                {jaTinha
+                                    ? 'Este é o campo que cruza com a tabela de preço — trocá-lo muda o valor das próximas cargas deste código.'
+                                    : 'Só aparecem os tipos que existem na tabela de preço.'}
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
+                                Carroceria
+                            </label>
+                            <select value={carroceriaEscolhida} onChange={e => setCarroceriaEscolhida(e.target.value)}
+                                className="w-full px-3 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-medium text-[#111827] outline-none focus:border-[#1d6fb8]">
+                                <option value="">— selecione —</option>
+                                {CARROCERIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <p className="text-[10px] font-medium text-[#6b7280] mt-1.5">
+                                Não muda o preço — vai para a cotação e para o campo Implemento do card,
+                                para chegar o carro certo.
                             </p>
                         </div>
 
@@ -538,14 +675,15 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                                 className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] bg-[#f9fafb] border border-[#e5e7eb] hover:bg-[#f3f4f6] transition-colors">
                                 Cancelar
                             </button>
-                            <button onClick={salvarClassificacao} disabled={!tipoEscolhido || salvandoTipo}
+                            <button onClick={salvarClassificacao} disabled={!tipoEscolhido || !carroceriaEscolhida || salvandoTipo}
                                 className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] transition-colors flex items-center justify-center gap-2">
                                 {salvandoTipo ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</> : 'Salvar e recalcular'}
                             </button>
                         </div>
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
             {!!(prontas.length + lancadas.length) && (
                 <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden">
