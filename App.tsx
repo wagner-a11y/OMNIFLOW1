@@ -70,7 +70,7 @@ const nextProposalNumber = (hist: { proposalNumber?: string }[]): string => {
 
 import { WonInfoModal } from './components/WonInfoModal';
 import { VehicleType, FreightCalculation, Customer, FederalTaxes, QuoteStatus, ANTTCoefficients, User, UserRole, Disponibilidade, ExtraCostItem } from './types';
-import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS } from './constants';
+import { VEHICLE_CONFIGS, INITIAL_CUSTOMERS, IMPLEMENTO_OPTIONS } from './constants';
 import { ANTT_CARGO_TYPES, CARGA_CONFERIR_PISO, computeANTTFloor } from './utils/antt';
 import MunicipioAutocomplete, { useMunicipios } from './components/MunicipioAutocomplete';
 import CadastroMotorista from './components/CadastroMotorista';
@@ -144,8 +144,8 @@ const matchMercadoriaOption = (v: string): string => {
     return MERCADORIA_OPTIONS.find(o => norm(o) === n) || '';
 };
 
-// Opções de Implemento — grafia IDÊNTICA ao campo "Implemento" (qual_o_tipo_de_carreta) do Pipefy.
-const IMPLEMENTO_OPTIONS = ['Sider', 'Baú', 'Grade Baixa', 'Graneleiro', 'N/A', 'Prancha'];
+// Implemento: a lista foi para constants.ts (IMPLEMENTO_OPTIONS). O de-para do
+// Fast Delivery usa a MESMA — e duas cópias divergiriam.
 
 // Insights determinísticos (sempre do banco; a IA nunca calcula número). Mesma fonte pro dashboard e
 // pro relatório do WhatsApp. REGRA: "carga fechada" = cotação enviada pro Pipefy (tem card / pipefy_sent_at).
