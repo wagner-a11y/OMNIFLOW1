@@ -1,6 +1,8 @@
 import * as XLSX from 'xlsx';
 import { supabase } from './supabase';
 import { IMPLEMENTO_OPTIONS } from '../constants';
+import { createPipefyCard } from './pipefy';
+import { createRamperCard } from './ramper';
 
 // ============================================================================
 // FAST DELIVERY — leitura do Excel do OTM e montagem da prévia (Bloco 2).
@@ -873,6 +875,20 @@ export async function criarCotacoesFastDelivery(
             total_freight: l.valorRecebido ?? 0,
             real_profit: l.margem,
             real_margin_percent: l.margemPercent,
+            /**
+             * QUANDO a cotação nasceu — e isto faltava.
+             *
+             * O fluxo normal sempre gravou (services/database.ts), o Fast
+             * Delivery nunca: o insert passava created_by e created_by_name e
+             * pulava a data. A coluna é bigint com epoch em MILISSEGUNDOS, não
+             * timestamptz — o resto do sistema lê com Number(), e um ISO aqui
+             * viraria NaN.
+             *
+             * Sem isto o histórico não tem por onde ordenar "mais recentes
+             * primeiro". As cotações já criadas continuam sem — para elas o
+             * histórico cai no instante embutido no id (ver instanteDaCotacao).
+             */
+            created_at: Date.now(),
             created_by: autor.id ?? null,
             created_by_name: autor.name ?? null,
         };
@@ -889,4 +905,264 @@ export async function criarCotacoesFastDelivery(
         }
     }
     return resultados;
+}
+
+// ============================================================================
+// HISTÓRICO E ENVIO
+//
+// Lê as cotações Fast Delivery que JÁ EXISTEM e reenvia o que faltou. Não cria
+// cotação, não calcula preço, não consulta rota — zero token do Qualp.
+//
+// O QUE MUDOU AQUI, E POR QUÊ. Até agora o envio ao Pipefy e ao Ramper só
+// existia na memória da tela: `createPipefyCard` era chamado e o "✓ enviado"
+// vivia num useState. Recarregar a página apagava esse conhecimento, e o mesmo
+// frete virava um segundo card — sem erro, sem aviso.
+//
+// Agora o envio é GRAVADO na própria cotação, e a trava consulta o BANCO antes
+// de mandar. É por isso que a trava sobrevive ao F5: ela não pergunta à tela, e
+// sim à linha.
+// ============================================================================
+
+/**
+ * Instante em que a cotação nasceu, em epoch ms.
+ *
+ * `created_at` é a fonte, mas as cotações Fast Delivery criadas ANTES desta
+ * leva não a têm — o insert nunca a preenchia. Para essas, o instante é
+ * recuperado do próprio id, que nasce de `${Date.now()}${aleatório}`: os 13
+ * primeiros dígitos são o milissegundo.
+ *
+ * Devolve 0 quando nenhum dos dois serve. Zero ordena por último, que é o lugar
+ * certo para uma linha cuja data ninguém sabe — melhor do que inventar "hoje" e
+ * jogá-la para o topo.
+ */
+export function instanteDaCotacao(createdAt: unknown, id: unknown): number {
+    const n = numeroDb(createdAt);
+    if (n && n > 0) return n;
+    const digitos = String(id ?? '').replace(/\D/g, '').slice(0, 13);
+    return digitos.length === 13 ? Number(digitos) : 0;
+}
+
+/** Uma carga já lançada, como o histórico a enxerga. */
+export interface CotacaoHistorico {
+    id: string;
+    proposta: string;
+    dt: string;
+    /** epoch ms. Ver instanteDaCotacao — 0 = data desconhecida. */
+    criadaEm: number;
+    destino: string;
+    cliente: string;
+    tipoVeiculo: string | null;
+    carroceria: string | null;
+    peso: number | null;
+    coletaEm: string | null;
+    observacoes: string | null;
+    valorRecebido: number | null;
+    valorAPagar: number | null;
+    margem: number | null;
+    margemPercent: number | null;
+    /** Preenchido = já foi. É a trava, e mora no banco. */
+    pipefySentAt: string | null;
+    pipefyCardId: string | null;
+    pipefyCardUrl: string | null;
+    ramperSentAt: string | null;
+}
+
+/** Colunas que o histórico lê. Explícitas: `select('*')` traria 60+ campos. */
+const COLUNAS_HISTORICO =
+    'id, proposal_number, client_reference, created_at, destination, cliente_nome_operacao, ' +
+    'veiculo_tipo_operacao, carroceria_tipo_operacao, peso_carga_operacao, coleta_date, ' +
+    'observacoes_gerais, nosso_frete, frete_terceiro, real_profit, real_margin_percent, ' +
+    'pipefy_card_id, pipefy_sent_at, pipefy_card_url, ramper_sent_at';
+
+function linhaParaHistorico(r: Record<string, unknown>): CotacaoHistorico {
+    const recebido = numeroDb(r.nosso_frete);
+    const pagar = numeroDb(r.frete_terceiro);
+    // A margem gravada é a verdade — foi calculada quando a cotação nasceu.
+    // Só se ela faltar é que se recalcula a partir dos dois valores; e se nem
+    // eles existirem, fica null. Nada é inventado para preencher a coluna.
+    const margem = numeroDb(r.real_profit) ?? (recebido !== null && pagar !== null ? recebido - pagar : null);
+    const margemPercent = numeroDb(r.real_margin_percent)
+        ?? (margem !== null && recebido ? (margem / recebido) * 100 : null);
+    return {
+        id: String(r.id),
+        proposta: String(r.proposal_number ?? ''),
+        dt: String(r.client_reference ?? ''),
+        criadaEm: instanteDaCotacao(r.created_at, r.id),
+        destino: String(r.destination ?? ''),
+        cliente: String(r.cliente_nome_operacao ?? ''),
+        tipoVeiculo: r.veiculo_tipo_operacao ? String(r.veiculo_tipo_operacao) : null,
+        carroceria: r.carroceria_tipo_operacao ? String(r.carroceria_tipo_operacao) : null,
+        peso: numeroDb(r.peso_carga_operacao),
+        coletaEm: r.coleta_date ? String(r.coleta_date) : null,
+        observacoes: r.observacoes_gerais ? String(r.observacoes_gerais) : null,
+        valorRecebido: recebido,
+        valorAPagar: pagar,
+        margem,
+        margemPercent,
+        pipefySentAt: r.pipefy_sent_at ? String(r.pipefy_sent_at) : null,
+        pipefyCardId: r.pipefy_card_id ? String(r.pipefy_card_id) : null,
+        pipefyCardUrl: r.pipefy_card_url ? String(r.pipefy_card_url) : null,
+        ramperSentAt: r.ramper_sent_at ? String(r.ramper_sent_at) : null,
+    };
+}
+
+/** Quantas cargas o histórico traz. O mesmo teto que o histórico geral usa. */
+export const LIMITE_HISTORICO = 500;
+
+/**
+ * As cargas Fast Delivery já lançadas, mais recentes primeiro.
+ *
+ * Fora da lixeira: `deleted_at is null`, a mesma regra do histórico geral —
+ * cotação mandada para a lixeira não deve reaparecer aqui como se estivesse
+ * viva, muito menos com botão de reenviar.
+ *
+ * A ORDENAÇÃO É FEITA AQUI, não no banco, e isso é deliberado: `created_at`
+ * está vazio nas cotações antigas desta operação, então `order by created_at`
+ * as jogaria todas para o mesmo lugar. Ordenar por `criadaEm` — que cai no id
+ * quando a data falta — põe cada uma no seu lugar. O `order` no servidor fica
+ * só para decidir QUAIS 500 vêm quando houver mais que isso.
+ */
+export async function carregarHistoricoFastDelivery(): Promise<CotacaoHistorico[]> {
+    const { data, error } = await supabase
+        .from('freight_calculations')
+        .select(COLUNAS_HISTORICO)
+        .eq('operacao', OPERACAO)
+        .is('deleted_at', null)
+        .order('id', { ascending: false })
+        .limit(LIMITE_HISTORICO);
+    if (error) throw new Error(`Não consegui ler o histórico: ${error.message}`);
+    return ((data ?? []) as unknown as Record<string, unknown>[])
+        .map(linhaParaHistorico)
+        .sort((a, b) => b.criadaEm - a.criadaEm);
+}
+
+export interface ResultadoEnvio {
+    ok?: true;
+    /** Já estava enviada no banco — nada foi mandado de novo. */
+    jaEnviado?: true;
+    erro?: string;
+}
+
+/**
+ * O estado de envio DA LINHA, lido do banco agora.
+ *
+ * É a pergunta que a tela não sabia fazer. Consultar antes de mandar é o que
+ * impede o card duplicado depois de um F5, de outra aba ou de outra máquina —
+ * casos em que o `useState` da tela está limpo e não sabe de nada.
+ */
+async function envioAtual(cotacaoId: string): Promise<{ pipefy: boolean; ramper: boolean } | { erro: string }> {
+    const { data, error } = await supabase
+        .from('freight_calculations')
+        .select('pipefy_card_id, pipefy_sent_at, ramper_sent_at')
+        .eq('id', cotacaoId)
+        .maybeSingle();
+    if (error) return { erro: `Não consegui conferir se já foi enviada: ${error.message}` };
+    if (!data) return { erro: 'Cotação não encontrada — recarregue o histórico.' };
+    return {
+        // Card id OU data: o fluxo normal grava os dois, mas basta um para a
+        // carga já ter card lá. Exigir os dois deixaria passar duplicata.
+        pipefy: !!(data.pipefy_card_id || data.pipefy_sent_at),
+        ramper: !!data.ramper_sent_at,
+    };
+}
+
+/**
+ * Manda a carga para o Pipefy e REGISTRA o envio.
+ *
+ * Mesma chamada que a prévia já fazia (`createPipefyCard`), mesmos campos,
+ * mesmos ids de conexão — não há caminho novo para o Pipefy aqui. O que é novo
+ * são as duas pontas: conferir o banco antes e gravar nele depois.
+ *
+ * LIMITE HONESTO: a conferência e a gravação são dois passos, então dois
+ * cliques verdadeiramente simultâneos (duas abas, dois computadores) ainda
+ * poderiam gerar dois cards. A tela desabilita o botão enquanto envia, o que
+ * cobre o clique repetido; e o caso que motivou isto — recarregar a página e
+ * mandar de novo — fica resolvido. Travar de verdade exigiria reservar a linha
+ * ANTES de chamar o Pipefy, e aí uma falha de rede marcaria como enviada uma
+ * carga sem card, que é um estado pior de consertar.
+ */
+export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<ResultadoEnvio> {
+    const estado = await envioAtual(c.id);
+    if ('erro' in estado) return { erro: estado.erro };
+    if (estado.pipefy) return { ok: true, jaEnviado: true };
+
+    const idCliente = await clientePipefyId();
+    const res = await createPipefyCard({
+        titulo: 'Suzano Fast',
+        rota: `${ORIGEM_FIXA} > ${c.destino}`,
+        receita: c.valorRecebido ?? 0,
+        freteTerceiro: c.valorAPagar ?? 0,
+        valorCarga: 0,
+        peso: c.peso ?? undefined,
+        veiculo: c.tipoVeiculo ?? undefined,
+        mercadoria: MERCADORIA_FIXA,
+        implemento: c.carroceria ?? CARROCERIA_PADRAO,
+        dataColeta: c.coletaEm ?? undefined,
+        localEntrega: c.cliente || undefined,
+        referencia: c.dt,
+        cliente: 'Suzano Fast',
+        clienteId: idCliente ?? undefined,
+        solicitante: SOLICITANTE_FIXO,
+        solicitanteId: SOLICITANTE_PIPEFY_ID,
+        observacoes: c.observacoes ?? undefined,
+    });
+    if (res?.error) return { erro: res.error };
+
+    // O card existe. A gravação abaixo pode falhar — e se falhar, o histórico
+    // continuará oferecendo o botão. Por isso o erro diz o que aconteceu de
+    // verdade: o card FOI criado. Esconder isso faria o operador clicar de novo.
+    const { error } = await supabase
+        .from('freight_calculations')
+        .update({
+            pipefy_card_id: res.cardId ?? null,
+            pipefy_card_url: res.cardUrl ?? null,
+            pipefy_sent_at: new Date().toISOString(),
+        })
+        .eq('id', c.id);
+    if (error) {
+        return { erro: `Card criado no Pipefy, mas não consegui registrar o envio: ${error.message}. Não mande de novo.` };
+    }
+    return { ok: true };
+}
+
+/**
+ * Manda a carga para o Ramper e REGISTRA o envio. Espelha a do Pipefy,
+ * inclusive no limite de concorrência descrito lá.
+ */
+export async function enviarCargaAoRamper(c: CotacaoHistorico): Promise<ResultadoEnvio> {
+    const estado = await envioAtual(c.id);
+    if ('erro' in estado) return { erro: estado.erro };
+    if (estado.ramper) return { ok: true, jaEnviado: true };
+
+    const res = await createRamperCard({
+        title: `${c.proposta} · ${c.destino}`,
+        value: c.valorRecebido ?? 0,
+        organizationName: 'Suzano Fast',
+        solicitante: SOLICITANTE_FIXO,
+        tipoDeVeiculo: c.tipoVeiculo ?? undefined,
+        documento: c.dt,
+        responsavelEmail: undefined,
+    });
+    if (res?.error) return { erro: res.error };
+
+    // O Ramper devolve o id em lugares diferentes conforme a rota da API. A
+    // mesma leitura que o fluxo normal já faz — e o id é opcional: se não vier,
+    // o envio continua registrado pela data, que é o que trava a duplicação.
+    const cru = (res as Record<string, unknown>)?.result as Record<string, unknown> | undefined;
+    const bruto = cru?.id
+        ?? (cru?.opportunity as Record<string, unknown> | undefined)?.id
+        ?? (cru?.data as Record<string, unknown> | undefined)?.id
+        ?? null;
+
+    const { error } = await supabase
+        .from('freight_calculations')
+        .update({
+            ramper_sent_at: new Date().toISOString(),
+            ramper_opportunity_id: bruto ? String(bruto) : null,
+        })
+        .eq('id', c.id);
+    if (error) {
+        return { erro: `Card criado no Ramper, mas não consegui registrar o envio: ${error.message}. Não mande de novo.` };
+    }
+    return { ok: true };
 }

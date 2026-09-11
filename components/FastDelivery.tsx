@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, FileUp, Info, Loader2, Send, Zap } from 'lucide-react';
+import { AlertTriangle, FileUp, Info, Loader2, RefreshCw, Send, Zap } from 'lucide-react';
 import {
+    // MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID e clientePipefyId saíram daqui: a
+    // montagem do card do Pipefy passou para o service, onde prévia e histórico
+    // usam a MESMA função — com a trava que consulta o banco antes de mandar.
     ApoioFastDelivery, LinhaPrevia, ORIGEM_FIXA, ResultadoCotacao, SOLICITANTE_FIXO,
-    MERCADORIA_FIXA, SOLICITANTE_PIPEFY_ID, carregarApoio, clientePipefyId, coletaAjustada,
+    carregarApoio, coletaAjustada,
     corDaMargem, criarCotacoesFastDelivery, lerExcelOtm, marcarJaLancadas,
     classificarEquipamento, tiposDaTabela, CARROCERIAS, CARROCERIA_PADRAO, codigosSemCarroceria,
+    CotacaoHistorico, carregarHistoricoFastDelivery, enviarCargaAoPipefy, enviarCargaAoRamper, LIMITE_HISTORICO,
 } from '../services/fastDelivery';
-import { createPipefyCard } from '../services/pipefy';
-import { createRamperCard } from '../services/ramper';
 
 // ============================================================================
 // FAST DELIVERY — prévia (Bloco 2 de 3).
@@ -106,6 +108,63 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
 
     /** Códigos que já têm veículo mas ainda não têm carroceria. */
     const semCarroceria = useMemo(() => (apoio ? codigosSemCarroceria(apoio) : []), [apoio]);
+
+    // ---- histórico ----
+    /** Prévia é o padrão: é o que o operador vem fazer aqui todo dia. */
+    const [aba, setAba] = useState<'previa' | 'historico'>('previa');
+    const [historico, setHistorico] = useState<CotacaoHistorico[] | null>(null);
+    const [carregandoHist, setCarregandoHist] = useState(false);
+    const [erroHist, setErroHist] = useState<string | null>(null);
+    /** Envio em curso, por cotação e destino. Desabilita o botão e evita o duplo clique. */
+    const [enviandoHist, setEnviandoHist] = useState<Record<string, boolean>>({});
+    const [erroEnvioHist, setErroEnvioHist] = useState<Record<string, string>>({});
+
+    /**
+     * Relê o histórico do banco.
+     *
+     * Chamado ao abrir a aba e DEPOIS DE CADA ENVIO — é a releitura que faz o
+     * status na tela vir do banco, e não de um palpite otimista. Se a gravação
+     * do envio falhar, a linha volta mostrando "não enviado", que é a verdade.
+     */
+    const recarregarHistorico = async () => {
+        setCarregandoHist(true); setErroHist(null);
+        try {
+            setHistorico(await carregarHistoricoFastDelivery());
+        } catch (e) {
+            setErroHist((e as Error).message);
+        } finally {
+            setCarregandoHist(false);
+        }
+    };
+
+    // Carrega ao entrar na aba, e só então: quem só usa a prévia não paga por
+    // uma consulta de 500 linhas que não vai olhar.
+    useEffect(() => {
+        if (aba === 'historico' && historico === null && !carregandoHist) void recarregarHistorico();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [aba]);
+
+    /**
+     * Envia uma carga do histórico e RELÊ do banco.
+     *
+     * A trava mora no service, que consulta a linha antes de mandar. Aqui só se
+     * cuida de não deixar clicar duas vezes enquanto a primeira ainda corre.
+     */
+    const enviarDoHistorico = async (c: CotacaoHistorico, alvo: 'pipefy' | 'ramper') => {
+        const chave = `${c.id}:${alvo}`;
+        if (enviandoHist[chave]) return;
+        setEnviandoHist(p => ({ ...p, [chave]: true }));
+        setErroEnvioHist(p => { const q = { ...p }; delete q[chave]; return q; });
+        try {
+            const r = alvo === 'pipefy' ? await enviarCargaAoPipefy(c) : await enviarCargaAoRamper(c);
+            if (r.erro) setErroEnvioHist(p => ({ ...p, [chave]: r.erro! }));
+            await recarregarHistorico();
+        } catch (e) {
+            setErroEnvioHist(p => ({ ...p, [chave]: (e as Error).message }));
+        } finally {
+            setEnviandoHist(p => ({ ...p, [chave]: false }));
+        }
+    };
 
     /**
      * Carrega o apoio ao ABRIR a tela, sem esperar planilha.
@@ -224,64 +283,55 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
     /** Cotação gravada de uma DT, quando houver. */
     const gravada = (dt: string) => resultados?.find(r => r.dt === dt && r.ok && !r.jaExistia);
 
-    const enviarRamper = async (l: LinhaPrevia) => {
-        const r = gravada(l.referencia);
-        if (!r) return;
-        setRamper(p => ({ ...p, [l.referencia]: { enviando: true } }));
-        // Mesma integração da cotação normal — nenhum caminho novo.
-        const res = await createRamperCard({
-            title: `${r.proposta} · ${l.cidadeOriginal}${l.uf ? `/${l.uf}` : ''}`,
-            value: l.valorRecebido ?? 0,
-            organizationName: 'Suzano Fast',
-            solicitante: SOLICITANTE_FIXO,
-            tipoDeVeiculo: l.tipoVeiculo ?? undefined,
-            documento: l.referencia,
-            responsavelEmail: undefined,
-        });
-        setRamper(p => ({
-            ...p,
-            [l.referencia]: res?.error ? { erro: res.error } : { enviado: true },
-        }));
-    };
+    /**
+     * A linha da prévia, no formato que o envio entende.
+     *
+     * Existe para que prévia e histórico usem A MESMA função de envio — a que
+     * confere o banco antes de mandar. Antes, a prévia montava o payload do
+     * Pipefy aqui dentro e o histórico montaria outro: duas versões do mesmo
+     * card, fadadas a divergir, e só uma delas com trava.
+     *
+     * Os campos saem da linha e da cotação recém-gravada; `id` é o que amarra
+     * tudo, porque é por ele que a trava consulta a linha.
+     */
+    const previaComoCarga = (l: LinhaPrevia, cotacaoId: string, proposta: string): CotacaoHistorico => ({
+        id: cotacaoId,
+        proposta,
+        dt: l.referencia,
+        criadaEm: Date.now(),
+        destino: `${l.cidadeOriginal}${l.uf ? `/${l.uf}` : ''}`,
+        cliente: l.cliente,
+        tipoVeiculo: l.tipoVeiculo,
+        carroceria: l.carroceriaEfetiva,
+        peso: l.peso,
+        // A MESMA antecipação de uma hora que foi gravada na cotação.
+        coletaEm: coletaAjustada(l.dataColeta),
+        observacoes: l.volume !== null ? `Volume: ${l.volume} m³` : null,
+        valorRecebido: l.valorRecebido,
+        valorAPagar: l.valorAPagar,
+        margem: l.margem,
+        margemPercent: l.margemPercent,
+        pipefySentAt: null, pipefyCardId: null, pipefyCardUrl: null, ramperSentAt: null,
+    });
 
-    const enviarPipefy = async (l: LinhaPrevia) => {
+    /**
+     * Envia da prévia. Agora pelo mesmo caminho do histórico, o que traz junto
+     * a trava que consulta o banco: reenviar depois de um F5 devolve "já
+     * enviado" em vez de criar o segundo card.
+     */
+    const enviarDaPrevia = async (l: LinhaPrevia, alvo: 'ramper' | 'pipefy') => {
         const r = gravada(l.referencia);
-        if (!r) return;
-        setPipefy(p => ({ ...p, [l.referencia]: { enviando: true } }));
-        // Card em fase e campos que JÁ EXISTEM. Nada de estrutura é tocado.
-        // Os campos "Cliente" e "Solicitante da Carga" são CONEXÕES: preenchem
-        // pelo ID do registro no Pipefy, não pelo nome. Sem os ids os dois ficam
-        // vazios no card — e o título, que sai do nome do cliente, sai errado
-        // junto. Por isso os dois vão sempre em par: nome e id.
-        const idCliente = await clientePipefyId();
-        const res = await createPipefyCard({
-            // Título = só o nome do cliente. O Wagner filtra pela DT, que já vai
-            // no campo de solicitação — DT e destino no título só poluiriam.
-            titulo: 'Suzano Fast',
-            rota: `${ORIGEM_FIXA} > ${l.cidadeOriginal}${l.uf ? `/${l.uf}` : ''}`,
-            receita: l.valorRecebido ?? 0,
-            freteTerceiro: l.valorAPagar ?? 0,
-            valorCarga: 0,
-            peso: l.peso ?? undefined,
-            veiculo: l.tipoVeiculo ?? undefined,
-            mercadoria: MERCADORIA_FIXA,
-            // Do de-para do código do OTM — a MESMA que foi gravada na cotação.
-            // A grafia já é a das opções do Pipefy, então cai direto no campo.
-            implemento: l.carroceriaEfetiva,
-            // Mesma antecipação de uma hora que foi gravada na cotação.
-            dataColeta: coletaAjustada(l.dataColeta) ?? undefined,
-            localEntrega: l.cliente || undefined,
-            referencia: l.referencia,
-            cliente: 'Suzano Fast',
-            clienteId: idCliente ?? undefined,
-            solicitante: SOLICITANTE_FIXO,
-            solicitanteId: SOLICITANTE_PIPEFY_ID,
-            observacoes: l.volume !== null ? `Volume: ${l.volume} m³` : undefined,
-        });
-        setPipefy(p => ({
+        if (!r?.id || !r.proposta) return;
+        const set = alvo === 'ramper' ? setRamper : setPipefy;
+        set(p => ({ ...p, [l.referencia]: { enviando: true } }));
+        const carga = previaComoCarga(l, r.id, r.proposta);
+        const res = alvo === 'ramper' ? await enviarCargaAoRamper(carga) : await enviarCargaAoPipefy(carga);
+        set(p => ({
             ...p,
-            [l.referencia]: res?.error ? { erro: res.error } : { enviado: true },
+            [l.referencia]: res.erro ? { erro: res.erro } : { enviado: true },
         }));
+        // O histórico, se já estiver carregado, precisa refletir o envio.
+        if (historico !== null) void recarregarHistorico();
     };
 
     const BotaoEnvio: React.FC<{ l: LinhaPrevia; alvo: 'ramper' | 'pipefy' }> = ({ l, alvo }) => {
@@ -296,11 +346,56 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
         return (
             <div className="flex flex-col items-start gap-0.5">
                 <button type="button" disabled={e.enviando}
-                    onClick={() => (alvo === 'ramper' ? enviarRamper(l) : enviarPipefy(l))}
+                    onClick={() => enviarDaPrevia(l, alvo)}
                     className="text-[10px] font-semibold text-[#1d6fb8] hover:underline disabled:text-[#9ca3af]">
                     {e.enviando ? 'enviando…' : `→ ${rotulo}`}
                 </button>
                 {e.erro && <span className="text-[10px] font-medium text-red-600 max-w-[160px]">{e.erro}</span>}
+            </div>
+        );
+    };
+
+    /**
+     * Status de envio de uma carga do histórico, e o botão quando falta enviar.
+     *
+     * O estado vem do BANCO (`pipefySentAt`/`ramperSentAt` da própria linha),
+     * não de um useState — é isso que faz o "enviado" continuar verdadeiro
+     * depois de recarregar a página, em outra aba ou em outra máquina.
+     */
+    const EnvioHistorico: React.FC<{ c: CotacaoHistorico; alvo: 'pipefy' | 'ramper' }> = ({ c, alvo }) => {
+        const enviadoEm = alvo === 'pipefy' ? c.pipefySentAt : c.ramperSentAt;
+        const chave = `${c.id}:${alvo}`;
+        const erro = erroEnvioHist[chave];
+        const ocupado = !!enviandoHist[chave];
+
+        if (enviadoEm) {
+            const link = alvo === 'pipefy'
+                ? (c.pipefyCardUrl || (c.pipefyCardId ? `https://app.pipefy.com/open-cards/${c.pipefyCardId}` : null))
+                : null;
+            return (
+                <div className="flex flex-col items-start gap-0.5">
+                    <span className="text-[10px] font-semibold text-emerald-700">✓ enviado</span>
+                    <span className="text-[10px] text-[#9ca3af]">{dataCurta(enviadoEm)}</span>
+                    {link && (
+                        <a href={link} target="_blank" rel="noopener noreferrer"
+                            className="text-[10px] font-semibold text-[#1d6fb8] hover:underline">
+                            abrir card
+                        </a>
+                    )}
+                </div>
+            );
+        }
+        return (
+            <div className="flex flex-col items-start gap-0.5">
+                <button type="button" disabled={ocupado}
+                    onClick={() => enviarDoHistorico(c, alvo)}
+                    className="text-[10px] font-semibold text-white bg-[#1d6fb8] hover:bg-[#175a94] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] px-2 py-1 rounded transition-colors">
+                    {ocupado ? 'enviando…' : `→ ${alvo === 'pipefy' ? 'Pipefy' : 'Ramper'}`}
+                </button>
+                {/* Erro NÃO vira "enviado": se não foi, o botão continua ali. E
+                    quando o card foi criado mas o registro falhou, a mensagem do
+                    service diz isso com todas as letras — para ninguém reenviar. */}
+                {erro && <span className="text-[10px] font-medium text-red-600 max-w-[180px] block">{erro}</span>}
             </div>
         );
     };
@@ -475,6 +570,30 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 </div>
             </div>
 
+            {/* ----------------------------------------------------------------
+                Prévia e Histórico. Duas coisas diferentes: a prévia é sobre o
+                que AINDA VAI virar cotação; o histórico, sobre o que já virou.
+                Misturá-las numa lista só confundiria o que já foi com o que
+                falta — que é justamente a pergunta que o histórico responde.
+               ---------------------------------------------------------------- */}
+            <div className="flex items-center gap-2 border-b border-[#e5e7eb]">
+                {([
+                    ['previa', 'Prévia da planilha'],
+                    ['historico', 'Histórico de cargas'],
+                ] as Array<['previa' | 'historico', string]>).map(([id, rotulo]) => (
+                    <button key={id} type="button" onClick={() => setAba(id)}
+                        className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${aba === id
+                            ? 'border-[#1d6fb8] text-[#1d6fb8]'
+                            : 'border-transparent text-[#6b7280] hover:text-[#111827]'}`}>
+                        {rotulo}
+                        {id === 'historico' && historico && (
+                            <span className="ml-1.5 text-[10px] font-semibold text-[#9ca3af]">{historico.length}</span>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {aba === 'previa' && (<>
             {/* upload */}
             <div className="bg-white border border-[#e5e7eb] rounded-xl p-6 flex flex-wrap items-center gap-4">
                 <label className={`cursor-pointer flex items-center gap-2 px-5 py-3 rounded-lg border text-xs font-medium transition-colors ${lendo
@@ -834,6 +953,115 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                     A margem usa o mesmo limiar da cotação ({marginThreshold}%): verde acima dele,
                     âmbar entre zero e ele, vermelho em zero ou negativo.
                 </p>
+            )}
+            </>)}
+
+            {/* ----------------------------------------------------------------
+                HISTÓRICO — só lê e reenvia. Não cria cotação nenhuma, não
+                calcula preço e não consulta rota: nenhum token do Qualp é gasto
+                aqui. O status de Pipefy e Ramper vem do BANCO, então sobrevive
+                ao F5 — que é exatamente o que faltava para não duplicar card.
+               ---------------------------------------------------------------- */}
+            {aba === 'historico' && (
+                <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm font-normal text-[#6b7280]">
+                            {historico
+                                ? `${historico.length} carga(s) já lançada(s)${historico.length === LIMITE_HISTORICO ? ' (as mais recentes)' : ''}`
+                                : 'Cargas Fast Delivery já lançadas.'}
+                        </p>
+                        <button type="button" onClick={recarregarHistorico} disabled={carregandoHist}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#6b7280] bg-white border border-[#e5e7eb] hover:bg-[#f9fafb] disabled:text-[#9ca3af] transition-colors">
+                            {carregandoHist ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.75} />}
+                            {carregandoHist ? 'Carregando…' : 'Atualizar'}
+                        </button>
+                    </div>
+
+                    {erroHist && (
+                        <div className="bg-red-50 border border-red-300 text-red-900 px-6 py-3 rounded-xl flex items-start gap-3">
+                            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-red-600" strokeWidth={1.75} />
+                            <p className="text-sm font-medium">{erroHist}</p>
+                        </div>
+                    )}
+
+                    {historico && !historico.length && !carregandoHist && (
+                        <div className="bg-white border border-[#e5e7eb] rounded-xl px-6 py-8 text-center">
+                            <p className="text-sm font-medium text-[#6b7280]">Nenhuma carga Fast Delivery lançada ainda.</p>
+                            <p className="text-xs font-normal text-[#9ca3af] mt-1">
+                                As cargas aparecem aqui depois de criadas na aba Prévia.
+                            </p>
+                        </div>
+                    )}
+
+                    {!!historico?.length && (
+                        <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-[#f9fafb] text-[10px] uppercase text-[#6b7280]">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-medium">Criada</th>
+                                            <th className="px-3 py-2 text-left font-medium">DT / proposta</th>
+                                            <th className="px-3 py-2 text-left font-medium">Destino / cliente</th>
+                                            <th className="px-3 py-2 text-left font-medium">Veículo</th>
+                                            <th className="px-3 py-2 text-right font-medium">Recebido</th>
+                                            <th className="px-3 py-2 text-right font-medium">A pagar</th>
+                                            <th className="px-3 py-2 text-right font-medium">Margem</th>
+                                            <th className="px-3 py-2 text-left font-medium">Pipefy</th>
+                                            <th className="px-3 py-2 text-left font-medium">Ramper</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[#f3f4f6]">
+                                        {historico.map(c => (
+                                            <tr key={c.id} className="hover:bg-[#f9fafb]">
+                                                <td className="px-3 py-2 text-xs whitespace-nowrap">
+                                                    {/* 0 = data desconhecida: são as cargas criadas antes de o
+                                                        Fast Delivery gravar created_at, e cujo id também não
+                                                        carrega o instante. Dizer "—" é melhor que mostrar 1970. */}
+                                                    {c.criadaEm ? dataCurta(new Date(c.criadaEm).toISOString()) : '—'}
+                                                </td>
+                                                <td className="px-3 py-2 font-mono text-xs">
+                                                    {c.dt || '—'}
+                                                    <span className="block text-[10px] text-[#9ca3af]">{c.proposta}</span>
+                                                </td>
+                                                <td className="px-3 py-2 text-xs">
+                                                    {c.destino || '—'}
+                                                    <span className="block text-[10px] text-[#9ca3af]">{c.cliente}</span>
+                                                </td>
+                                                <td className="px-3 py-2 text-xs">
+                                                    {c.tipoVeiculo ?? '—'}
+                                                    {c.carroceria && <span className="text-[#6b7280]"> · {c.carroceria}</span>}
+                                                </td>
+                                                <td className="px-3 py-2 text-xs text-right font-medium">{brl(c.valorRecebido)}</td>
+                                                <td className="px-3 py-2 text-xs text-right font-medium">{brl(c.valorAPagar)}</td>
+                                                <td className={`px-3 py-2 text-xs text-right font-semibold ${CORES[corDaMargem(c.margemPercent, marginThreshold)]}`}>
+                                                    {brl(c.margem)}
+                                                    <span className="block text-[10px] font-medium">
+                                                        {c.margemPercent === null ? '' : `${c.margemPercent.toFixed(1)}%`}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-xs">
+                                                    <EnvioHistorico c={c} alvo="pipefy" />
+                                                </td>
+                                                <td className="px-3 py-2 text-xs">
+                                                    <EnvioHistorico c={c} alvo="ramper" />
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {!!historico?.length && (
+                        <p className="text-[11px] font-normal text-[#9ca3af] flex items-start gap-2">
+                            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" strokeWidth={1.75} />
+                            O histórico só lista e reenvia — não cria cotação nem recalcula valor.
+                            O status de envio vem do banco: se disser "enviado", há card lá, e clicar
+                            de novo não cria outro. A margem usa o mesmo limiar da cotação ({marginThreshold}%).
+                        </p>
+                    )}
+                </div>
             )}
         </div>
     );
