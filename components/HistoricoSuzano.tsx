@@ -53,6 +53,8 @@ const HistoricoSuzano: React.FC<Props> = ({ operacao, marginThreshold, recarrega
     const [erro, setErro] = useState<string | null>(null);
     const [enviando, setEnviando] = useState<Record<string, boolean>>({});
     const [erroEnvio, setErroEnvio] = useState<Record<string, string>>({});
+    /** Enviou, mas com ressalva (ex.: planta sem cliente vinculado). */
+    const [avisoEnvio, setAvisoEnvio] = useState<Record<string, string>>({});
 
     const recarregar = async () => {
         setCarregando(true); setErro(null);
@@ -81,7 +83,10 @@ const HistoricoSuzano: React.FC<Props> = ({ operacao, marginThreshold, recarrega
         setErroEnvio(p => { const q = { ...p }; delete q[chave]; return q; });
         try {
             const r = alvo === 'pipefy' ? await enviarCargaAoPipefy(c) : await enviarCargaAoRamper(c);
+            // Erro e aviso ocupam o mesmo lugar na tela, com pesos diferentes:
+            // erro mantém o botão (não foi), aviso acompanha um envio que foi.
             if (r.erro) setErroEnvio(p => ({ ...p, [chave]: r.erro! }));
+            else if (r.aviso) setAvisoEnvio(p => ({ ...p, [chave]: r.aviso! }));
             await recarregar();
         } catch (e) {
             setErroEnvio(p => ({ ...p, [chave]: (e as Error).message }));
@@ -110,6 +115,11 @@ const HistoricoSuzano: React.FC<Props> = ({ operacao, marginThreshold, recarrega
                 <div className="flex flex-col items-start gap-0.5">
                     <span className="text-[10px] font-semibold text-emerald-700">✓ enviado</span>
                     <span className="text-[10px] text-[#9ca3af]">{dataCurta(enviadoEm)}</span>
+                    {avisoEnvio[chave] && (
+                        <span className="text-[10px] font-medium text-amber-700 max-w-[180px] block">
+                            {avisoEnvio[chave]}
+                        </span>
+                    )}
                     {link && (
                         <a href={link} target="_blank" rel="noopener noreferrer"
                             className="text-[10px] font-semibold text-[#1d6fb8] hover:underline">

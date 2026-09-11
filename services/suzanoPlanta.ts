@@ -22,6 +22,19 @@ export interface PlantaOrigem {
     uf: string;
     /** Código do IBGE. null = cadastrada sem casar com a base oficial. */
     codIbge: number | null;
+    /**
+     * Id do registro na tabela "Clientes" do Pipefy.
+     *
+     * É ele que preenche a conexão do card — o nome sozinho não vincula nada. A
+     * grafia lá varia sem regra ("Suzano Mucuri/BA", "SUZANO LIMEIRA"), então
+     * derivar da cidade acertaria umas e erraria outras em silêncio.
+     *
+     * null = falta vincular. Imperatriz e Mogi das Cruzes estão assim porque
+     * ainda não existe registro para elas no Pipefy.
+     */
+    pipefyClienteId: string | null;
+    /** Nome como está no Pipefy, para conferência. Quem vincula é o id. */
+    pipefyClienteNome: string | null;
 }
 
 /**
@@ -37,7 +50,7 @@ export type MapaPlantas = Map<string, PlantaOrigem>;
 export async function carregarPlantas(): Promise<MapaPlantas> {
     const { data, error } = await supabase
         .from('fast_delivery_planta')
-        .select('codigo_planta, cidade, uf, cod_ibge');
+        .select('codigo_planta, cidade, uf, cod_ibge, pipefy_cliente_id, pipefy_cliente_nome');
     if (error) throw new Error(`Não consegui ler o de-para de planta: ${error.message}`);
     const mapa: MapaPlantas = new Map();
     for (const r of data ?? []) {
@@ -47,6 +60,8 @@ export async function carregarPlantas(): Promise<MapaPlantas> {
             cidade: String(r.cidade),
             uf: String(r.uf).toUpperCase(),
             codIbge: r.cod_ibge === null || r.cod_ibge === undefined ? null : Number(r.cod_ibge),
+            pipefyClienteId: r.pipefy_cliente_id ? String(r.pipefy_cliente_id) : null,
+            pipefyClienteNome: r.pipefy_cliente_nome ? String(r.pipefy_cliente_nome) : null,
         });
     }
     return mapa;
@@ -100,6 +115,7 @@ export function casarComIbge(lista: Municipio[], texto: string): Municipio | nul
 export async function classificarPlanta(
     codigoPlanta: string,
     municipio: Municipio,
+    clientePipefy?: { id: string; nome: string } | null,
 ): Promise<{ ok?: true; error?: string }> {
     const codigo = String(codigoPlanta ?? '').trim();
     if (!codigo) return { error: 'Código da planta vazio.' };
@@ -113,6 +129,10 @@ export async function classificarPlanta(
                 cidade: municipio.nome,
                 uf: municipio.uf,
                 cod_ibge: municipio.codigo,
+                // Undefined some do payload e PRESERVA o vínculo que já existe;
+                // null apagaria. São coisas diferentes: "não mexi" e "desvinculei".
+                pipefy_cliente_id: clientePipefy ? clientePipefy.id : undefined,
+                pipefy_cliente_nome: clientePipefy ? clientePipefy.nome : undefined,
                 observacao: 'classificada na tela',
             },
             { onConflict: 'codigo_planta' },
@@ -129,4 +149,19 @@ export async function classificarPlanta(
         return { error: error.message };
     }
     return { ok: true };
+}
+
+/**
+ * Acha a planta pela origem gravada na cotação.
+ *
+ * `origin` guarda exatamente o que `rotuloPlanta()` produz ("Mucuri, BA"), então
+ * o casamento é por igualdade — não há normalização nem aproximação aqui, e é
+ * de propósito: se um dia divergir, é melhor não achar do que achar a planta
+ * errada e mandar o card para outro cliente.
+ */
+export function plantaPorOrigem(plantas: MapaPlantas, origem: string): PlantaOrigem | null {
+    const alvo = (origem ?? '').trim();
+    if (!alvo) return null;
+    for (const p of plantas.values()) if (rotuloPlanta(p) === alvo) return p;
+    return null;
 }

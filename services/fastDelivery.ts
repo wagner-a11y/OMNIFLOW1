@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 import { IMPLEMENTO_OPTIONS } from '../constants';
 import { createPipefyCard } from './pipefy';
 import { createRamperCard } from './ramper';
+import { carregarPlantas, plantaPorOrigem } from './suzanoPlanta';
 
 // ============================================================================
 // FAST DELIVERY — leitura do Excel do OTM e montagem da prévia (Bloco 2).
@@ -1210,11 +1211,71 @@ export function tituloCardRamper(c: CotacaoHistorico): string {
     return `${ref}Cotação de Frete SPOT - ${c.origem || '—'} x ${c.destino || '—'}`;
 }
 
+/**
+ * Cliente e solicitante do card, por operação.
+ *
+ * O QUE ESTE BLOCO CONSERTA. O card das Demais Plantas nascia com "Suzano Fast"
+ * e "Operação Fast Delivery" — os fixos do Fast, herdados quando o envio virou
+ * código compartilhado. Era a terceira vez que uma particularidade do Fast
+ * vazava para a outra operação; por isso agora tudo o que varia está aqui, e o
+ * envio não conhece constante nenhuma.
+ *
+ * O CLIENTE É CONEXÃO, não texto: o card se vincula pelo id do registro na
+ * tabela "Clientes" do Pipefy. Sem id, a conexão fica vazia — e é assim que
+ * fica para planta ainda não vinculada, em vez de apontar para o cliente errado.
+ *
+ * O SOLICITANTE vai VAZIO nas Demais Plantas, por decisão do Wagner: quem
+ * preenche é o operador, no Pipefy. Só o Fast tem solicitante fixo.
+ */
+export async function clienteESolicitanteDoCard(
+    c: CotacaoHistorico,
+): Promise<{
+    cliente?: string; clienteId?: string;
+    solicitante?: string; solicitanteId?: string;
+    aviso?: string;
+}> {
+    if (c.operacao === OPERACAO) {
+        const id = await clientePipefyId();
+        return {
+            cliente: 'Suzano Fast',
+            clienteId: id ?? undefined,
+            solicitante: SOLICITANTE_FIXO,
+            solicitanteId: SOLICITANTE_PIPEFY_ID,
+        };
+    }
+
+    // Demais Plantas: o cliente é a planta de origem. A cotação guarda a origem
+    // no mesmo formato que o de-para produz, então o casamento é direto.
+    const plantas = await carregarPlantas();
+    const planta = plantaPorOrigem(plantas, c.origem);
+    if (!planta) {
+        return { aviso: `Origem "${c.origem}" não bate com nenhuma planta cadastrada — o card vai sem cliente.` };
+    }
+    if (!planta.pipefyClienteId) {
+        return {
+            cliente: planta.pipefyClienteNome ?? `Suzano ${planta.cidade}`,
+            aviso: `A planta ${planta.codigo} (${planta.cidade}) ainda não tem cliente vinculado no Pipefy — o card vai sem a conexão.`,
+        };
+    }
+    return {
+        cliente: planta.pipefyClienteNome ?? `Suzano ${planta.cidade}`,
+        clienteId: planta.pipefyClienteId,
+        // Solicitante em branco, de propósito. Ver acima.
+    };
+}
+
 export interface ResultadoEnvio {
     ok?: true;
     /** Já estava enviada no banco — nada foi mandado de novo. */
     jaEnviado?: true;
     erro?: string;
+    /**
+     * Deu certo, MAS com ressalva — hoje: planta sem cliente vinculado, então o
+     * card foi criado sem a conexão de Cliente. Não é erro (o card existe e não
+     * deve ser reenviado), e não pode passar calado: é a diferença entre
+     * "enviado" e "enviado do jeito certo".
+     */
+    aviso?: string;
 }
 
 /**
@@ -1267,7 +1328,7 @@ export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<Resultad
         return { erro: 'Cotação sem origem gravada — não dá para montar o card. Recarregue o histórico.' };
     }
 
-    const idCliente = await clientePipefyId();
+    const quem = await clienteESolicitanteDoCard(c);
     const res = await createPipefyCard({
         titulo: tituloCardPipefy(c.operacao),
         // A origem vem da COTAÇÃO, não de constante. Era aqui que a carga de
@@ -1286,10 +1347,10 @@ export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<Resultad
         localColeta: c.origem,
         localEntrega: c.cliente || undefined,
         referencia: c.dt,
-        cliente: 'Suzano Fast',
-        clienteId: idCliente ?? undefined,
-        solicitante: SOLICITANTE_FIXO,
-        solicitanteId: SOLICITANTE_PIPEFY_ID,
+        cliente: quem.cliente,
+        clienteId: quem.clienteId,
+        solicitante: quem.solicitante,
+        solicitanteId: quem.solicitanteId,
         observacoes: c.observacoes ?? undefined,
     });
     if (res?.error) return { erro: res.error };
@@ -1308,7 +1369,7 @@ export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<Resultad
     if (error) {
         return { erro: `Card criado no Pipefy, mas não consegui registrar o envio: ${error.message}. Não mande de novo.` };
     }
-    return { ok: true };
+    return { ok: true, aviso: quem.aviso };
 }
 
 /**
