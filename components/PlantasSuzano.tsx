@@ -5,6 +5,7 @@ import {
     municipiosParaEscolha,
 } from '../services/suzanoPlanta';
 import { buscarMunicipios, type Municipio } from '../utils/municipios';
+import { searchPipefyRecords } from '../services/pipefy';
 
 // ============================================================================
 // DE-PARA DE PLANTA — a origem das Demais Plantas.
@@ -49,6 +50,29 @@ const PlantasSuzano: React.FC<Props> = ({ ehMaster, codigoInicial, aoClassificar
     const [salvando, setSalvando] = useState(false);
     const [erroSalvar, setErroSalvar] = useState<string | null>(null);
 
+    // ---- cliente do Pipefy ----
+    /** Texto buscado e o registro escolhido. null = não mexer no vínculo atual. */
+    const [termoCliente, setTermoCliente] = useState('');
+    const [clientes, setClientes] = useState<{ id: string; title: string }[]>([]);
+    const [clienteEscolhido, setClienteEscolhido] = useState<{ id: string; nome: string } | null>(null);
+    const [buscandoCliente, setBuscandoCliente] = useState(false);
+
+    /**
+     * Busca na tabela "Clientes" do Pipefy. Só por clique, não a cada tecla:
+     * é chamada de rede para fora, e disparar a cada letra encheria de
+     * requisições um campo que se usa uma vez por planta.
+     */
+    const buscarCliente = async () => {
+        const q = termoCliente.trim();
+        if (q.length < 2) return;
+        setBuscandoCliente(true);
+        try {
+            setClientes(await searchPipefyRecords('cliente', q));
+        } finally {
+            setBuscandoCliente(false);
+        }
+    };
+
     const recarregar = async () => {
         setCarregando(true); setErro(null);
         try {
@@ -88,6 +112,10 @@ const PlantasSuzano: React.FC<Props> = ({ ehMaster, codigoInicial, aoClassificar
         setTermo(atual ? `${atual.cidade}, ${atual.uf}` : '');
         setEscolhido(null);
         setErroSalvar(null);
+        // Abre com o vínculo atual à vista; sem escolher nada, ele é preservado.
+        setTermoCliente(atual?.pipefyClienteNome ?? '');
+        setClientes([]);
+        setClienteEscolhido(null);
         setAberto(true);
     };
 
@@ -100,7 +128,7 @@ const PlantasSuzano: React.FC<Props> = ({ ehMaster, codigoInicial, aoClassificar
         if (!codigo.trim() || !escolhido) return;
         setSalvando(true); setErroSalvar(null);
         try {
-            const r = await classificarPlanta(codigo.trim(), escolhido);
+            const r = await classificarPlanta(codigo.trim(), escolhido, clienteEscolhido);
             if (r.error) { setErroSalvar(r.error); return; }
             const m = await recarregar();
             if (m) aoClassificar?.(m);
@@ -157,6 +185,7 @@ const PlantasSuzano: React.FC<Props> = ({ ehMaster, codigoInicial, aoClassificar
                                 <th className="px-3 py-2 text-left font-medium">Cidade</th>
                                 <th className="px-3 py-2 text-left font-medium">UF</th>
                                 <th className="px-3 py-2 text-left font-medium">IBGE</th>
+                                <th className="px-3 py-2 text-left font-medium">Cliente Pipefy</th>
                                 <th className="px-3 py-2 text-left font-medium"></th>
                             </tr>
                         </thead>
@@ -172,6 +201,13 @@ const PlantasSuzano: React.FC<Props> = ({ ehMaster, codigoInicial, aoClassificar
                                         {p.codIbge ?? <span className="text-amber-700 font-semibold">sem código</span>}
                                     </td>
                                     <td className="px-3 py-2 text-xs">
+                                        {/* Sem vínculo o card sai sem cliente — por isso âmbar,
+                                            e não um traço discreto. */}
+                                        {p.pipefyClienteNome
+                                            ? <>{p.pipefyClienteNome}<span className="block text-[10px] text-[#9ca3af]">id {p.pipefyClienteId}</span></>
+                                            : <span className="text-amber-700 font-semibold">falta vincular</span>}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs">
                                         {ehMaster && (
                                             <button type="button" onClick={() => abrir(p.codigo)}
                                                 className="text-[10px] font-semibold text-[#1d6fb8] hover:underline">
@@ -183,7 +219,7 @@ const PlantasSuzano: React.FC<Props> = ({ ehMaster, codigoInicial, aoClassificar
                             ))}
                             {!lista.length && !carregando && (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-6 text-center text-xs text-[#6b7280]">
+                                    <td colSpan={6} className="px-6 py-6 text-center text-xs text-[#6b7280]">
                                         Nenhuma planta cadastrada. Enquanto isso, toda carga de Demais Plantas
                                         fica pendente de origem.
                                     </td>
@@ -258,6 +294,45 @@ const PlantasSuzano: React.FC<Props> = ({ ehMaster, codigoInicial, aoClassificar
                                     )}
                                 </div>
                             )}
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-medium uppercase text-[#6b7280] mb-1.5 block">
+                                Cliente no Pipefy
+                            </label>
+                            <div className="flex gap-2">
+                                <input value={termoCliente}
+                                    onChange={e => { setTermoCliente(e.target.value); setClienteEscolhido(null); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void buscarCliente(); } }}
+                                    placeholder="Suzano Mucuri…"
+                                    className="flex-1 px-3 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-medium text-[#111827] outline-none focus:border-[#1d6fb8]" />
+                                <button type="button" onClick={buscarCliente} disabled={buscandoCliente || termoCliente.trim().length < 2}
+                                    className="px-3 py-2.5 rounded-lg text-xs font-semibold text-[#1d6fb8] bg-[#f9fafb] border border-[#e5e7eb] hover:bg-[#f3f4f6] disabled:text-[#9ca3af] transition-colors">
+                                    {buscandoCliente ? <Loader2 className="w-4 h-4 animate-spin" /> : 'buscar'}
+                                </button>
+                            </div>
+                            {clienteEscolhido ? (
+                                <p className="text-[11px] font-semibold text-emerald-700 mt-1.5">
+                                    ✓ {clienteEscolhido.nome} · id {clienteEscolhido.id}
+                                </p>
+                            ) : (
+                                <div className="mt-1.5 max-h-32 overflow-y-auto">
+                                    {clientes.map(c => (
+                                        <button key={c.id} type="button"
+                                            onClick={() => { setClienteEscolhido({ id: c.id, nome: c.title }); setTermoCliente(c.title); }}
+                                            className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f3f4f6] transition-colors">
+                                            {c.title}
+                                            <span className="text-[10px] text-[#9ca3af]"> · id {c.id}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <p className="text-[10px] font-medium text-[#6b7280] mt-1.5">
+                                {/* O campo Cliente do card é CONEXÃO: vincula pelo id do registro,
+                                    não pelo nome. Sem escolher da busca, o card sai sem cliente. */}
+                                O card vincula pelo id do registro, não pelo nome — escolha da busca.
+                                Sem vínculo, o card vai sem cliente. Deixar como está preserva o atual.
+                            </p>
                         </div>
 
                         {erroSalvar && (
