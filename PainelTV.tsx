@@ -159,7 +159,7 @@ const PainelTV: React.FC = () => {
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
 
     return (
-        <div className="relative min-h-screen w-full bg-gradient-to-br from-[#0b3a5e] via-[#0d4f7a] to-[#10643f] text-white flex flex-col items-center justify-center p-10 select-none overflow-hidden">
+        <div className="relative isolate min-h-screen w-full bg-gradient-to-br from-[#0b3a5e] via-[#0d4f7a] to-[#10643f] text-white flex flex-col items-center justify-center p-10 select-none overflow-hidden">
             <style>{`
                 @keyframes tv-money-up {
                     0%   { transform: translateY(0) scale(.5); opacity: 0; }
@@ -174,6 +174,37 @@ const PainelTV: React.FC = () => {
                 }
                 @keyframes tv-pop { 0% { transform: scale(1); } 35% { transform: scale(1.05); } 100% { transform: scale(1); } }
             `}</style>
+
+            {/* ------------------------------------------------------------------
+                MARCA D'ÁGUA — o símbolo da OmniCargo ao fundo.
+
+                `-z-10` com `isolate` no container: o negativo pinta ACIMA do
+                gradiente e ABAIXO do conteúdo, e o `isolate` é o que garante
+                isso — sem ele, o z negativo fugiria para o stacking context da
+                página e a logo sumiria atrás do próprio fundo.
+
+                É só o SÍMBOLO, sem o letreiro: `logo-simbolo.png` foi
+                recortado de `logo-full.png` — o `logo-icon.jpg` é o mesmo
+                desenho, mas em JPG com fundo BRANCO, que sobre o gradiente
+                escuro viraria um quadrado branco. O recorte preserva a
+                transparência do PNG.
+
+                `brightness-0 invert` transforma o símbolo (azul, cinza e
+                laranja) em silhueta branca. Sobre o gradiente azul-escuro, as
+                cores originais em baixa opacidade sumiriam ou sujariam o fundo;
+                a silhueta lê como marca d'água e não briga com o número, que é
+                o que a TV existe para mostrar.
+
+                `w-[min(92vh,92vw)]`: o símbolo é quadrado e a TV é 16:9,
+                então quem limita é a ALTURA — medir só por vw estouraria a
+                tela. A 92vh ele quase encosta em cima e embaixo; passar de
+                100vh faz o `overflow-hidden` do container cortar as bordas.
+
+                Opacidade baixa e `pointer-events-none`: é fundo, não interface.
+               ------------------------------------------------------------------ */}
+            <img src="/logo-simbolo.png" alt=""
+                aria-hidden="true"
+                className="pointer-events-none select-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 w-[min(92vh,92vw)] opacity-[0.07] brightness-0 invert" />
 
             {/* Animação "dinheiro entrando" — chuva de notas + badge +R$ */}
             {animar && (
