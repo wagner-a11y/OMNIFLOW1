@@ -467,7 +467,10 @@ function pegar(linha: Record<string, unknown>, mapa: Record<string, string>, cam
  * Casa os nomes de coluna do arquivo com os que esperamos, comparando
  * normalizado. Devolve campo -> nome real da coluna no arquivo.
  */
-export function mapearColunas(cabecalhos: string[]): { mapa: Record<string, string>; faltando: string[] } {
+export function mapearColunas(
+    cabecalhos: string[],
+    colunas: Record<string, string[]> = COLUNAS_OTM,
+): { mapa: Record<string, string>; faltando: string[] } {
     // A PRIMEIRA coluna com um dado nome vence. Se o arquivo trouxer duas que
     // normalizem igual, sobrescrever silenciosamente é o que causou o bug do
     // peso — melhor ficar com a primeira e previsível do que com a última.
@@ -479,7 +482,7 @@ export function mapearColunas(cabecalhos: string[]): { mapa: Record<string, stri
 
     const mapa: Record<string, string> = {};
     const faltando: string[] = [];
-    for (const [campo, candidatos] of Object.entries(COLUNAS_OTM)) {
+    for (const [campo, candidatos] of Object.entries(colunas)) {
         const achou = candidatos.map(normalizarCabecalho).find((n) => porNormalizado.has(n));
         if (achou) mapa[campo] = porNormalizado.get(achou)!;
         else faltando.push(candidatos[0]);
@@ -493,23 +496,90 @@ export interface ResultadoLeitura {
     totalLinhas: number;
 }
 
-/** Lê o .xlsx e monta a prévia. Não grava nada. */
-export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): ResultadoLeitura {
+/**
+ * Os campos que TODA operação lê do mesmo Excel do OTM.
+ *
+ * Fast e Demais Plantas recebem o mesmo arquivo de 60 colunas; o que muda entre
+ * elas é de onde vem a origem e como se acha o valor do terceiro — não como se
+ * lê uma data ou um peso. Isto é a parte igual, num lugar só: corrigir a
+ * leitura do peso aqui conserta as duas.
+ */
+export interface CamposBasicos {
+    linhaExcel: number;
+    referencia: string;
+    dataColeta: string | null;
+    cliente: string;
+    cidadeOriginal: string;
+    uf: string;
+    destinoNormalizado: string;
+    codigoEquipamento: string;
+    placa: string;
+    motorista: string;
+    cpfMotorista: string;
+    peso: number | null;
+    volume: number | null;
+    /** Do OTM: o que a Omnicargo recebe. */
+    valorRecebido: number | null;
+}
+
+/**
+ * Abre o .xlsx e casa os cabeçalhos. `colunas` permite a cada operação
+ * acrescentar o que só ela lê (a Demais Plantas acrescenta "ID Origem") sem
+ * alterar o dicionário do Fast — mexer em COLUNAS_OTM faria o Fast passar a
+ * reclamar de coluna que ele nunca usou.
+ */
+export function abrirPlanilhaOtm(
+    buffer: ArrayBuffer,
+    colunas: Record<string, string[]> = COLUNAS_OTM,
+): { bruto: Record<string, unknown>[]; mapa: Record<string, string>; faltando: string[] } {
     const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
     const aba = wb.Sheets[wb.SheetNames[0]];
     const bruto = XLSX.utils.sheet_to_json<Record<string, unknown>>(aba, { defval: '' });
-    if (!bruto.length) return { linhas: [], colunasFaltando: [], totalLinhas: 0 };
+    if (!bruto.length) return { bruto, mapa: {}, faltando: [] };
+    const { mapa, faltando } = mapearColunas(Object.keys(bruto[0]), colunas);
+    return { bruto, mapa, faltando };
+}
 
-    const { mapa, faltando } = mapearColunas(Object.keys(bruto[0]));
+/** Lê de uma linha do Excel tudo o que é comum às operações. */
+export function camposBasicos(
+    l: Record<string, unknown>,
+    mapa: Record<string, string>,
+    indice: number,
+): CamposBasicos {
+    const cidade = String(pegar(l, mapa, 'cidadeDestino') ?? '').trim();
+    return {
+        linhaExcel: indice + 2,   // +1 do cabeçalho, +1 porque planilha começa em 1
+        referencia: semZerosAEsquerda(pegar(l, mapa, 'referencia')),
+        dataColeta: data(pegar(l, mapa, 'dataColeta')),
+        cliente: String(pegar(l, mapa, 'cliente') ?? '').trim(),
+        cidadeOriginal: cidade,
+        uf: String(pegar(l, mapa, 'uf') ?? '').trim().toUpperCase(),
+        destinoNormalizado: normalizarDestino(cidade),
+        codigoEquipamento: String(pegar(l, mapa, 'tipoEquipamento') ?? '').trim(),
+        placa: limparPlaca(pegar(l, mapa, 'placa')),
+        motorista: String(pegar(l, mapa, 'motorista') ?? '').trim(),
+        cpfMotorista: String(pegar(l, mapa, 'cpfMotorista') ?? '').trim(),
+        peso: numero(pegar(l, mapa, 'peso')),
+        volume: numero(pegar(l, mapa, 'volume')),
+        valorRecebido: numero(pegar(l, mapa, 'custoFrete')),
+    };
+}
+
+/** Lê um campo mapeado de uma linha. Exportado para os leitores de cada operação. */
+export function campo(l: Record<string, unknown>, mapa: Record<string, string>, nome: string): unknown {
+    return pegar(l, mapa, nome);
+}
+
+/** Lê o .xlsx e monta a prévia. Não grava nada. */
+export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): ResultadoLeitura {
+    const { bruto, mapa, faltando } = abrirPlanilhaOtm(buffer);
+    if (!bruto.length) return { linhas: [], colunasFaltando: [], totalLinhas: 0 };
 
     const linhas = bruto.map((l, i) => {
         const pendencias: LinhaPrevia['pendencias'] = [];
 
-        const cidade = String(pegar(l, mapa, 'cidadeDestino') ?? '').trim();
-        const uf = String(pegar(l, mapa, 'uf') ?? '').trim().toUpperCase();
-        const destinoNormalizado = normalizarDestino(cidade);
-
-        const codigoEquipamento = String(pegar(l, mapa, 'tipoEquipamento') ?? '').trim();
+        const base = camposBasicos(l, mapa, i);
+        const { cidadeOriginal: cidade, destinoNormalizado, codigoEquipamento } = base;
         const equipamento = apoio.equipamentos.get(codigoEquipamento) ?? null;
         const tipoVeiculo = equipamento?.tipo_veiculo ?? null;
 
@@ -539,7 +609,7 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
             });
         }
 
-        const volumeCarga = numero(pegar(l, mapa, 'volume'));
+        const volumeCarga = base.volume;
 
         const preco = tipoVeiculo ? apoio.precos.get(`${destinoNormalizado}|${tipoVeiculo}`) ?? null : null;
         if (tipoVeiculo && !preco) {
@@ -558,7 +628,7 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
             );
         }
 
-        const valorRecebido = numero(pegar(l, mapa, 'custoFrete'));
+        const valorRecebido = base.valorRecebido;
         if (valorRecebido === null) {
             pendencias.push({ motivo: 'valor', texto: 'Sem "Custo Frete" na planilha — não dá para calcular margem.' });
         }
@@ -568,24 +638,14 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
         const margemPercent = margem !== null && valorRecebido ? (margem / valorRecebido) * 100 : null;
 
         return {
-            linhaExcel: i + 2,   // +1 do cabeçalho, +1 porque planilha começa em 1
-            referencia: semZerosAEsquerda(pegar(l, mapa, 'referencia')),
-            dataColeta: data(pegar(l, mapa, 'dataColeta')),
-            cliente: String(pegar(l, mapa, 'cliente') ?? '').trim(),
-            cidadeOriginal: cidade,
-            uf,
-            destinoNormalizado,
-            codigoEquipamento,
+            // Os campos comuns vêm prontos de camposBasicos(); aqui só o que é
+            // do Fast. Antes esta lista repetia a leitura campo a campo, e era
+            // ela que a tela nova teria de copiar.
+            ...base,
             tipoVeiculo,
             carroceria,
             carroceriaEfetiva,
             avisoCarroceria,
-            placa: limparPlaca(pegar(l, mapa, 'placa')),
-            motorista: String(pegar(l, mapa, 'motorista') ?? '').trim(),
-            cpfMotorista: String(pegar(l, mapa, 'cpfMotorista') ?? '').trim(),
-            peso: numero(pegar(l, mapa, 'peso')),
-            volume: volumeCarga,
-            valorRecebido,
             valorAPagar,
             km: preco?.km ?? null,
             pedagio: preco?.pedagio ?? null,
@@ -768,7 +828,14 @@ export async function marcarJaLancadas(linhas: LinhaPrevia[]): Promise<LinhaPrev
 }
 
 /** Próximo número de proposta, no formato CT-AAAA-NNNN que o projeto já usa. */
-async function proximoNumeroBase(): Promise<number> {
+/**
+ * Próximo número da série CT-AAAA-NNNN.
+ *
+ * Exportada porque a série é UMA SÓ para todas as operações: Fast e Demais
+ * Plantas tiram número da mesma sequência, como a cotação normal. Duas séries
+ * paralelas produziriam CT-2026-0042 em duplicidade.
+ */
+export async function proximoNumeroBase(): Promise<number> {
     const { data } = await supabase
         .from('freight_calculations')
         .select('proposal_number')
@@ -778,6 +845,119 @@ async function proximoNumeroBase(): Promise<number> {
     const ultimo = data?.[0]?.proposal_number as string | undefined;
     const n = ultimo ? Number(String(ultimo).split('-')[2]) : 0;
     return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Os dados que variam de uma cotação Suzano para outra.
+ *
+ * O que NÃO está aqui é o que é igual nas duas operações — cliente, solicitante,
+ * mercadoria, status, o modo tabelado e os impostos zerados — e por isso mora em
+ * `montarCotacaoSuzano`, num lugar só.
+ */
+export interface DadosCotacaoSuzano {
+    id: string;
+    proposta: string;
+    dt: string;
+    /** Texto da origem: "GUARULHOS" no Fast, "Mogi das Cruzes, SP" nas Demais Plantas. */
+    origem: string;
+    /** Já montado como "Cidade/UF". */
+    destino: string;
+    clienteLocal: string | null;
+    tipoVeiculo: string | null;
+    carroceria: string;
+    coletaEm: string | null;
+    peso: number | null;
+    observacoes: string | null;
+    valorRecebido: number | null;
+    valorAPagar: number | null;
+    km: number | null;
+    margem: number | null;
+    margemPercent: number | null;
+    /** 'FAST_DELIVERY' ou 'DEMAIS_PLANTAS'. É o que separa as duas nos relatórios. */
+    operacao: string;
+    autor: { id?: string; name?: string };
+}
+
+/**
+ * Monta a linha de `freight_calculations` de uma cotação da Suzano.
+ *
+ * Existe para as duas operações gravarem a MESMA coisa: eram quarenta campos
+ * que a tela nova teria de copiar, e uma cópia divergiria no primeiro ajuste —
+ * bastaria alguém corrigir o `tipo_precificacao` de um lado só para a outra
+ * operação voltar a disparar o Qualp ao abrir a cotação.
+ */
+export function montarCotacaoSuzano(d: DadosCotacaoSuzano): Record<string, unknown> {
+    return {
+        id: d.id,
+        proposal_number: d.proposta,
+        client_reference: d.dt,
+        customer_id: CLIENTE_SUZANO_FAST,
+        solicitante: SOLICITANTE_FIXO,
+        cliente_nome_operacao: d.clienteLocal || null,
+        origin: d.origem,
+        destination: d.destino,
+        // A calculadora usa outro vocabulário; sem a ponte o campo fica vazio
+        // na tela de cotação.
+        vehicle_type: (d.tipoVeiculo && VEICULO_CALCULADORA[d.tipoVeiculo]) || d.tipoVeiculo || '',
+        veiculo_tipo_operacao: d.tipoVeiculo ?? null,
+        merchandise_type: MERCADORIA_FIXA,
+        // Do de-para do código do OTM, não mais "Baú" para todo mundo.
+        carroceria_tipo_operacao: d.carroceria,
+        // Uma hora antes do OTM, por decisão da operação.
+        coleta_date: d.coletaEm,
+        peso_carga_operacao: d.peso,
+        // Só o volume na observação — peso já tem campo próprio, e motorista
+        // e placa são ignorados por decisão do Wagner.
+        observacoes_gerais: d.observacoes,
+        nosso_frete: d.valorRecebido,
+        frete_terceiro: d.valorAPagar,
+        operacao: d.operacao,
+        status: STATUS_INICIAL,
+        /**
+         * TABELADO — e este campo é o que impede o Qualp.
+         *
+         * A cotação nasce PRONTA: o valor final é o que o OTM paga, não algo a
+         * calcular. O OmniFlow já tem esse modo ('tabelado', frete fechado por
+         * contrato) e ele curto-circuita a consulta de rota — sem ele, abrir a
+         * cotação dispara o Qualp e a engine refaz o preço por cima, mostrando
+         * "Frete Final" inflado e "Desatualizado".
+         *
+         * Vale para as DUAS operações. Nas Demais Plantas o valor pode ter vindo
+         * do piso ANTT, mas quando chega aqui já é número fechado: recalcular
+         * seria gastar Qualp de novo para reescrever o que o operador decidiu.
+         */
+        tipo_precificacao: 'tabelado',
+        // Obrigatórios da tabela. O preço aqui é contratado: não há engine de
+        // custo por trás, então imposto e seguro ficam zerados e o total é o
+        // que o OTM paga.
+        distance_km: d.km ?? 0,
+        weight: d.peso ?? 0,
+        base_freight: d.valorAPagar ?? 0,
+        /**
+         * ZERO, e não o pedágio. O valor a pagar já é o cheio acertado com o
+         * terceiro — o pedágio está dentro dele. Lançá-lo à parte contaria duas
+         * vezes e quebraria a identidade que mantém a engine tabelada coerente:
+         *     final × (1 − margem%) = a pagar
+         */
+        tolls: 0,
+        goods_value: 0,
+        insurance_percent: 0,
+        ad_valorem: 0,
+        profit_margin: d.margemPercent ?? 0,
+        icms_percent: 0, pis_percent: 0, cofins_percent: 0, csll_percent: 0, irpj_percent: 0,
+        total_freight: d.valorRecebido ?? 0,
+        real_profit: d.margem,
+        real_margin_percent: d.margemPercent,
+        /**
+         * QUANDO a cotação nasceu. O fluxo normal sempre gravou; o Fast Delivery
+         * nunca gravava, e sem isso o histórico não tem por onde ordenar. A
+         * coluna é bigint com epoch em MILISSEGUNDOS — um ISO aqui viraria NaN
+         * no Number() que o resto do sistema usa para ler.
+         */
+        created_at: Date.now(),
+        created_by: d.autor.id ?? null,
+        created_by_name: d.autor.name ?? null,
+    };
 }
 
 export interface ResultadoCotacao {
@@ -816,82 +996,28 @@ export async function criarCotacoesFastDelivery(
         const proposta = `CT-${ano}-${String(seq).padStart(4, '0')}`;
         const id = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
-        const linha = {
+        // A montagem é a MESMA das Demais Plantas (montarCotacaoSuzano); aqui
+        // só o que é do Fast: origem fixa no OPL de Guarulhos e o marcador.
+        const linha = montarCotacaoSuzano({
             id,
-            proposal_number: proposta,
-            client_reference: l.referencia,
-            customer_id: CLIENTE_SUZANO_FAST,
-            solicitante: SOLICITANTE_FIXO,
-            cliente_nome_operacao: l.cliente || null,
-            origin: ORIGEM_FIXA,
-            destination: `${l.cidadeOriginal}${l.uf ? `/${l.uf}` : ''}`,
-            // A calculadora usa outro vocabulário; sem a ponte o campo fica vazio
-            // na tela de cotação.
-            vehicle_type: (l.tipoVeiculo && VEICULO_CALCULADORA[l.tipoVeiculo]) || l.tipoVeiculo || '',
-            veiculo_tipo_operacao: l.tipoVeiculo ?? null,
-            merchandise_type: MERCADORIA_FIXA,
-            // Do de-para do código do OTM, não mais "Baú" para todo mundo.
-            carroceria_tipo_operacao: l.carroceriaEfetiva,
-            // Uma hora antes do OTM, por decisão da operação.
-            coleta_date: coletaAjustada(l.dataColeta),
-            peso_carga_operacao: l.peso,
-            // Só o volume na observação — peso já tem campo próprio, e motorista
-            // e placa são ignorados por decisão do Wagner.
-            observacoes_gerais: l.volume !== null ? `Volume: ${l.volume} m³` : null,
-            nosso_frete: l.valorRecebido,
-            frete_terceiro: l.valorAPagar,
+            proposta,
+            dt: l.referencia,
+            origem: ORIGEM_FIXA,
+            destino: `${l.cidadeOriginal}${l.uf ? `/${l.uf}` : ''}`,
+            clienteLocal: l.cliente,
+            tipoVeiculo: l.tipoVeiculo,
+            carroceria: l.carroceriaEfetiva,
+            coletaEm: coletaAjustada(l.dataColeta),
+            peso: l.peso,
+            observacoes: l.volume !== null ? `Volume: ${l.volume} m³` : null,
+            valorRecebido: l.valorRecebido,
+            valorAPagar: l.valorAPagar,
+            km: l.km,
+            margem: l.margem,
+            margemPercent: l.margemPercent,
             operacao: OPERACAO,
-            status: STATUS_INICIAL,
-            /**
-             * TABELADO — e este campo é o que impede o Qualp.
-             *
-             * A cotação Fast Delivery nasce PRONTA: o valor final é o que o OTM
-             * paga, não algo a calcular. O OmniFlow já tem exatamente esse modo
-             * ('tabelado', frete fechado por contrato) e ele curto-circuita a
-             * consulta de rota — sem ele, abrir a cotação dispara o Qualp e a
-             * engine refaz o preço por cima, mostrando "Frete Final" inflado e
-             * "Desatualizado". Zero token do Qualp é gasto nesta operação.
-             */
-            tipo_precificacao: 'tabelado',
-            // Obrigatórios da tabela. O preço aqui é contratado: não há engine de
-            // custo por trás, então imposto e seguro ficam zerados e o total é o
-            // que o OTM paga.
-            distance_km: l.km ?? 0,
-            weight: l.peso ?? 0,
-            base_freight: l.valorAPagar ?? 0,
-            /**
-             * ZERO, e não o pedágio da tabela. O `a_pagar` já é o valor cheio
-             * acertado com o terceiro — o pedágio está dentro dele. Lançar o
-             * pedágio à parte contaria duas vezes e quebraria a identidade que
-             * mantém a engine tabelada coerente:
-             *     final × (1 − margem%) = a pagar
-             */
-            tolls: 0,
-            goods_value: 0,
-            insurance_percent: 0,
-            ad_valorem: 0,
-            profit_margin: l.margemPercent ?? 0,
-            icms_percent: 0, pis_percent: 0, cofins_percent: 0, csll_percent: 0, irpj_percent: 0,
-            total_freight: l.valorRecebido ?? 0,
-            real_profit: l.margem,
-            real_margin_percent: l.margemPercent,
-            /**
-             * QUANDO a cotação nasceu — e isto faltava.
-             *
-             * O fluxo normal sempre gravou (services/database.ts), o Fast
-             * Delivery nunca: o insert passava created_by e created_by_name e
-             * pulava a data. A coluna é bigint com epoch em MILISSEGUNDOS, não
-             * timestamptz — o resto do sistema lê com Number(), e um ISO aqui
-             * viraria NaN.
-             *
-             * Sem isto o histórico não tem por onde ordenar "mais recentes
-             * primeiro". As cotações já criadas continuam sem — para elas o
-             * histórico cai no instante embutido no id (ver instanteDaCotacao).
-             */
-            created_at: Date.now(),
-            created_by: autor.id ?? null,
-            created_by_name: autor.name ?? null,
-        };
+            autor,
+        });
 
         const { error } = await supabase.from('freight_calculations').insert([linha]);
         if (error) {
@@ -949,8 +1075,23 @@ export interface CotacaoHistorico {
     dt: string;
     /** epoch ms. Ver instanteDaCotacao — 0 = data desconhecida. */
     criadaEm: number;
+    /**
+     * Origem REAL da cotação, lida da coluna `origin`.
+     *
+     * É dado, não constante — e essa diferença é o bug que isto conserta. O
+     * envio usava ORIGEM_FIXA ('GUARULHOS'), que é particularidade do Fast (a
+     * carga sai do OPL, não da fábrica). Nas Demais Plantas a carga sai da
+     * própria planta, e o card ia para o Pipefy dizendo Guarulhos.
+     *
+     * Lendo do banco, cada operação manda a sua: o Fast gravou 'GUARULHOS' e
+     * continua mandando Guarulhos; as Demais Plantas gravaram 'Mucuri, BA' e
+     * mandam Mucuri.
+     */
+    origem: string;
     destino: string;
     cliente: string;
+    /** 'FAST_DELIVERY' ou 'DEMAIS_PLANTAS'. Decide o formato do título dos cards. */
+    operacao: string;
     tipoVeiculo: string | null;
     carroceria: string | null;
     peso: number | null;
@@ -969,7 +1110,7 @@ export interface CotacaoHistorico {
 
 /** Colunas que o histórico lê. Explícitas: `select('*')` traria 60+ campos. */
 const COLUNAS_HISTORICO =
-    'id, proposal_number, client_reference, created_at, destination, cliente_nome_operacao, ' +
+    'id, proposal_number, client_reference, created_at, origin, destination, operacao, cliente_nome_operacao, ' +
     'veiculo_tipo_operacao, carroceria_tipo_operacao, peso_carga_operacao, coleta_date, ' +
     'observacoes_gerais, nosso_frete, frete_terceiro, real_profit, real_margin_percent, ' +
     'pipefy_card_id, pipefy_sent_at, pipefy_card_url, ramper_sent_at';
@@ -988,7 +1129,9 @@ function linhaParaHistorico(r: Record<string, unknown>): CotacaoHistorico {
         proposta: String(r.proposal_number ?? ''),
         dt: String(r.client_reference ?? ''),
         criadaEm: instanteDaCotacao(r.created_at, r.id),
+        origem: String(r.origin ?? ''),
         destino: String(r.destination ?? ''),
+        operacao: String(r.operacao ?? ''),
         cliente: String(r.cliente_nome_operacao ?? ''),
         tipoVeiculo: r.veiculo_tipo_operacao ? String(r.veiculo_tipo_operacao) : null,
         carroceria: r.carroceria_tipo_operacao ? String(r.carroceria_tipo_operacao) : null,
@@ -1022,11 +1165,13 @@ export const LIMITE_HISTORICO = 500;
  * quando a data falta — põe cada uma no seu lugar. O `order` no servidor fica
  * só para decidir QUAIS 500 vêm quando houver mais que isso.
  */
-export async function carregarHistoricoFastDelivery(): Promise<CotacaoHistorico[]> {
+export async function carregarHistoricoFastDelivery(
+    operacao: string = OPERACAO,
+): Promise<CotacaoHistorico[]> {
     const { data, error } = await supabase
         .from('freight_calculations')
         .select(COLUNAS_HISTORICO)
-        .eq('operacao', OPERACAO)
+        .eq('operacao', operacao)
         .is('deleted_at', null)
         .order('id', { ascending: false })
         .limit(LIMITE_HISTORICO);
@@ -1034,6 +1179,35 @@ export async function carregarHistoricoFastDelivery(): Promise<CotacaoHistorico[
     return ((data ?? []) as unknown as Record<string, unknown>[])
         .map(linhaParaHistorico)
         .sort((a, b) => b.criadaEm - a.criadaEm);
+}
+
+/**
+ * Título do card no Pipefy, por operação.
+ *
+ * O Fast manda "Suzano Fast", que é como a operação sempre apareceu no board.
+ * As Demais Plantas mandam VAZIO de propósito: a Edge Function, sem título,
+ * usa o campo Rota — que agora carrega a origem real. Assim o card sai
+ * "Mucuri, BA > SAO LUIS/MA" em vez de um rótulo que não diz de onde a carga
+ * saiu. Mudar o padrão é mudar esta função, e só ela.
+ */
+export function tituloCardPipefy(operacao: string): string {
+    return operacao === OPERACAO ? 'Suzano Fast' : '';
+}
+
+/**
+ * Título da oportunidade no Ramper. UM padrão, para as duas operações.
+ *
+ * É o mesmo da cotação normal (App.tsx): a DT na frente, depois a rota. O time
+ * procura pela DT no Ramper, e era isso que faltava — o Fast mandava
+ * "CT-2026-0042 · COTIA/SP", sem a referência que se usa para achar a carga.
+ *
+ * O Fast foi uniformizado a pedido do Wagner em 11/09/2026; antes disso este
+ * ramo existia só para as Demais Plantas. Os cards já criados no Ramper ficam
+ * com o título antigo: isto vale para os próximos.
+ */
+export function tituloCardRamper(c: CotacaoHistorico): string {
+    const ref = c.dt?.trim() ? `${c.dt.trim()} - ` : '';
+    return `${ref}Cotação de Frete SPOT - ${c.origem || '—'} x ${c.destino || '—'}`;
 }
 
 export interface ResultadoEnvio {
@@ -1086,10 +1260,19 @@ export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<Resultad
     if ('erro' in estado) return { erro: estado.erro };
     if (estado.pipefy) return { ok: true, jaEnviado: true };
 
+    // Sem origem não se monta card. O fallback óbvio seria ORIGEM_FIXA, e é
+    // justamente ele que mandava carga de Imperatriz para o Pipefy como
+    // Guarulhos — errado e calado. Recusar é pior de usar e melhor de confiar.
+    if (!c.origem) {
+        return { erro: 'Cotação sem origem gravada — não dá para montar o card. Recarregue o histórico.' };
+    }
+
     const idCliente = await clientePipefyId();
     const res = await createPipefyCard({
-        titulo: 'Suzano Fast',
-        rota: `${ORIGEM_FIXA} > ${c.destino}`,
+        titulo: tituloCardPipefy(c.operacao),
+        // A origem vem da COTAÇÃO, não de constante. Era aqui que a carga de
+        // Imperatriz virava "GUARULHOS > IMPERATRIZ/MA" no card.
+        rota: `${c.origem} > ${c.destino}`,
         receita: c.valorRecebido ?? 0,
         freteTerceiro: c.valorAPagar ?? 0,
         valorCarga: 0,
@@ -1098,6 +1281,9 @@ export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<Resultad
         mercadoria: MERCADORIA_FIXA,
         implemento: c.carroceria ?? CARROCERIA_PADRAO,
         dataColeta: c.coletaEm ?? undefined,
+        // Local da Coleta é o campo de ORIGEM do card, e nunca foi preenchido —
+        // por isso vinha vazio. O destino já ia em localEntrega.
+        localColeta: c.origem,
         localEntrega: c.cliente || undefined,
         referencia: c.dt,
         cliente: 'Suzano Fast',
@@ -1135,7 +1321,7 @@ export async function enviarCargaAoRamper(c: CotacaoHistorico): Promise<Resultad
     if (estado.ramper) return { ok: true, jaEnviado: true };
 
     const res = await createRamperCard({
-        title: `${c.proposta} · ${c.destino}`,
+        title: tituloCardRamper(c),
         value: c.valorRecebido ?? 0,
         organizationName: 'Suzano Fast',
         solicitante: SOLICITANTE_FIXO,

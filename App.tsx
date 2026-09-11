@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    Activity, AlertTriangle, ArrowDown, ArrowRight, Award, BarChart3, Calendar, Check, CheckCircle, ChevronDown, Clock, Copy as ClipboardCopy, CopyPlus, DollarSign, Download, Edit3, FileDown, FileText, Hash, History, IdCard, ImageIcon, Info, Key, Layers, Link2, Lock, LogOut, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, Save, Scale, Search, Send, Settings, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, UserCheck, Users, Wrench, X, Zap
+    Activity, AlertTriangle, ArrowDown, ArrowRight, Award, BarChart3, Calendar, Check, CheckCircle, ChevronDown, Clock, Copy as ClipboardCopy, CopyPlus, DollarSign, Download, Edit3, FileDown, FileText, Factory, Hash, History, IdCard, ImageIcon, Info, Key, Layers, Link2, Lock, LogOut, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, Save, Scale, Search, Send, Settings, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, UserCheck, Users, Wrench, X, Zap
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
@@ -23,6 +23,7 @@ const ICONES_MENU: Record<string, any> = {
     'acoes-comercial': Layers, 'contato-diario': UserCheck, 'cd-cobranca': PieChart,
     'cd-registro': FileText, negocios: Activity, 'painel-tv': Tv,
     tracking: Activity, 'fast-delivery': Zap,
+    'importar-suzano': Layers, 'suzano-plantas': Factory, 'demais-plantas': Package,
     'cadastro-motorista': IdCard, 'cadastro-proprietario': UserCheck,
     'cadastro-veiculo': Truck, 'cadastro-conjunto': Link2,
     emergencia: AlertTriangle, 'config-sistema': Wrench, 'trocar-senha': Lock,
@@ -77,6 +78,8 @@ import CadastroMotorista from './components/CadastroMotorista';
 import CadastroVeiculo from './components/CadastroVeiculo';
 import CadastroConjunto from './components/CadastroConjunto';
 import FastDelivery from './components/FastDelivery';
+import PlantasSuzano from './components/PlantasSuzano';
+import DemaisPlantas from './components/DemaisPlantas';
 import { normalizar, resolverMunicipio } from './utils/municipios';
 import { definirEmergencia, lerEmergencia, EstadoEmergencia } from './services/emergencia';
 import { estimateDistance, estimateMultiRoute, falhouRota, parseRequest, compileReportText } from './services/geminiService';
@@ -227,7 +230,7 @@ const App: React.FC = () => {
     // Só o setter é usado: o valor alimenta o banco, não a tela.
     const [, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-proprietario' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-proprietario' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery' | 'suzano-plantas' | 'demais-plantas'>('dashboard');
     // Seções da barra lateral. Mapa vazio = TODAS recolhidas, que é como a tela nasce.
     // A mesma chave serve pro subgrupo "Ações do Comercial" dentro de Comercial.
     const [secoesAbertas, setSecoesAbertas] = useState<Record<string, boolean>>({});
@@ -2613,6 +2616,8 @@ Disponibilidade: ${disponibilidade}`;
                                         activeTab === 'cadastro-veiculo' ? 'Cadastro Veículo' :
                                         activeTab === 'cadastro-conjunto' ? 'Cadastro de Conjunto' :
                                         activeTab === 'fast-delivery' ? 'Fast Delivery · Prévia' :
+                                        activeTab === 'suzano-plantas' ? 'Plantas da Suzano · Origem' :
+                                        activeTab === 'demais-plantas' ? 'Demais Plantas · Prévia' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
@@ -2661,6 +2666,25 @@ Disponibilidade: ${disponibilidade}`;
                             // A tela grava direto no banco; sem isto a lista de
                             // cotações só mostraria o lote novo depois de recarregar
                             // a página, e parecia que nada tinha sido criado.
+                            aoGravar={async () => setHistory(await getFreightCalculations())}
+                        />
+                    )}
+
+                    {/* De-para de planta: a origem das Demais Plantas. Tela
+                        própria por enquanto; na fase seguinte ela também aparece
+                        embutida na tela de importação, resolvendo a pendência
+                        sem trocar de lugar. */}
+                    {activeTab === 'suzano-plantas' && (
+                        <PlantasSuzano ehMaster={currentUser.role === 'master'} />
+                    )}
+
+                    {/* Prévia das Demais Plantas. Não grava nada ainda — a
+                        criação das cotações é a fase seguinte. */}
+                    {activeTab === 'demais-plantas' && (
+                        <DemaisPlantas
+                            marginThreshold={marginThreshold}
+                            ehMaster={currentUser.role === 'master'}
+                            autor={{ id: currentUser.id, name: currentUser.name }}
                             aoGravar={async () => setHistory(await getFreightCalculations())}
                         />
                     )}
