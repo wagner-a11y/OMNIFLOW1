@@ -71,7 +71,12 @@ const SO_MASTER = ['Meu CRM', 'Lixeira', 'Modo emergência', 'Configurações do
 const DE_TODOS = [
     'Nova Cotação', 'Dashboard', 'Histórico', 'Painel TV',
     'Minha Carteira', 'Contato Diário · Análise', 'Contato Diário · Registrar',
-    'Acompanhamento PPFY', 'Fast Delivery',
+    // As duas importações da Suzano viram filhas de "Importar Cargas Suzano".
+    // "Fast Delivery" virou "Fast" ali dentro — o id 'fast-delivery' não mudou,
+    // então a tela é a mesma; mudou o rótulo e o lugar. "Plantas (origem)" é de
+    // todos de propósito: o operador precisa VER de onde a carga sai, mesmo sem
+    // poder cadastrar (a trava de escrita é a RLS de fast_delivery_planta).
+    'Acompanhamento PPFY', 'Importar Cargas Suzano', 'Fast', 'Demais Plantas', 'Plantas (origem)',
     'Cadastro Motorista', 'Cadastro Veículo', 'Cadastro Conjunto',
 ];
 

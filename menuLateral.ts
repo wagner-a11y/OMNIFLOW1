@@ -93,7 +93,22 @@ export function montarMenu(ctx: ContextoMenu): { secoes: SecaoMenu[]; soltos: It
         {
             id: 'operacional', titulo: 'Operacional', itens: [
                 { id: 'tracking', label: 'Acompanhamento PPFY' },
-                { id: 'fast-delivery', label: 'Fast Delivery' },
+                // As importações da Suzano viram um subgrupo: são o MESMO Excel
+                // do OTM, com a mesma classificação de equipamento, separadas só
+                // pela operação. O id 'fast-delivery' NÃO muda — a tela e o
+                // activeTab continuam os mesmos, só mudou onde o item aparece.
+                {
+                    id: 'importar-suzano',
+                    label: 'Importar Cargas Suzano',
+                    filhos: [
+                        { id: 'fast-delivery', label: 'Fast' },
+                        // Origem das Demais Plantas. Todos VEEM (o operador
+                        // precisa saber de onde a carga sai); só master
+                        // cadastra, e a trava é a RLS.
+                        { id: 'demais-plantas', label: 'Demais Plantas' },
+                        { id: 'suzano-plantas', label: 'Plantas (origem)' },
+                    ],
+                },
             ],
         },
         {
