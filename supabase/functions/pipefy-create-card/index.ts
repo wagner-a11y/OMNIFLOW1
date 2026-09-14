@@ -15,8 +15,40 @@ const corsHeaders = {
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
 const PIPEFY_URL = 'https://api.pipefy.com/graphql';
-const PIPE_ID = '304753830';
-const PHASE_FECHADAS = '339926927'; // "Cotações Fechadas"
+
+// ---- PARA ONDE VAI O CARD, por operação ----
+//
+// Cada operação tem seu Pipe e sua fase. O DESTINO É DECIDIDO AQUI, no servidor,
+// e não vem do corpo da requisição: se o chamador pudesse escolher pipe_id, um
+// erro de digitação no front mandaria carga para um Pipe qualquer, e o card
+// nasceria fora do fluxo sem ninguém perceber.
+//
+// O PADRÃO é o Pipe de sempre. Requisição sem `operacao` — a cotação normal, e
+// qualquer chamada antiga — cai exatamente onde sempre caiu. É isso que faz
+// esta mudança não ter efeito nenhum sobre quem não pediu por ela.
+//
+// Os dois Pipes são clones estruturais: mesmos 25 campos, com os MESMOS
+// field_id, mesmos 4 obrigatórios, e as conexões de Cliente e Solicitante
+// apontando para as MESMAS tabelas (n4RglqvR / NRSsu5wv). Conferido por
+// inspeção read-only em 14/09/2026 — por isso só o destino muda; nenhum id de
+// cliente precisou ser remapeado.
+const PIPE_PADRAO = '304753830';            // "Acompanhamento de Fretes"
+const PHASE_PADRAO = '339926927';           // "Cotações Fechadas"
+
+const DESTINO_POR_OPERACAO: Record<string, { pipe: string; phase: string }> = {
+  // Pipe próprio do Fast Delivery: "Fretes - Suzano Fast".
+  FAST_DELIVERY: { pipe: '307341584', phase: '344236205' },
+  // DEMAIS_PLANTAS não entra aqui de propósito: continua no Pipe padrão.
+};
+
+function destinoDaOperacao(operacao: unknown): { pipe: string; phase: string } {
+  const chave = (operacao == null ? '' : String(operacao)).trim().toUpperCase();
+  return DESTINO_POR_OPERACAO[chave] ?? { pipe: PIPE_PADRAO, phase: PHASE_PADRAO };
+}
+
+// Mantidos para a inspeção read-only, que olha o Pipe padrão quando não recebe id.
+const PIPE_ID = PIPE_PADRAO;
+const PHASE_FECHADAS = PHASE_PADRAO;
 
 // ---- normalização e mapeamento de opções ----
 const norm = (s: unknown) => (s == null ? '' : String(s)).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
@@ -122,13 +154,15 @@ Deno.serve(async (req) => {
   // Inspeção READ-ONLY das conexões (a que cadastro Cliente/Solicitante estão ligados). Não cria card.
   if (body.inspect === 'connectors') {
     try {
+      // pipeId opcional: sem ele, inspeciona o Pipe de sempre. READ-ONLY.
+      const alvo = (body.pipeId == null ? '' : String(body.pipeId)).trim() || PIPE_ID;
       // 1) descobre os tipos possíveis da union PublicRepoUnion
       const introspect = await gql(token, `{ __type(name: "PublicRepoUnion") { possibleTypes { name } } }`, {});
       const tipos: string[] = (introspect?.__type?.possibleTypes || []).map((t: any) => t.name);
       // 2) monta fragments dinâmicos só com os tipos que existem
       const frags = tipos.map(t => `... on ${t} { id name }`).join('\n');
       const q = `query {
-        pipe(id: ${PIPE_ID}) {
+        pipe(id: ${alvo}) {
           start_form_fields {
             id label type
             connectedRepo { __typename ${frags} }
@@ -142,6 +176,54 @@ Deno.serve(async (req) => {
           cadastro: f.connectedRepo ? { tipo: f.connectedRepo.__typename, id: f.connectedRepo.id, nome: f.connectedRepo.name } : null,
         }));
       return json({ ok: true, unionTypes: tipos, connectors: fields });
+    } catch (e) {
+      return json({ error: (e as Error).message }, 502);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Inspeção READ-ONLY da ESTRUTURA de um Pipe: fases e campos com os field_id
+  // reais. Existe para comparar Pipes antes de migrar o envio — o field_id é um
+  // slug e NÃO é garantido que se repita entre Pipes, mesmo com o label igual.
+  // Campo com id inexistente no destino não estoura: o card nasce com o campo
+  // em branco, sem erro. Por isso se confere antes, e não depois.
+  //
+  // NÃO cria, NÃO altera e NÃO apaga nada. Só lê.
+  // ------------------------------------------------------------------
+  if (body.inspect === 'pipe') {
+    try {
+      const alvo = (body.pipeId == null ? '' : String(body.pipeId)).trim() || PIPE_ID;
+      const introspect = await gql(token, `{ __type(name: "PublicRepoUnion") { possibleTypes { name } } }`, {});
+      const tipos: string[] = (introspect?.__type?.possibleTypes || []).map((t: any) => t.name);
+      const frags = tipos.map(t => `... on ${t} { id name }`).join('\n');
+
+      const q = `query {
+        pipe(id: ${alvo}) {
+          id name
+          phases { id name cards_count }
+          start_form_fields {
+            id label type required
+            connectedRepo { __typename ${frags} }
+          }
+        }
+      }`;
+      const data = await gql(token, q, {});
+      const pipe = data?.pipe;
+      if (!pipe) return json({ error: `Pipe ${alvo} não encontrado ou sem acesso.` }, 404);
+
+      const campos = (pipe.start_form_fields || []).map((f: any) => ({
+        id: f.id, label: f.label, type: f.type, required: !!f.required,
+        cadastro: f.connectedRepo
+          ? { tipo: f.connectedRepo.__typename, id: f.connectedRepo.id, nome: f.connectedRepo.name }
+          : null,
+      }));
+
+      return json({
+        ok: true,
+        pipe: { id: pipe.id, nome: pipe.name },
+        fases: (pipe.phases || []).map((f: any) => ({ id: f.id, nome: f.name, cards: f.cards_count })),
+        campos,
+      });
     } catch (e) {
       return json({ error: (e as Error).message }, 502);
     }
@@ -285,6 +367,9 @@ Deno.serve(async (req) => {
   const observacoes = (body.observacoes == null ? '' : String(body.observacoes)).trim();
   const titulo = (body.titulo == null ? '' : String(body.titulo)).trim() || rota;
 
+  // Para onde este card vai. Sem `operacao` no corpo, é o Pipe de sempre.
+  const destino = destinoDaOperacao(body.operacao);
+
   // Origens dos campos especiais:
   const clienteRaw = (body.cliente == null ? '' : String(body.cliente)).trim();          // nome (vai no título/resumo)
   const solicitanteRaw = (body.solicitante == null ? '' : String(body.solicitante)).trim();
@@ -400,7 +485,7 @@ Deno.serve(async (req) => {
       .map(c => ({ campo: c.campo, field_id: c.field_id, valorOmniflow: c.valorOrigem }));
 
     return json({
-      ok: true, dryRun: true, pipe_id: PIPE_ID, phase_id: PHASE_FECHADAS, title: titulo,
+      ok: true, dryRun: true, pipe_id: destino.pipe, phase_id: destino.phase, title: titulo,
       fields_attributes: fields,
       mapeamento: { veiculo, mercadoria, implemento, clienteRecordId: clienteId || null, solicitanteRecordId: solicitanteId || null, novaUsada: novaUsada || null, outrasNecSel: outrasNecSel || null, necessidadeGR: grMarcados },
       camposAlvo,
@@ -412,7 +497,7 @@ Deno.serve(async (req) => {
     const mutation = `mutation CreateCard($input: CreateCardInput!) {
       createCard(input: $input) { card { id title url fields { name value } } }
     }`;
-    const input = { pipe_id: PIPE_ID, phase_id: PHASE_FECHADAS, title: titulo, fields_attributes: fields };
+    const input = { pipe_id: destino.pipe, phase_id: destino.phase, title: titulo, fields_attributes: fields };
     const data = await gql(token, mutation, { input });
     const card = data?.createCard?.card;
     if (!card?.id) return json({ error: 'Pipefy não retornou o card criado.' }, 502);

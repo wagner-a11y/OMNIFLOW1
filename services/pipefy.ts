@@ -29,6 +29,17 @@ export interface PipefyCardPayload {
     necessidadeGR?: string[];           // checklist (lista dos marcados)
     titulo?: string;
     dryRun?: boolean;
+    /**
+     * Qual operação está mandando ('FAST_DELIVERY', 'DEMAIS_PLANTAS'…).
+     *
+     * A Edge Function usa isto para escolher o Pipe e a fase de destino. NÃO se
+     * manda pipe_id daqui de propósito: se o destino viesse do front, um engano
+     * mandaria carga para um Pipe qualquer e o card nasceria fora do fluxo sem
+     * ninguém notar. O servidor decide; aqui só se diz quem está falando.
+     *
+     * Ausente = Pipe de sempre, que é o caso da cotação normal.
+     */
+    operacao?: string;
 }
 
 // Busca read-only nas tabelas do Pipefy pro autocomplete. Fail-soft: erro/rede -> lista vazia,

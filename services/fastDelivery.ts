@@ -1331,6 +1331,9 @@ export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<Resultad
     const quem = await clienteESolicitanteDoCard(c);
     const res = await createPipefyCard({
         titulo: tituloCardPipefy(c.operacao),
+        // Decide o Pipe de destino no servidor: Fast tem Pipe próprio
+        // ("Fretes - Suzano Fast"); Demais Plantas segue no Pipe de sempre.
+        operacao: c.operacao,
         // A origem vem da COTAÇÃO, não de constante. Era aqui que a carga de
         // Imperatriz virava "GUARULHOS > IMPERATRIZ/MA" no card.
         rota: `${c.origem} > ${c.destino}`,
