@@ -5,7 +5,7 @@ import {
     // montagem do card do Pipefy passou para o service, onde prévia e histórico
     // usam a MESMA função — com a trava que consulta o banco antes de mandar.
     ApoioFastDelivery, LinhaPrevia, ORIGEM_FIXA, OPERACAO, ResultadoCotacao, SOLICITANTE_FIXO,
-    carregarApoio, coletaAjustada,
+    carregarApoio, coletaAjustada, observacaoDaCarga,
     corDaMargem, criarCotacoesFastDelivery, lerExcelOtm, marcarJaLancadas,
     classificarEquipamento, tiposDaTabela, CARROCERIAS, CARROCERIA_PADRAO, codigosSemCarroceria,
     // A lista e os botões do histórico foram para HistoricoSuzano; aqui ficam
@@ -267,7 +267,9 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
         peso: l.peso,
         // A MESMA antecipação de uma hora que foi gravada na cotação.
         coletaEm: coletaAjustada(l.dataColeta),
-        observacoes: l.volume !== null ? `Volume: ${l.volume} m³` : null,
+        // A entrega vai como o OTM informou: sem a antecipação da coleta.
+        entregaEm: l.entregaEm,
+        observacoes: observacaoDaCarga(l.volume, l.instrucao),
         valorRecebido: l.valorRecebido,
         valorAPagar: l.valorAPagar,
         margem: l.margem,

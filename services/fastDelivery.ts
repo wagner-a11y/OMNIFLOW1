@@ -43,6 +43,14 @@ export const COLUNAS_OTM: Record<string, string[]> = {
     peso: ['Peso', 'Peso (kg)', 'Peso Kg'],
     volume: ['Volume M³', 'Volume M3', 'Volume', 'M³'],
     custoFrete: ['Custo Frete', 'Custo do Frete', 'Valor Frete'],
+    // Texto de observacao da carga ("* Obs: Aceita so 1 veiculo..."). Vai para a
+    // observacao da cotacao e, por ela, para a observacao do card.
+    instrucaoTransporte: ['Instrucao de Transporte', 'Instrucao Transporte'],
+    // Data/hora de entrega -> campo Data de Entrega do card, que ate aqui ia
+    // vazio. O sufixo "_1" e a rede do sheet_to_json: se um dia o export trouxer
+    // a coluna repetida, a segunda chega desduplicada com esse nome. A primeira
+    // continua vencendo, que e a regra de mapearColunas.
+    fimViagem: ['Fim Viagem', 'Fim da Viagem', 'Fim Viagem_1'],
 };
 
 /** O Excel traz a placa prefixada pela operação: "SUZANO.BXC7J79". */
@@ -440,6 +448,13 @@ export interface LinhaPrevia {
     volume: number | null;
     /** Do OTM. */
     valorRecebido: number | null;
+    // Os dois vêm de camposBasicos(), como os de cima. Esta interface repete os
+    // campos comuns em vez de estender CamposBasicos — mantido assim de
+    // propósito, para esta mudança não mexer no formato da prévia inteira.
+    /** Texto da coluna "Instrucao de Transporte". '' = célula vazia. */
+    instrucao: string;
+    /** "Fim Viagem" em hora local. null = célula vazia. */
+    entregaEm: string | null;
     /** Da NOSSA tabela. null = sem preço, e aí não há margem. */
     valorAPagar: number | null;
     km: number | null;
@@ -522,6 +537,10 @@ export interface CamposBasicos {
     volume: number | null;
     /** Do OTM: o que a Omnicargo recebe. */
     valorRecebido: number | null;
+    /** Texto livre da coluna "Instrucao de Transporte". '' = celula vazia. */
+    instrucao: string;
+    /** "Fim Viagem" em hora local ("AAAA-MM-DDTHH:mm"). null = celula vazia. */
+    entregaEm: string | null;
 }
 
 /**
@@ -564,6 +583,8 @@ export function camposBasicos(
         peso: numero(pegar(l, mapa, 'peso')),
         volume: numero(pegar(l, mapa, 'volume')),
         valorRecebido: numero(pegar(l, mapa, 'custoFrete')),
+        instrucao: String(pegar(l, mapa, 'instrucaoTransporte') ?? '').trim(),
+        entregaEm: entregaDoOtm(data(pegar(l, mapa, 'fimViagem'))),
     };
 }
 
@@ -727,19 +748,59 @@ export const ANTECIPACAO_COLETA_MS = 60 * 60 * 1000;
  * Devolve "AAAA-MM-DDTHH:mm" — hora LOCAL, sem fuso.
  *
  * Não é firula de formato, são dois erros de uma vez:
- *  1. o campo "Coleta" da tela é <input type="datetime-local">, que RECUSA
- *     valor com fuso ("...+00:00") e aparece vazio — foi o que aconteceu;
+ *  1. os campos de data da tela são <input type="datetime-local">, que RECUSAM
+ *     valor com fuso ("...+00:00") e aparecem vazios — foi o que aconteceu;
  *  2. toISOString() converte para UTC, então 00:30 em Brasília virava 03:30 e
  *     a coleta ficava três horas adiantada no banco.
  * É também o formato que a cotação normal grava, vindo do mesmo input.
+ *
+ * Coleta e entrega passam as duas por aqui: o formato é o mesmo, o que muda é
+ * só a antecipação de uma hora, que é regra da coleta.
  */
+function localSemFuso(d: Date): string {
+    const z = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+
+/** Coleta do OTM com a antecipação de uma hora, em hora local. */
 export function coletaAjustada(iso: string | null): string | null {
     if (!iso) return null;
     const d = new Date(iso);
     if (!Number.isFinite(d.getTime())) return null;
-    const m = new Date(d.getTime() - ANTECIPACAO_COLETA_MS);
-    const z = (n: number) => String(n).padStart(2, '0');
-    return `${m.getFullYear()}-${z(m.getMonth() + 1)}-${z(m.getDate())}T${z(m.getHours())}:${z(m.getMinutes())}`;
+    return localSemFuso(new Date(d.getTime() - ANTECIPACAO_COLETA_MS));
+}
+
+/**
+ * Entrega do OTM ("Fim Viagem"), no MESMO formato local da coleta e SEM a
+ * antecipacao de uma hora — aquela e regra da coleta, nao da entrega.
+ *
+ * O que o OTM informa e a hora combinada com o cliente: 20:00 na planilha tem
+ * de ser 20:00 no card. Por isso NAO passa por toISOString(), que jogaria para
+ * UTC e mostraria 23:00.
+ */
+export function entregaDoOtm(iso: string | null): string | null {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return null;
+    return localSemFuso(d);
+}
+
+/**
+ * A observacao da carga, uma so para as duas operacoes.
+ *
+ * Volume e instrucao sao independentes: cada um entra se tiver conteudo, e a
+ * linha e pulada quando nao tiver — rotulo vazio no card e pior que campo
+ * vazio. Sem nenhum dos dois, devolve null e a cotacao nasce sem observacao,
+ * exatamente como antes desta funcao existir.
+ *
+ * A instrucao vai SEM rotulo: o texto do OTM ja chega com o "* Obs:" dele.
+ */
+export function observacaoDaCarga(volume: number | null, instrucao: string): string | null {
+    const linhas = [
+        volume !== null ? `Volume: ${volume} m³` : '',
+        (instrucao || '').trim(),
+    ].filter(Boolean);
+    return linhas.length ? linhas.join('\n') : null;
 }
 
 /**
@@ -871,6 +932,8 @@ export interface DadosCotacaoSuzano {
     tipoVeiculo: string | null;
     carroceria: string;
     coletaEm: string | null;
+    /** "Fim Viagem" do OTM. Vai para o campo Data de Entrega do card. */
+    entregaEm: string | null;
     peso: number | null;
     observacoes: string | null;
     valorRecebido: number | null;
@@ -910,9 +973,13 @@ export function montarCotacaoSuzano(d: DadosCotacaoSuzano): Record<string, unkno
         carroceria_tipo_operacao: d.carroceria,
         // Uma hora antes do OTM, por decisão da operação.
         coleta_date: d.coletaEm,
+        // A entrega NAO leva a antecipacao da coleta: e a hora combinada com o
+        // cliente. Coluna que ja existia e o Fast nunca preenchia.
+        entrega_date: d.entregaEm,
         peso_carga_operacao: d.peso,
-        // Só o volume na observação — peso já tem campo próprio, e motorista
-        // e placa são ignorados por decisão do Wagner.
+        // Volume e instrução de transporte, montados por observacaoDaCarga().
+        // Peso já tem campo próprio, e motorista e placa são ignorados por
+        // decisão do Wagner.
         observacoes_gerais: d.observacoes,
         nosso_frete: d.valorRecebido,
         frete_terceiro: d.valorAPagar,
@@ -1013,8 +1080,9 @@ export async function criarCotacoesFastDelivery(
             tipoVeiculo: l.tipoVeiculo,
             carroceria: l.carroceriaEfetiva,
             coletaEm: coletaAjustada(l.dataColeta),
+            entregaEm: l.entregaEm,
             peso: l.peso,
-            observacoes: l.volume !== null ? `Volume: ${l.volume} m³` : null,
+            observacoes: observacaoDaCarga(l.volume, l.instrucao),
             valorRecebido: l.valorRecebido,
             valorAPagar: l.valorAPagar,
             km: l.km,
@@ -1101,6 +1169,8 @@ export interface CotacaoHistorico {
     carroceria: string | null;
     peso: number | null;
     coletaEm: string | null;
+    /** Vai para o campo Data de Entrega do card. */
+    entregaEm: string | null;
     observacoes: string | null;
     valorRecebido: number | null;
     valorAPagar: number | null;
@@ -1116,7 +1186,7 @@ export interface CotacaoHistorico {
 /** Colunas que o histórico lê. Explícitas: `select('*')` traria 60+ campos. */
 const COLUNAS_HISTORICO =
     'id, proposal_number, client_reference, created_at, origin, destination, operacao, cliente_nome_operacao, ' +
-    'veiculo_tipo_operacao, carroceria_tipo_operacao, peso_carga_operacao, coleta_date, ' +
+    'veiculo_tipo_operacao, carroceria_tipo_operacao, peso_carga_operacao, coleta_date, entrega_date, ' +
     'observacoes_gerais, nosso_frete, frete_terceiro, real_profit, real_margin_percent, ' +
     'pipefy_card_id, pipefy_sent_at, pipefy_card_url, ramper_sent_at';
 
@@ -1142,6 +1212,7 @@ function linhaParaHistorico(r: Record<string, unknown>): CotacaoHistorico {
         carroceria: r.carroceria_tipo_operacao ? String(r.carroceria_tipo_operacao) : null,
         peso: numeroDb(r.peso_carga_operacao),
         coletaEm: r.coleta_date ? String(r.coleta_date) : null,
+        entregaEm: r.entrega_date ? String(r.entrega_date) : null,
         observacoes: r.observacoes_gerais ? String(r.observacoes_gerais) : null,
         valorRecebido: recebido,
         valorAPagar: pagar,
@@ -1349,6 +1420,9 @@ export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<Resultad
         mercadoria: MERCADORIA_FIXA,
         implemento: c.carroceria ?? CARROCERIA_PADRAO,
         dataColeta: c.coletaEm ?? undefined,
+        // Campo Data de Entrega do card. Sem "Fim Viagem" na planilha nao se
+        // manda nada, e o card fica com a entrega vazia, como antes.
+        dataEntrega: c.entregaEm ?? undefined,
         // Local da Coleta é o campo de ORIGEM do card, e nunca foi preenchido —
         // por isso vinha vazio. O destino já ia em localEntrega.
         localColeta: c.origem,

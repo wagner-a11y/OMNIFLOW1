@@ -1,7 +1,7 @@
 import {
     ApoioFastDelivery, CamposBasicos, COLUNAS_OTM, CARROCERIA_PADRAO, CotacaoHistorico,
     ResultadoCotacao, abrirPlanilhaOtm, alertaDeVolume, camposBasicos, campo,
-    coletaAjustada, dtsJaLancadas, montarCotacaoSuzano, proximoNumeroBase,
+    coletaAjustada, dtsJaLancadas, montarCotacaoSuzano, observacaoDaCarga, proximoNumeroBase,
     VEICULO_CALCULADORA, type AlertaVolume,
 } from './fastDelivery';
 import { supabase } from './supabase';
@@ -385,8 +385,9 @@ export async function criarCotacoesDemaisPlantas(
             tipoVeiculo: l.tipoVeiculo,
             carroceria: l.carroceriaEfetiva,
             coletaEm: coletaAjustada(l.dataColeta),
+            entregaEm: l.entregaEm,
             peso: l.peso,
-            observacoes: l.volume !== null ? `Volume: ${l.volume} m³` : null,
+            observacoes: observacaoDaCarga(l.volume, l.instrucao),
             valorRecebido: l.valorRecebido,
             // O que o operador definiu: da tabela, do piso ANTT ou da mão dele.
             valorAPagar: l.valorAPagar,
@@ -437,7 +438,8 @@ export function comoCargaEnviavel(
         carroceria: l.carroceriaEfetiva,
         peso: l.peso,
         coletaEm: coletaAjustada(l.dataColeta),
-        observacoes: l.volume !== null ? `Volume: ${l.volume} m³` : null,
+        entregaEm: l.entregaEm,
+        observacoes: observacaoDaCarga(l.volume, l.instrucao),
         valorRecebido: l.valorRecebido,
         valorAPagar: l.valorAPagar,
         margem: l.margem,
