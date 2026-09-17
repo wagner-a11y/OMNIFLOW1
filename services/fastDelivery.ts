@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { supabase } from './supabase';
 import { IMPLEMENTO_OPTIONS } from '../constants';
+import { VehicleType } from '../types';
 import { createPipefyCard } from './pipefy';
 import { createRamperCard } from './ramper';
 import { carregarPlantas, plantaPorOrigem } from './suzanoPlanta';
@@ -754,12 +755,15 @@ export function coletaAjustada(iso: string | null): string | null {
  * operação for majoritariamente LS, é esta linha que muda.
  */
 export const VEICULO_CALCULADORA: Record<string, string> = {
-    FIORINO: 'Fiorino',
-    VAN: 'Van',
-    '3/4': '3/4',
-    TOCO: 'toco',
-    TRUCK: 'truck',
-    CARRETA: 'Carreta Simples',
+    FIORINO: VehicleType.Fiorino,
+    VAN: VehicleType.Van,
+    '3/4': VehicleType.TresQuartos,
+    // Eram 'toco' e 'truck', em minúsculas, e é por isso que as cotações do Fast
+    // apareciam como veículo ÓRFÃO: 'truck' não existe no cadastro, que tem
+    // 'Truck'. A caixa é parte do nome, aqui e no banco.
+    TOCO: VehicleType.Toco,
+    TRUCK: VehicleType.Truck,
+    CARRETA: VehicleType.CarretaSimples,
 };
 
 /**

@@ -117,10 +117,17 @@ export const ANTT_TABLE_A: Record<ANTTCargoType, CargoCoefficients> = {
 // Veículos sem tabela ANTT — devem exibir "—" no piso e ocultar o seletor de carga.
 // (Não são removidos do sistema; apenas ignoram o piso mínimo.)
 export const NO_ANTT_VEHICLES = new Set<string>([
+    // Utilitários: pagos por km rodado, não por piso. HR e VUC entram separados
+    // desde que deixaram de ser um item só ("HR/VUC"), e o 3/4 passou a existir
+    // como veículo próprio — antes ele se escondia dentro daquele par.
     VehicleType.Fiorino,
     VehicleType.Van,
-    VehicleType.HR_VUC, // categoria 3/4
+    VehicleType.HR,
+    VehicleType.VUC,
+    VehicleType.TresQuartos,
+    // Preço livre.
     VehicleType.Prancha,
+    VehicleType.Aereo,
 ]);
 
 export const vehicleHasANTT = (vehicleType: string): boolean => !NO_ANTT_VEHICLES.has(vehicleType);

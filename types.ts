@@ -1,17 +1,42 @@
 
+/**
+ * Os nomes OFICIAIS de veículo. Uma fonte de verdade só.
+ *
+ * O VALOR de cada entrada é a chave usada em vehicle_configs (banco), em
+ * freight_calculations.vehicle_type (cotações) e no VEHICLE_CONFIGS (código).
+ * Os três PRECISAM falar a mesma língua, e é isto que garante.
+ *
+ * POR QUE OS NOMES MUDARAM. O App monta a lista da tela com
+ *     { ...VEHICLE_CONFIGS, ...configsDoBanco }
+ * que é um spread: mescla por chave de string. Enquanto o código dizia
+ * "Fiorino - Utilitário" e o banco dizia "Fiorino", as chaves não casavam e as
+ * DUAS apareciam na tela — a mesma Fiorino duas vezes, com tarifas diferentes
+ * (2,50 do código contra 1,50 do banco). Quem escolhesse a errada cotava errado.
+ * Alinhados os nomes, o spread sobrepõe em vez de somar.
+ *
+ * HR e VUC eram um item só ("HR/VUC"). Viraram DOIS: são veículos distintos, com
+ * tarifas distintas (2,00 e 3,00), e juntá-los obrigava a cotar um pelo preço do
+ * outro.
+ *
+ * A caixa é parte do nome: "Truck" e "truck" são veículos diferentes para o
+ * spread e para o banco. Ao mexer aqui, confira o de-para do banco junto.
+ */
 export enum VehicleType {
-    Fiorino = "Fiorino - Utilitário",
-    Van = "Van - Utilitário",
-    HR_VUC = "HR/VUC - Utilitário",
+    Fiorino = "Fiorino",
+    Van = "Van",
+    HR = "HR",
+    VUC = "VUC",
+    TresQuartos = "3/4",
     Toco = "Toco",
     Truck = "Truck",
     Bitruck = "Bitruck",
     CarretaSimples = "Carreta Simples",
     CarretaLS = "Carreta LS",
-    Carreta4Eixo = "Carreta 4º Eixo",
-    Vanderleia = "Vanderleia",
+    CarretaVanderleia = "Carreta Vanderleia",
+    Carreta4Eixo = "Carreta 4º eixo",
     Rodotrem = "Rodotrem",
-    Prancha = "Prancha - Preço livre"
+    Prancha = "Prancha",
+    Aereo = "Aéreo"
 }
 
 export type Disponibilidade = "Imediato" | "Conforme programação";
