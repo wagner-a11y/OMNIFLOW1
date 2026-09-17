@@ -1,21 +1,49 @@
 
 import { VehicleType, Customer, ANTTCoefficients } from './types';
 
+/**
+ * Os 15 veículos oficiais, com a regra de formação do preço base de cada um.
+ *
+ * ESTES VALORES SÃO ESPELHO DO BANCO, não a fonte. A fonte é vehicle_configs:
+ * o App faz `{ ...VEHICLE_CONFIGS, ...configsDoBanco }`, então o banco sempre
+ * vence. Isto aqui existe para (a) a tela ter o que mostrar antes de o banco
+ * responder e (b) veículo novo aparecer mesmo em base que ainda não o tem.
+ *
+ * Por isso as CHAVES têm de bater com as do banco, exatamente. Quando não
+ * batiam, o spread somava em vez de sobrepor e a tela mostrava a mesma Fiorino
+ * duas vezes, com tarifas diferentes.
+ *
+ * MODOS (coluna calc_mode no banco):
+ *   KM_ROUND_TRIP  base = km x 2 x factor   utilitário roda ida e volta
+ *   ANTT           piso da Tabela A por eixos (fixed + variable)
+ *   FREE           sem piso e sem tarifa
+ *
+ * Tarifas dos utilitários confirmadas pelo Wagner; coeficientes ANTT da Tabela A
+ * (Portaria SUROC nº 4/2026), carga geral.
+ */
 export const VEHICLE_CONFIGS: Record<string, ANTTCoefficients & { factor: number; axles?: number; capacity?: number; consumption?: number }> = {
-    [VehicleType.Fiorino]: { fixed: 0, variable: 0, factor: 2.50, axles: 2, capacity: 650, consumption: 12, calcMode: 'KM_ROUND_TRIP' },
-    [VehicleType.Van]: { fixed: 0, variable: 0, factor: 3.50, axles: 2, capacity: 1500, consumption: 9, calcMode: 'KM_ROUND_TRIP' },
-    [VehicleType.HR_VUC]: { fixed: 0, variable: 0, factor: 4.20, axles: 2, capacity: 1800, consumption: 8, calcMode: 'KM_ROUND_TRIP' },
-    // Custo Fixo (fixed = CC) e Custo Var/km (variable = CCD) alinhados à Tabela A da ANTT
-    // (Portaria SUROC nº 4/2026), tipo de carga "Carga geral" — padrão.
+    // ---- Utilitários: pagos pelo km RODADO (ida e volta) ----
+    [VehicleType.Fiorino]: { fixed: 0, variable: 0, factor: 1.50, axles: 2, capacity: 650, consumption: 12, calcMode: 'KM_ROUND_TRIP' },
+    [VehicleType.Van]: { fixed: 0, variable: 0, factor: 1.60, axles: 2, capacity: 1500, consumption: 9, calcMode: 'KM_ROUND_TRIP' },
+    // HR e VUC eram "HR/VUC", um item só com fator 4,20 — que não era o de
+    // nenhum dos dois. Separados, cada um com a sua tarifa.
+    [VehicleType.HR]: { fixed: 0, variable: 0, factor: 2.00, axles: 2, capacity: 1800, consumption: 8, calcMode: 'KM_ROUND_TRIP' },
+    [VehicleType.VUC]: { fixed: 0, variable: 0, factor: 3.00, axles: 2, capacity: 3000, consumption: 7, calcMode: 'KM_ROUND_TRIP' },
+    [VehicleType.TresQuartos]: { fixed: 0, variable: 0, factor: 4.10, axles: 2, capacity: 4000, consumption: 6, calcMode: 'KM_ROUND_TRIP' },
+
+    // ---- Pesados: piso mínimo da Tabela A da ANTT, por eixos ----
     [VehicleType.Toco]: { fixed: 436.39, variable: 4.0031, factor: 0, axles: 2, capacity: 6000, consumption: 5, calcMode: 'ANTT' },
     [VehicleType.Truck]: { fixed: 523.33, variable: 5.1295, factor: 0, axles: 3, capacity: 12000, consumption: 4, calcMode: 'ANTT' },
     [VehicleType.Bitruck]: { fixed: 568.72, variable: 5.8178, factor: 0, axles: 4, capacity: 16000, consumption: 3.2, calcMode: 'ANTT' },
     [VehicleType.CarretaSimples]: { fixed: 635.08, variable: 6.7126, factor: 0, axles: 5, capacity: 25000, consumption: 2.8, calcMode: 'ANTT' },
     [VehicleType.CarretaLS]: { fixed: 648.95, variable: 7.4124, factor: 0, axles: 6, capacity: 32000, consumption: 2.2, calcMode: 'ANTT' },
+    [VehicleType.CarretaVanderleia]: { fixed: 648.95, variable: 7.4124, factor: 0, axles: 6, capacity: 34000, consumption: 2.1, calcMode: 'ANTT' },
     [VehicleType.Carreta4Eixo]: { fixed: 803.22, variable: 8.1252, factor: 0, axles: 7, capacity: 38000, consumption: 2.0, calcMode: 'ANTT' },
-    [VehicleType.Vanderleia]: { fixed: 648.95, variable: 7.4124, factor: 0, axles: 6, capacity: 34000, consumption: 2.1, calcMode: 'ANTT' },
     [VehicleType.Rodotrem]: { fixed: 872.44, variable: 9.2466, factor: 0, axles: 9, capacity: 50000, consumption: 1.6, calcMode: 'ANTT' },
-    [VehicleType.Prancha]: { fixed: 0, variable: 0, factor: 0, axles: 6, capacity: 40000, consumption: 1.5, calcMode: 'FREE' }
+
+    // ---- Especiais: preço livre, sem piso e sem tarifa ----
+    [VehicleType.Prancha]: { fixed: 0, variable: 0, factor: 0, axles: 6, capacity: 40000, consumption: 1.5, calcMode: 'FREE' },
+    [VehicleType.Aereo]: { fixed: 0, variable: 0, factor: 0, axles: 0, capacity: 0, consumption: 0, calcMode: 'FREE' }
 };
 
 export const INITIAL_CUSTOMERS: Customer[] = [
