@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { hojeYMD, semanaCorrente } from './semana.ts';
+import { hojeYMD, mesCorrente, semanaCorrente } from './semana.ts';
 
 // get-faturamento-publico
 // Endpoint PÚBLICO (sem JWT) para o Painel da TV, que roda sem login.
@@ -97,9 +97,38 @@ Deno.serve(async (req) => {
       console.warn('semana indisponível (painel segue sem gráfico):', (e as Error).message);
     }
 
+    // --- Ajuste manual do mês (NFS emitidas fora do TMS) ---
+    // ISOLADO, pela mesma razão da semana: em 25/09 a TV ficou em "Carregando…"
+    // porque uma leitura secundária derrubou a resposta inteira. O número do mês
+    // é o que a parede existe para mostrar — se esta tabela sumir, estiver vazia
+    // ou der erro, o painel mostra o TMS puro e ninguém fica sem número.
+    //
+    // Mês sem linha é o caso NORMAL: todo mês começa assim, e vira zero.
+    let ajuste = 0;
+    try {
+      const { data: aj, error: erroAjuste } = await db
+        .from('faturamento_ajuste_manual')
+        .select('valor')
+        .eq('mes', mesCorrente())
+        .maybeSingle();
+      if (erroAjuste) throw new Error(erroAjuste.message);
+      const v = Number(aj?.valor);
+      if (Number.isFinite(v)) ajuste = v;
+    } catch (e) {
+      console.warn('ajuste manual indisponível (painel segue com o TMS puro):', (e as Error).message);
+    }
+
     const num = (v: unknown) => (v !== null && v !== undefined ? Number(v) : null);
+    // O total que a TV mostra JÁ VEM SOMADO: um número só na parede, sem
+    // composição. O gráfico da semana NÃO leva o ajuste — ele é só CTe do TMS,
+    // e distribuir um total mensal pelos dias seria inventar data de emissão.
+    const totalTms = num(data.total);
+    const totalComAjuste = totalTms != null ? totalTms + ajuste : totalTms;
     return json({
-      total: num(data.total),
+      total: totalComAjuste,
+      // Quem precisa da composição (Dashboard) lê as duas partes; a TV usa só o total.
+      totalTms,
+      ajusteManual: ajuste,
       ctes: data.ctes ?? null,
       totalHoje: num(data.total_hoje),
       // Dois números do painel: faturamento autorizado e valor travado (pendências).

@@ -112,6 +112,7 @@ import {
     permanentlyDeleteFreightCalculation,
     purgeOldTrash,
     getFaturamentoCache,
+    getAjusteManual, upsertAjusteManual, mesCorrenteBRT, type AjusteManual,
     FaturamentoCache,
     getPainelTvToken,
     getSystemConfig,
@@ -223,6 +224,10 @@ const App: React.FC = () => {
     const [history, setHistory] = useState<FreightCalculation[]>([]);
     const [trash, setTrash] = useState<FreightCalculation[]>([]);
     const [faturamento, setFaturamento] = useState<FaturamentoCache | null>(null);
+    // Complemento manual do mês (NFS fora do TMS). Só o master edita; todo mundo vê somado.
+    const [ajuste, setAjuste] = useState<AjusteManual | null>(null);
+    const [ajusteRascunho, setAjusteRascunho] = useState<string>('');   // o que está digitado no campo
+    const [salvandoAjuste, setSalvandoAjuste] = useState(false);
     const [painelTvToken, setPainelTvToken] = useState<string | null>(null);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [fedTaxes, setFedTaxes] = useState<FederalTaxes>({ pis: 0.65, cofins: 3.0, csll: 1.08, irpj: 1.2, insurancePolicyRate: 0.035 });
@@ -513,6 +518,9 @@ const App: React.FC = () => {
             const trashData = await getDeletedFreightCalculations();
             setTrash(trashData);
             setFaturamento(await getFaturamentoCache());
+            const aj = await getAjusteManual(mesCorrenteBRT());
+            setAjuste(aj);
+            setAjusteRascunho(aj.valor ? maskCurrency(aj.valor) : '');
             setPainelTvToken(await getPainelTvToken());
             const configData = await getSystemConfig();
             if (configData) {
@@ -600,6 +608,29 @@ const App: React.FC = () => {
         // Remove R$, whitespace, and dots used as thousands separators. Replace comma with dot for decimal.
         const clean = s.replace(/R\$\s?/, '').replace(/\./g, '').replace(',', '.').trim();
         return parseFloat(clean) || 0;
+    };
+
+    /**
+     * Grava o complemento manual do mês (NFS fora do TMS).
+     *
+     * A tela só mostra o campo para o master, mas a trava de verdade é a RLS
+     * (fam_insert/fam_update com is_master()): se um operador chamar isto pelo
+     * console, o banco recusa. Por isso o erro é mostrado, não engolido — é o
+     * que distingue "não sou master" de "deu ruim".
+     */
+    const salvarAjusteManual = async () => {
+        if (!ehMaster || salvandoAjuste) return;
+        const mes = mesCorrenteBRT();
+        const valor = num(ajusteRascunho);
+        setSalvandoAjuste(true);
+        try {
+            const r = await upsertAjusteManual(mes, valor, currentUser?.name);
+            if (!r.success) { showFeedback(`Não consegui salvar o ajuste: ${r.error}`, 'error'); return; }
+            setAjuste(await getAjusteManual(mes));
+            showFeedback(valor ? 'Ajuste do mês salvo.' : 'Ajuste do mês zerado.');
+        } finally {
+            setSalvandoAjuste(false);
+        }
     };
 
     const maskCurrency = (val: string | number) => {
@@ -2746,12 +2777,57 @@ Disponibilidade: ${disponibilidade}`;
                                 </div>
                             </div>
 
-                            {/* ===== Faturamento do mês (TMS) — atualizado a cada 2 min pelo cron, lido via realtime ===== */}
+                            {/* ===== Faturamento do mês — TMS + ajuste manual das NFS fora do TMS =====
+                                O cron atualiza o TMS a cada 2 min (realtime). O ajuste é digitado
+                                pelo master e some sozinho na virada do mês: a chave é 'YYYY-MM' e
+                                mês novo simplesmente não tem linha.
+                                O número GRANDE é o total. A composição só aparece quando há ajuste
+                                — sem ele, o quadro fica igual ao que sempre foi. */}
                             <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white p-6 rounded-2xl shadow-sm flex items-center justify-between gap-4">
                                 <div>
-                                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/70 flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5" /> Faturamento do mês · TMS</p>
-                                    <p className="text-4xl font-semibold mt-1 leading-none">{faturamento?.total != null ? `R$ ${formatCur(faturamento.total)}` : '—'}</p>
+                                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/70 flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5" /> Faturamento do mês</p>
+                                    <p className="text-4xl font-semibold mt-1 leading-none">
+                                        {faturamento?.total != null
+                                            ? `R$ ${formatCur(faturamento.total + (ajuste?.valor || 0))}`
+                                            : '—'}
+                                    </p>
+                                    {/* Composição: só quando há ajuste. Zero -> o quadro não ganha linha nova. */}
+                                    {faturamento?.total != null && !!ajuste?.valor && (
+                                        <p className="text-[11px] font-medium text-white/60 mt-1">
+                                            TMS R$ {formatCur(faturamento.total)} + NFS R$ {formatCur(ajuste.valor)}
+                                        </p>
+                                    )}
                                     <p className="text-[11px] font-medium text-white/70 mt-1.5">{faturamento?.ctes != null ? `${faturamento.ctes} CTes emitidos no mês` : 'aguardando primeira leitura'}</p>
+                                    {/* Campo do ajuste: SÓ MASTER. A RLS é quem garante de verdade;
+                                        esconder aqui é conveniência, não segurança. */}
+                                    {ehMaster && (
+                                        <div className="mt-3 flex items-center gap-2">
+                                            <label className="text-[10px] font-medium uppercase tracking-wider text-white/60 shrink-0">
+                                                NFS fora do TMS
+                                            </label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={ajusteRascunho}
+                                                onChange={e => setAjusteRascunho(maskCurrency(e.target.value))}
+                                                onKeyDown={e => { if (e.key === 'Enter') salvarAjusteManual(); }}
+                                                placeholder="0,00"
+                                                className="w-32 bg-white/15 border border-white/30 rounded-lg px-2.5 py-1 text-sm font-medium text-white placeholder-white/40 outline-none focus:border-white/70 transition-colors"
+                                            />
+                                            <button
+                                                onClick={salvarAjusteManual}
+                                                disabled={salvandoAjuste}
+                                                className="text-[11px] font-semibold uppercase tracking-wider bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded-lg px-3 py-1.5 transition-colors"
+                                            >
+                                                {salvandoAjuste ? 'salvando…' : 'salvar'}
+                                            </button>
+                                            {ajuste?.atualizadoPor && (
+                                                <span className="text-[10px] font-medium text-white/50 truncate">
+                                                    por {ajuste.atualizadoPor}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="text-right shrink-0">
                                     {faturamento?.status === 'erro' && (

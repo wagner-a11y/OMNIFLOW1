@@ -34,6 +34,9 @@ export const addDias = (ymd: string, n: number): string => {
     return t.toISOString().slice(0, 10);
 };
 
+/** Mês corrente em BRT, 'YYYY-MM'. Chave da tabela de ajuste manual. */
+export const mesCorrente = (agora: Date = new Date()): string => hojeYMD(agora).slice(0, 7);
+
 /** Os 7 rótulos da semana corrente, domingo -> sábado, em BRT. */
 export const semanaCorrente = (agora: Date = new Date()): string[] => {
     const domingo = addDias(hojeYMD(agora), -dowBRT(agora));
