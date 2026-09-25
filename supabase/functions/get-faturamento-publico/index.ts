@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { hojeYMD, semanaCorrente } from './semana.ts';
 
 // get-faturamento-publico
 // Endpoint PÚBLICO (sem JWT) para o Painel da TV, que roda sem login.
@@ -54,6 +55,48 @@ Deno.serve(async (req) => {
 
     if (error || !data) return json({ error: 'sem dados' }, 502);
 
+    // --- A semana do gráfico ---
+    // ISOLADA DO RESTO, DE PROPÓSITO. Em 25/09/2026 esta leitura derrubou o
+    // painel inteiro: a função foi publicada antes de a tabela existir, o erro
+    // subiu e a TV ficou em "Carregando…" — sem gráfico E sem o número do mês.
+    // O número do mês é o que a parede existe para mostrar; ele não pode depender
+    // do gráfico. Daqui para frente, qualquer falha aqui OMITE o campo `semana`
+    // e o painel renderiza como antes, sem gráfico e sem erro.
+    //
+    // Série vazia também omite: sete barras zeradas não informam nada e só
+    // ocupariam a tela.
+    //
+    // Uma consulta só, na janela de 7 dias. O que não veio do banco é dia futuro
+    // (ou dia sem CTe) e entra com valor 0 — a barra existe, vazia, para a semana
+    // ter sempre 7 colunas. O dia de HOJE vem parcial, por definição.
+    let semana: Array<{ dia: string; valor: number; ctes: number; hoje: boolean; futuro: boolean }> | undefined;
+    try {
+      const dias = semanaCorrente();
+      const hoje = hojeYMD();
+      const { data: serie, error: erroSerie } = await db
+        .from('faturamento_diario')
+        .select('dia, valor, ctes')
+        .gte('dia', dias[0])
+        .lte('dia', dias[6]);
+      if (erroSerie) throw new Error(erroSerie.message);
+      if (serie && serie.length) {
+        const porDia = new Map(serie.map(r => [String(r.dia).slice(0, 10), r]));
+        semana = dias.map(dia => {
+          const r = porDia.get(dia);
+          return {
+            dia,                                       // 'YYYY-MM-DD' (BRT)
+            valor: r ? Number(r.valor) : 0,
+            ctes: r ? Number(r.ctes) : 0,
+            hoje: dia === hoje,
+            futuro: dia > hoje,                        // comparação de texto: 'YYYY-MM-DD' ordena igual à data
+          };
+        });
+      }
+    } catch (e) {
+      // Nunca propaga: o painel sem gráfico é muito melhor que painel nenhum.
+      console.warn('semana indisponível (painel segue sem gráfico):', (e as Error).message);
+    }
+
     const num = (v: unknown) => (v !== null && v !== undefined ? Number(v) : null);
     return json({
       total: num(data.total),
@@ -66,6 +109,12 @@ Deno.serve(async (req) => {
       status: data.status,
       atualizadoEm: data.atualizado_em,   // última tentativa (ok ou erro)
       sucessoEm: data.sucesso_em ?? null,  // última coleta BEM-SUCEDIDA (staleness)
+      // Domingo -> sábado da semana corrente (BRT), sempre 7 itens. O servidor
+      // decide qual é o domingo: a TV não tem como saber se o relógio dela está
+      // no fuso certo, e um painel de parede fica ligado meses sem ninguém olhar.
+      // AUSENTE quando a série falhou ou está vazia — o painel trata como
+      // "sem gráfico" e desenha o resto normalmente.
+      ...(semana ? { semana } : {}),
     });
   } catch (e) {
     return json({ error: 'falha ao ler faturamento', detalhe: (e as Error).message }, 502);

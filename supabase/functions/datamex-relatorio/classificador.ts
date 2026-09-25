@@ -63,6 +63,14 @@ export interface ResultadoBsoft {
     substituidosExcluidos: string[]; // ids excluídos por substituição
     divergencias: Divergencia[];     // sentinela do protocolo (não altera o valor)
     descartados: number;
+    /**
+     * Faturamento por DIA de emissão, 'YYYY-MM-DD' -> { valor, ctes }.
+     *
+     * Mesma passada, mesmos registros: é o `autorizadoHoje` generalizado de um
+     * dia para todos os do período. Não custa request nenhum — os registros já
+     * estão em memória. Só os AUTORIZADOS entram, igual ao total do painel.
+     */
+    porDia: Record<string, { valor: number; ctes: number }>;
 }
 
 export interface ContratoResultado { ok: boolean; erro?: string; }
@@ -145,6 +153,7 @@ export function agregar(registros: RegistroBsoft[], dataIni: string, dataFim: st
 
     // 3) Agrega.
     let faturamentoAutorizado = 0, autorizadoCount = 0, autorizadoHoje = 0;
+    const porDia: Record<string, { valor: number; ctes: number }> = {};
     let valorTravado = 0, canceladoCount = 0, canceladoValor = 0;
     const pendencias: Pendencia[] = [];
     const divergencias: Divergencia[] = [];
@@ -163,7 +172,16 @@ export function agregar(registros: RegistroBsoft[], dataIni: string, dataFim: st
             if (excluidos.has(id)) continue; // substituído por um substituto autorizado -> não conta
             faturamentoAutorizado += valor;
             autorizadoCount++;
-            if (hojeYMD && dataDe(String(r?.data_emissao ?? '')) === hojeYMD) autorizadoHoje += valor;
+            const diaEmissao = dataDe(String(r?.data_emissao ?? ''));
+            if (diaEmissao) {
+                // Comparação de DATA como TEXTO ('YYYY-MM-DD'), nunca via Date:
+                // esta função roda em UTC e converter o instante jogaria o CTe
+                // das últimas três horas do dia para o dia seguinte.
+                const acc = porDia[diaEmissao] ?? { valor: 0, ctes: 0 };
+                acc.valor += valor; acc.ctes++;
+                porDia[diaEmissao] = acc;
+            }
+            if (hojeYMD && diaEmissao === hojeYMD) autorizadoHoje += valor;
         } else if (cat === 'CANCELADO') {
             canceladoCount++; canceladoValor += valor; // fora do faturamento
         } else if (cat === 'PENDENTE') {
@@ -181,5 +199,6 @@ export function agregar(registros: RegistroBsoft[], dataIni: string, dataFim: st
         pendencias, autorizadoCount, autorizadoHoje: round2(autorizadoHoje),
         canceladoCount, canceladoValor: round2(canceladoValor),
         substituidosExcluidos: [...excluidos], divergencias, descartados,
+        porDia: Object.fromEntries(Object.entries(porDia).map(([d, v]) => [d, { valor: round2(v.valor), ctes: v.ctes }])),
     };
 }

@@ -12,9 +12,23 @@ interface Pendencia {
     tomador: string;
 }
 
+/** Um dia da semana corrente, como o servidor manda (domingo -> sábado). */
+interface DiaSemana {
+    dia: string;      // 'YYYY-MM-DD' em America/Sao_Paulo — TEXTO, nunca Date
+    valor: number;
+    ctes: number;
+    hoje: boolean;    // quem decide é o servidor: a TV não sabe se o relógio dela está certo
+    futuro: boolean;  // dia que ainda não chegou -> barra vazia
+}
+
 interface Dados {
     total: number | null;
     ctes: number | null;
+    /**
+     * Continua vindo do endpoint, mas NÃO é mais desenhado: virou a barra de
+     * hoje no gráfico da semana, e repetir o mesmo número duas vezes na parede
+     * era ruído. Mantido no tipo porque o contrato do endpoint não mudou.
+     */
     totalHoje: number | null;
     // Dois números: faturamento autorizado e valor travado (pendências não transmitidas/rejeitadas).
     faturamentoAutorizado?: number | null;
@@ -23,15 +37,83 @@ interface Dados {
     status: string;
     atualizadoEm: string;       // última tentativa (ok ou erro)
     sucessoEm?: string | null;  // última coleta BEM-SUCEDIDA
+    /**
+     * Os 7 dias da semana corrente. OPCIONAL de propósito: enquanto a Edge
+     * Function nova não estiver publicada, o endpoint responde sem este campo e
+     * o painel segue exatamente como era, sem o gráfico e sem erro.
+     */
+    semana?: DiaSemana[];
 }
 
 const STALE_MIN = 15; // acima disso sem coleta bem-sucedida, o painel se marca desatualizado
 
 const POLL_MS = 30_000; // relê o cache a cada 30s (cron grava a cada 2 min)
-const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-faturamento-publico`;
+
+/**
+ * A URL do projeto, com as duas defesas que faltavam aqui.
+ *
+ * FALLBACK: as VITE_* só estão configuradas em Production na Vercel — os
+ * previews nascem sem elas. Sem fallback, `import.meta.env.VITE_SUPABASE_URL`
+ * é inlinado como `undefined` no build e a URL vira
+ * "undefined/functions/v1/…": o fetch cai numa rota relativa, volta 404, e o
+ * painel fica em "Carregando…" para sempre. O services/supabase.ts já tinha
+ * esse fallback pelo mesmo motivo; esta tela ficou de fora.
+ *
+ * TRIM: o valor gravado em Production hoje termina com QUEBRA DE LINHA (dá para
+ * ver no bundle: "…supabase.co\n/functions/v1/…"). Produção sobrevive porque o
+ * parser de URL do navegador descarta \n e \t silenciosamente — mas é sorte, não
+ * desenho. Limpar aqui custa uma chamada e tira a dependência dessa gentileza.
+ */
+const FALLBACK_URL = 'https://trdkggiobsydruihvesj.supabase.co';
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || FALLBACK_URL).trim().replace(/\/+$/, '');
+const FN_URL = `${SUPABASE_URL}/functions/v1/get-faturamento-publico`;
 
 const formatCur = (v: number) =>
     v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Valor curto para caber em cima da barra e ser lido de longe: "12,5 mil",
+// "1,2 mi". Na parede, "R$ 12.480,00" em fonte pequena não se lê.
+const formatCompacto = (v: number): string => {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`;
+    if (v >= 1_000) return `${(v / 1_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`;
+    return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+};
+
+// Rótulos por POSIÇÃO: a semana vem sempre domingo -> sábado do servidor, então
+// o índice já diz o dia. Derivar o nome da data no cliente exigiria Date e
+// reabriria o problema de fuso justo na ponta que não controlamos (o relógio da TV).
+const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+/** "2026-09-18" -> "18". Corte de texto: sem Date, sem fuso. */
+const diaDoMes = (ymd: string): string => (typeof ymd === 'string' ? ymd.slice(8, 10) : '');
+
+/**
+ * Normaliza o que veio no campo `semana` — ou devolve null e o painel fica sem
+ * gráfico.
+ *
+ * O painel da parede não pode depender de o servidor mandar exatamente o
+ * formato esperado. Aqui não se confia em nada: precisa ser array de 7, cada
+ * item vira número/booleano por conversão explícita, e `valor` não-finito (NaN,
+ * Infinity, string, null) vira 0 em vez de contaminar a escala do gráfico.
+ *
+ * null = sem gráfico, e o resto do painel desenha igual.
+ */
+const normalizarSemana = (bruto: unknown): DiaSemana[] | null => {
+    if (!Array.isArray(bruto) || bruto.length !== 7) return null;
+    const dias = bruto.map((d: any) => {
+        const valor = Number(d?.valor);
+        const ctes = Number(d?.ctes);
+        return {
+            dia: typeof d?.dia === 'string' ? d.dia : '',
+            valor: Number.isFinite(valor) ? valor : 0,
+            ctes: Number.isFinite(ctes) ? ctes : 0,
+            hoje: d?.hoje === true,
+            futuro: d?.futuro === true,
+        };
+    });
+    // Sem nenhuma data legível não há o que rotular — melhor não desenhar.
+    return dias.every(d => d.dia.length >= 10) ? dias : null;
+};
 
 // Som de caixa registradora (arquivo real do Pixabay, royalty-free) servido em
 // /coin.mp3 (pasta public). Carregado e tocado pelo AudioContext.
@@ -124,9 +206,20 @@ const PainelTV: React.FC = () => {
             setDados(j);
             setUltimaLeitura(new Date());
             setErro(null);
-        } catch {
-            // Falha de rede: mantém o último valor na tela (fail-soft), sem apagar.
-            setErro(prev => prev ?? null);
+        } catch (e) {
+            // Já houve leitura boa: mantém o último valor na tela (fail-soft) e não
+            // assusta a parede por uma falha de rede passageira.
+            //
+            // NUNCA houve: aí o silêncio é o pior dos mundos — foi assim que esta
+            // tela passou horas em "Carregando…" sem dizer o que estava errado,
+            // enquanto o problema era uma URL montada com "undefined". Falhar
+            // visível é melhor que falhar mudo.
+            const msg = (e as Error)?.message || 'falha desconhecida';
+            console.error('[PainelTV] falha ao ler o faturamento:', msg, '| URL:', FN_URL);
+            setDados(prev => {
+                if (!prev) setErro(`Não consegui ler o faturamento (${msg}).`);
+                return prev;
+            });
         }
     }, [token]);
 
@@ -256,37 +349,131 @@ const PainelTV: React.FC = () => {
                         <span className="text-white/60 align-top" style={{ fontSize: '0.4em' }}>R$ </span>
                         {dados.total != null ? formatCur(dados.total) : '—'}
                     </p>
-                    <p className="mt-8 text-3xl md:text-5xl font-medium text-emerald-200">
-                        R$ {dados.totalHoje != null ? formatCur(dados.totalHoje) : '0,00'} <span className="text-white/50">emitidos hoje</span>
-                    </p>
 
-                    {/* Destaque secundário: valor travado (CTe pendente/rejeitado, não faturado). */}
+                    {/* Destaque secundário: CTe que ainda não virou faturamento (pendente,
+                        rejeitado ou não transmitido). Na tela chama "Em Emissão", que é como
+                        a operação fala; o campo continua `valorTravado` porque é o nome no
+                        banco e na Edge Function — renomear os dois por causa do rótulo seria
+                        migração, não ajuste de texto. */}
                     {dados.valorTravado != null && dados.valorTravado > 0 && (
-                        <p className="mt-5 text-2xl md:text-3xl font-medium text-amber-300/90 flex items-center gap-3">
+                        <p className="mt-8 text-2xl md:text-3xl font-medium text-amber-300/90 flex items-center gap-3">
                             <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400" />
-                            R$ {formatCur(dados.valorTravado)} <span className="text-white/50">travado</span>
+                            R$ {formatCur(dados.valorTravado)} <span className="text-white/50">Em Emissão</span>
                             {dados.pendencias && dados.pendencias.length > 0 && (
                                 <span className="text-white/40 text-lg md:text-xl">· {dados.pendencias.length} CTe(s) pendente(s)</span>
                             )}
                         </p>
                     )}
-                    <div className="mt-12 flex items-center gap-3 text-lg">
-                        <span className={`w-3 h-3 rounded-full ${stale.desatualizado ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
-                        <span className={stale.desatualizado ? 'text-red-300 font-medium' : 'text-white/50'}>
+                    {/* ------------------------------------------------------------------
+                        GRÁFICO DA SEMANA — domingo a sábado, faixa horizontal.
+
+                        Fica ABAIXO do bloco de status de propósito: o número do
+                        mês é o que se lê do fundo da sala e não pode encolher.
+                        O gráfico é a segunda leitura, de quem se aproxima.
+
+                        Sem lib de gráfico: são sete divs com `height` em
+                        porcentagem. Uma dependência nova para desenhar retângulo
+                        custaria bundle e manutenção pelo mesmo resultado.
+
+                        A ESCALA é relativa à MAIOR barra da semana (= 100% da
+                        altura), não a um teto fixo: assim a forma da semana
+                        aparece igual numa semana de R$ 50 mil e numa de R$ 500 mil.
+                        Semana inteira zerada -> todas vazias, sem divisão por zero.
+                       ------------------------------------------------------------------ */}
+                    {(() => {
+                        const semana = normalizarSemana(dados.semana);
+                        if (!semana) return null;   // ausente, vazia ou torta -> painel sem gráfico
+                        // reduce em vez de Math.max(...spread): 7 itens não estouram a
+                        // pilha, mas o spread é o tipo de coisa que quebra quando a
+                        // lista cresce e ninguém lembra do porquê.
+                        const maxValor = semana.reduce((m, d) => (d.valor > m ? d.valor : m), 0);
+                        return (
+                            <div className="mt-14 w-[70vw] max-w-[1600px]">
+                                <div className="flex items-baseline justify-between mb-2">
+                                    <p className="text-sm md:text-base font-medium uppercase tracking-[0.2em] text-white/40">
+                                        Esta semana
+                                    </p>
+                                    <p className="text-sm md:text-base font-medium text-white/40">
+                                        R$ {formatCur(semana.reduce((a, d) => a + d.valor, 0))}
+                                    </p>
+                                </div>
+                                <div className="flex items-end justify-between gap-[1.2vw] h-[18vh]">
+                                    {semana.map((d, i) => {
+                                        // Piso de 2% para o dia que faturou pouco não virar uma
+                                        // linha invisível: a barra existindo comunica "houve CTe".
+                                        const pct = maxValor > 0 && d.valor > 0
+                                            ? Math.max(2, (d.valor / maxValor) * 100)
+                                            : 0;
+                                        return (
+                                            <div key={d.dia} className="flex-1 h-full flex flex-col justify-end items-center gap-[0.6vh]">
+                                                {/* valor acima da barra; dia sem faturamento não escreve nada */}
+                                                <span className={`font-semibold leading-none whitespace-nowrap ${d.hoje ? 'text-emerald-200' : 'text-white/55'}`}
+                                                    style={{ fontSize: 'clamp(0.6rem, 1.15vw, 1.35rem)' }}>
+                                                    {d.valor > 0 ? formatCompacto(d.valor) : ''}
+                                                </span>
+                                                {/* a barra */}
+                                                <div className="w-full flex-1 flex flex-col justify-end">
+                                                    <div
+                                                        className={
+                                                            d.futuro
+                                                                ? 'w-full rounded-t-md border border-dashed border-white/15'
+                                                                : d.hoje
+                                                                    ? 'w-full rounded-t-md bg-emerald-300 shadow-[0_0_25px_rgba(52,211,153,0.55)]'
+                                                                    : d.valor > 0
+                                                                        ? 'w-full rounded-t-md bg-emerald-400/55'
+                                                                        : 'w-full rounded-t-md bg-white/10'
+                                                        }
+                                                        style={{
+                                                            // Futuro e dia vazio ficam com um toco de 4% só para a
+                                                            // coluna existir visualmente — a semana tem sempre 7.
+                                                            height: d.futuro || d.valor === 0 ? '4%' : `${pct}%`,
+                                                            transition: 'height 0.8s ease',
+                                                        }}
+                                                    />
+                                                </div>
+                                                {/* rótulo do dia */}
+                                                <span className={`leading-none whitespace-nowrap ${d.hoje ? 'text-emerald-200 font-bold' : 'text-white/45 font-medium'}`}
+                                                    style={{ fontSize: 'clamp(0.65rem, 1.25vw, 1.5rem)' }}>
+                                                    {DIAS_SEMANA[i]} {diaDoMes(d.dia)}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* ------------------------------------------------------------------
+                        RODAPÉ — o que é serviço, não manchete.
+
+                        A hora da coleta e a contagem de CTes saíram do centro e vieram
+                        para cá juntas: quem olha da parede quer o número do mês e a
+                        forma da semana; a hora da última coleta só importa quando se
+                        desconfia do número, e aí se chega perto.
+
+                        A BOLINHA FICA. Ela é o sinal de vida do painel — verde pulsando
+                        = coletando; vermelha = parado. Foi o que denunciou o cookie
+                        expirado da outra vez, e some junto com o texto se alguém
+                        resolver "limpar" mais.
+
+                        Desatualizado continua GRITANDO: o texto fica vermelho aqui, e o
+                        banner vermelho do topo (que não mudou) é quem avisa de longe.
+                       ------------------------------------------------------------------ */}
+                    <div className="absolute bottom-6 right-8 max-w-[62vw] flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1 text-right text-white/40 text-sm md:text-base font-medium">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${stale.desatualizado ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
+                        <span className={stale.desatualizado ? 'text-red-300' : undefined}>
                             {stale.desatualizado
                                 ? `desatualizado — última coleta OK ${stale.horaSucesso} (${stale.textoIdade})`
                                 : `atualizado ${stale.horaSucesso} (${stale.textoIdade})`}
                         </span>
                         {ultimaLeitura && (
-                            <span className="text-white/40 text-sm ml-2">· tela sincronizada {ultimaLeitura.toLocaleTimeString('pt-BR')}</span>
+                            <span className="hidden md:inline text-white/30">· tela {ultimaLeitura.toLocaleTimeString('pt-BR')}</span>
+                        )}
+                        {dados.ctes != null && (
+                            <span className="text-white/30">· {dados.ctes.toLocaleString('pt-BR')} CTes no mês</span>
                         )}
                     </div>
-                    {/* Canto inferior direito: total de CTes do mês (discreto) */}
-                    {dados.ctes != null && (
-                        <div className="absolute bottom-6 right-8 text-white/40 text-base md:text-lg font-medium">
-                            {dados.ctes.toLocaleString('pt-BR')} CTes no mês
-                        </div>
-                    )}
                 </>
             )}
 
