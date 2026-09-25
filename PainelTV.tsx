@@ -43,7 +43,25 @@ interface Dados {
 const STALE_MIN = 15; // acima disso sem coleta bem-sucedida, o painel se marca desatualizado
 
 const POLL_MS = 30_000; // relê o cache a cada 30s (cron grava a cada 2 min)
-const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-faturamento-publico`;
+
+/**
+ * A URL do projeto, com as duas defesas que faltavam aqui.
+ *
+ * FALLBACK: as VITE_* só estão configuradas em Production na Vercel — os
+ * previews nascem sem elas. Sem fallback, `import.meta.env.VITE_SUPABASE_URL`
+ * é inlinado como `undefined` no build e a URL vira
+ * "undefined/functions/v1/…": o fetch cai numa rota relativa, volta 404, e o
+ * painel fica em "Carregando…" para sempre. O services/supabase.ts já tinha
+ * esse fallback pelo mesmo motivo; esta tela ficou de fora.
+ *
+ * TRIM: o valor gravado em Production hoje termina com QUEBRA DE LINHA (dá para
+ * ver no bundle: "…supabase.co\n/functions/v1/…"). Produção sobrevive porque o
+ * parser de URL do navegador descarta \n e \t silenciosamente — mas é sorte, não
+ * desenho. Limpar aqui custa uma chamada e tira a dependência dessa gentileza.
+ */
+const FALLBACK_URL = 'https://trdkggiobsydruihvesj.supabase.co';
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || FALLBACK_URL).trim().replace(/\/+$/, '');
+const FN_URL = `${SUPABASE_URL}/functions/v1/get-faturamento-publico`;
 
 const formatCur = (v: number) =>
     v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -62,7 +80,35 @@ const formatCompacto = (v: number): string => {
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 /** "2026-09-18" -> "18". Corte de texto: sem Date, sem fuso. */
-const diaDoMes = (ymd: string): string => ymd.slice(8, 10);
+const diaDoMes = (ymd: string): string => (typeof ymd === 'string' ? ymd.slice(8, 10) : '');
+
+/**
+ * Normaliza o que veio no campo `semana` — ou devolve null e o painel fica sem
+ * gráfico.
+ *
+ * O painel da parede não pode depender de o servidor mandar exatamente o
+ * formato esperado. Aqui não se confia em nada: precisa ser array de 7, cada
+ * item vira número/booleano por conversão explícita, e `valor` não-finito (NaN,
+ * Infinity, string, null) vira 0 em vez de contaminar a escala do gráfico.
+ *
+ * null = sem gráfico, e o resto do painel desenha igual.
+ */
+const normalizarSemana = (bruto: unknown): DiaSemana[] | null => {
+    if (!Array.isArray(bruto) || bruto.length !== 7) return null;
+    const dias = bruto.map((d: any) => {
+        const valor = Number(d?.valor);
+        const ctes = Number(d?.ctes);
+        return {
+            dia: typeof d?.dia === 'string' ? d.dia : '',
+            valor: Number.isFinite(valor) ? valor : 0,
+            ctes: Number.isFinite(ctes) ? ctes : 0,
+            hoje: d?.hoje === true,
+            futuro: d?.futuro === true,
+        };
+    });
+    // Sem nenhuma data legível não há o que rotular — melhor não desenhar.
+    return dias.every(d => d.dia.length >= 10) ? dias : null;
+};
 
 // Som de caixa registradora (arquivo real do Pixabay, royalty-free) servido em
 // /coin.mp3 (pasta public). Carregado e tocado pelo AudioContext.
@@ -155,9 +201,20 @@ const PainelTV: React.FC = () => {
             setDados(j);
             setUltimaLeitura(new Date());
             setErro(null);
-        } catch {
-            // Falha de rede: mantém o último valor na tela (fail-soft), sem apagar.
-            setErro(prev => prev ?? null);
+        } catch (e) {
+            // Já houve leitura boa: mantém o último valor na tela (fail-soft) e não
+            // assusta a parede por uma falha de rede passageira.
+            //
+            // NUNCA houve: aí o silêncio é o pior dos mundos — foi assim que esta
+            // tela passou horas em "Carregando…" sem dizer o que estava errado,
+            // enquanto o problema era uma URL montada com "undefined". Falhar
+            // visível é melhor que falhar mudo.
+            const msg = (e as Error)?.message || 'falha desconhecida';
+            console.error('[PainelTV] falha ao ler o faturamento:', msg, '| URL:', FN_URL);
+            setDados(prev => {
+                if (!prev) setErro(`Não consegui ler o faturamento (${msg}).`);
+                return prev;
+            });
         }
     }, [token]);
 
@@ -328,8 +385,13 @@ const PainelTV: React.FC = () => {
                         aparece igual numa semana de R$ 50 mil e numa de R$ 500 mil.
                         Semana inteira zerada -> todas vazias, sem divisão por zero.
                        ------------------------------------------------------------------ */}
-                    {dados.semana && dados.semana.length === 7 && (() => {
-                        const maxValor = Math.max(...dados.semana.map(d => d.valor), 0);
+                    {(() => {
+                        const semana = normalizarSemana(dados.semana);
+                        if (!semana) return null;   // ausente, vazia ou torta -> painel sem gráfico
+                        // reduce em vez de Math.max(...spread): 7 itens não estouram a
+                        // pilha, mas o spread é o tipo de coisa que quebra quando a
+                        // lista cresce e ninguém lembra do porquê.
+                        const maxValor = semana.reduce((m, d) => (d.valor > m ? d.valor : m), 0);
                         return (
                             <div className="mt-10 w-[70vw] max-w-[1600px]">
                                 <div className="flex items-baseline justify-between mb-2">
@@ -337,11 +399,11 @@ const PainelTV: React.FC = () => {
                                         Esta semana
                                     </p>
                                     <p className="text-sm md:text-base font-medium text-white/40">
-                                        R$ {formatCur(dados.semana.reduce((a, d) => a + d.valor, 0))}
+                                        R$ {formatCur(semana.reduce((a, d) => a + d.valor, 0))}
                                     </p>
                                 </div>
                                 <div className="flex items-end justify-between gap-[1.2vw] h-[18vh]">
-                                    {dados.semana.map((d, i) => {
+                                    {semana.map((d, i) => {
                                         // Piso de 2% para o dia que faturou pouco não virar uma
                                         // linha invisível: a barra existindo comunica "houve CTe".
                                         const pct = maxValor > 0 && d.valor > 0
