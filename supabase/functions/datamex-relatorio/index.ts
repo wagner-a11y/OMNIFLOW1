@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { fetchFromBsoftApi } from "./fonteApiBsoft.ts";
 import type { Pendencia } from "./classificador.ts";
+import { brToNumber, somaPorDia } from "./relatorioHtml.ts";
 
 // datamex-relatorio
 // Busca o total de faturamento do mês corrente no TMS Bsoft/NSTech (e-login),
@@ -73,27 +74,6 @@ async function readLatin1(res: Response): Promise<string> {
   return new TextDecoder('iso-8859-1').decode(buf);
 }
 
-// "1.502.836,27" -> 1502836.27  (formato BR: ponto = milhar, vírgula = decimal)
-const brToNumber = (s: string): number => Number(s.replace(/\./g, '').replace(',', '.'));
-
-const MONEY_CELL = /^\d{1,3}(?:\.\d{3})*,\d{2}$/;   // valor 2 casas (descarta peso 4 casas)
-const DATE_CELL = /^\d{2}\/\d{2}\/\d{4}$/;           // DD/MM/YYYY
-const INT_CELL = /^\d{1,7}$/;                        // inteiro puro (candidato a CTRC/nº do conhecimento)
-
-// CTRC (nº do conhecimento) da linha: primeira célula inteira pura depois da data.
-// Anulações têm série própria de numeração baixa (ex.: 20-25) — CTRC < 1000 não é
-// faturamento. Retorna null se não achar (aí, por segurança, NÃO descartamos a linha).
-const ctrcDaLinha = (cells: string[]): number | null => {
-  for (let i = 1; i < Math.min(cells.length, 5); i++) {
-    if (INT_CELL.test(cells[i])) return Number(cells[i]);
-  }
-  return null;
-};
-
-// Data de hoje em BRT (America/Sao_Paulo) no formato DD/MM/YYYY, p/ casar com a
-// coluna "Emissão" do relatório (a função roda em UTC).
-const hojeBR = (): string => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-
 // Data BRT em 'YYYY-MM-DD' (para a janela de emissão da API Bsoft).
 const hojeYMDBR = (): string =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -102,24 +82,6 @@ const inicioMesYMDBR = (): string => hojeYMDBR().slice(0, 8) + '01';
 
 // Flag da fonte API Bsoft (default OFF). Off = mantém o scraping atual.
 const usarApiBsoft = (): boolean => (Deno.env.get('USE_BSOFT_API') ?? 'false').toLowerCase() === 'true';
-
-// Soma o "Total" por CTe (última coluna 2-casas da linha) das linhas cuja
-// Emissão (1ª célula) é HOJE. Mesmo HTML do mês — sem request extra ao TMS.
-function somaFaturadoHoje(html: string, hoje: string): number {
-  let soma = 0;
-  for (const tr of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
-    const cells = [...tr[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)]
-      .map(c => c[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim());
-    if (cells.length >= 20 && DATE_CELL.test(cells[0]) && cells[0] === hoje) {
-      // Descarta CTe de anulação (série própria, CTRC < 1000) — não é faturamento.
-      const ctrc = ctrcDaLinha(cells);
-      if (ctrc !== null && ctrc < 1000) continue;
-      const monies = cells.filter(x => MONEY_CELL.test(x));
-      if (monies.length) soma += brToNumber(monies[monies.length - 1]);
-    }
-  }
-  return soma;
-}
 
 // Detecta a tela de login (sessão expirada) — mesmo quando vem com HTTP 200.
 const looksLikeLogin = (html: string): boolean =>
@@ -134,6 +96,39 @@ const FETCH_HEADERS = (cookie: string) => ({
   'User-Agent': 'Mozilla/5.0 (compatible; OmniFlow/1.0)',
   'Accept': 'text/html,application/xhtml+xml,*/*',
 });
+
+/**
+ * Grava a série diária em faturamento_diario (upsert por dia).
+ *
+ * Só toca os dias que vieram nesta coleta — o relatório é do mês CORRENTE, então
+ * os dias de meses anteriores ficam exatamente como foram gravados quando o mês
+ * deles era o corrente. É isso que faz a semana que atravessa a virada (domingo
+ * em setembro, sábado em outubro) continuar inteira no gráfico.
+ *
+ * Falhar aqui NÃO derruba a coleta: o número grande do painel vem do cache e já
+ * foi gravado. Um buraco no gráfico é muito menos grave que perder o total.
+ */
+async function writeDiario(porDia: Record<string, { valor: number; ctes: number }>) {
+  try {
+    const dias = Object.keys(porDia);
+    if (!dias.length) return;
+    const url = Deno.env.get('SUPABASE_URL');
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!url || !key) return;
+    const db = createClient(url, key);
+    const agora = new Date().toISOString();
+    const linhas = dias.map(dia => ({
+      dia,                                   // 'YYYY-MM-DD', já em BRT, vindo como texto
+      valor: porDia[dia].valor,
+      ctes: porDia[dia].ctes,
+      atualizado_em: agora,
+    }));
+    const { error } = await db.from('faturamento_diario').upsert(linhas, { onConflict: 'dia' });
+    if (error) console.warn('writeDiario falhou:', error.message);
+  } catch (e) {
+    console.warn('writeDiario falhou:', (e as Error).message);
+  }
+}
 
 // Grava o resultado no cache lido pelo painel (linha única id=1).
 // Sucesso: atualiza total/ctes e zera o erro. Erro: marca status/erro SEM
@@ -193,6 +188,10 @@ Deno.serve(async (req) => {
         valorTravado: r.valorTravado,
         pendencias: r.pendencias,
       });
+      // A MESMA série diária da outra fonte. As duas gravam aqui porque a flag
+      // pode virar a qualquer momento: implementar só numa deixaria o gráfico
+      // parar de crescer no dia da troca, e calado.
+      await writeDiario(r.porDia);
       return json({
         fonte: 'api_bsoft', periodo: `${dataIni}..${dataFim}`,
         faturamentoAutorizado: r.faturamentoAutorizado, valorTravado: r.valorTravado,
@@ -254,11 +253,17 @@ Deno.serve(async (req) => {
       return json({ error: 'Total não encontrado no relatório.', amostra: text.slice(-400) }, 502);
     }
 
-    // Faturado hoje: soma dos CTes emitidos na data de hoje (BRT).
-    const totalHoje = somaFaturadoHoje(reportHtml, hojeBR());
+    // UMA passada pelo HTML devolve o mês inteiro dia a dia; "hoje" é só uma
+    // entrada desse mapa. Antes eram duas leituras do mesmo dado.
+    const porDia = somaPorDia(reportHtml);
+    const totalHoje = porDia[hojeYMDBR()]?.valor ?? 0;
 
     await writeCache({ status: 'ok', total, ctes, totalHoje });
-    return json({ total, ctes, totalHoje, fonte: 'relatorio_html', periodo: 'mes_corrente', geradoEm: new Date().toISOString() });
+    await writeDiario(porDia);
+    return json({
+      total, ctes, totalHoje, fonte: 'relatorio_html', periodo: 'mes_corrente',
+      dias: Object.keys(porDia).length, geradoEm: new Date().toISOString(),
+    });
   } catch (e) {
     await writeCache({ status: 'erro', erro: (e as Error).message });
     return json({ error: 'Falha ao acessar o relatório do TMS.', detalhe: (e as Error).message }, 502);

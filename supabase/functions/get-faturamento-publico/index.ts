@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { hojeYMD, semanaCorrente } from './semana.ts';
 
 // get-faturamento-publico
 // Endpoint PÚBLICO (sem JWT) para o Painel da TV, que roda sem login.
@@ -54,6 +55,30 @@ Deno.serve(async (req) => {
 
     if (error || !data) return json({ error: 'sem dados' }, 502);
 
+    // --- A semana do gráfico ---
+    // Uma consulta só, na janela de 7 dias. A tabela guarda os dias que já
+    // aconteceram; o que não veio do banco é dia futuro (ou dia sem CTe) e entra
+    // com valor 0 — a barra existe, vazia, para a semana ter sempre 7 colunas.
+    // O dia de HOJE vem parcial, por definição: é o que já entrou até agora.
+    const dias = semanaCorrente();
+    const hoje = hojeYMD();
+    const { data: serie } = await db
+      .from('faturamento_diario')
+      .select('dia, valor, ctes')
+      .gte('dia', dias[0])
+      .lte('dia', dias[6]);
+    const porDia = new Map((serie ?? []).map(r => [String(r.dia).slice(0, 10), r]));
+    const semana = dias.map(dia => {
+      const r = porDia.get(dia);
+      return {
+        dia,                                       // 'YYYY-MM-DD' (BRT)
+        valor: r ? Number(r.valor) : 0,
+        ctes: r ? Number(r.ctes) : 0,
+        hoje: dia === hoje,
+        futuro: dia > hoje,                        // comparação de texto: 'YYYY-MM-DD' ordena igual à data
+      };
+    });
+
     const num = (v: unknown) => (v !== null && v !== undefined ? Number(v) : null);
     return json({
       total: num(data.total),
@@ -66,6 +91,10 @@ Deno.serve(async (req) => {
       status: data.status,
       atualizadoEm: data.atualizado_em,   // última tentativa (ok ou erro)
       sucessoEm: data.sucesso_em ?? null,  // última coleta BEM-SUCEDIDA (staleness)
+      // Domingo -> sábado da semana corrente (BRT), sempre 7 itens. O servidor
+      // decide qual é o domingo: a TV não tem como saber se o relógio dela está
+      // no fuso certo, e um painel de parede fica ligado meses sem ninguém olhar.
+      semana,
     });
   } catch (e) {
     return json({ error: 'falha ao ler faturamento', detalhe: (e as Error).message }, 502);
