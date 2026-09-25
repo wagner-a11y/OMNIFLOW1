@@ -1,6 +1,6 @@
 // Testes da semana BRT. Roda: npx tsx <este arquivo> (ou via esbuild+node).
 // O que se testa aqui é o FUSO: a Edge Function roda em UTC e o painel é BRT.
-import { hojeYMD, dowBRT, addDias, semanaCorrente } from './semana.ts';
+import { hojeYMD, dowBRT, addDias, semanaCorrente, mesCorrente } from './semana.ts';
 
 let pass = 0, fail = 0;
 const eq = (label, got, want) => {
@@ -54,6 +54,15 @@ for (const iso of ['2026-01-01T12:00:00Z', '2026-06-15T12:00:00Z', '2026-12-31T2
         [s.length, dowBRT(new Date(s[0] + 'T15:00:00Z')), addDias(s[0], 6) === s[6]],
         [7, 0, true]);
 }
+
+// ---- mesCorrente: a chave do ajuste manual, e a virada de mes ----
+// 30/09 as 21h BRT == 01/10 00:00 UTC. Se o mes saisse de getMonth() em UTC, o
+// ajuste digitado na noite do dia 30 iria para outubro e sumiria da tela.
+eq('30/09 21h BRT ainda e setembro', mesCorrente(new Date('2026-10-01T00:00:00Z')), '2026-09');
+eq('(contraste) o instante em UTC ja e outubro', new Date('2026-10-01T00:00:00Z').toISOString().slice(0, 7), '2026-10');
+eq('01/10 09h BRT e outubro', mesCorrente(new Date('2026-10-01T12:00:00Z')), '2026-10');
+eq('31/12 22h BRT ainda e dezembro', mesCorrente(new Date('2027-01-01T01:00:00Z')), '2026-12');
+eq('formato YYYY-MM', /^[0-9]{4}-[0-9]{2}$/.test(mesCorrente(new Date('2026-06-15T12:00:00Z'))), true);
 
 console.log(`\n${pass} ok, ${fail} falhas`);
 process.exit(fail ? 1 : 0);

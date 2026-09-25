@@ -22,7 +22,17 @@ interface DiaSemana {
 }
 
 interface Dados {
+    /**
+     * O que vai na parede: TMS + ajuste manual das NFS emitidas fora do TMS.
+     * UM número só, sem composição — a TV não é lugar de mostrar conta.
+     */
     total: number | null;
+    /**
+     * Só a parte do TMS, sem o ajuste. Não é desenhado: serve para o "+R$" do
+     * CTe novo ser o valor do CTe, e não engordar junto quando o master digita
+     * o complemento do mês. Ausente na função antiga -> cai no total.
+     */
+    totalTms?: number | null;
     ctes: number | null;
     /**
      * Continua vindo do endpoint, mas NÃO é mais desenhado: virou a barra de
@@ -177,10 +187,14 @@ const PainelTV: React.FC = () => {
         if (!dados || dados.ctes == null) return;
         const prevCtes = prevCtesRef.current;
         const prevTotal = prevTotalRef.current;
+        // Acompanha a parte do TMS, não o total: senão, digitar o ajuste manual
+        // no mesmo intervalo em que um CTe entra mostraria "+R$ 20.850,00" —
+        // o CTe somado ao complemento do mês, que não é o que acabou de entrar.
+        const baseDelta = dados.totalTms ?? dados.total;
         prevCtesRef.current = dados.ctes;
-        prevTotalRef.current = dados.total;
+        prevTotalRef.current = baseDelta;
         if (prevCtes != null && dados.ctes > prevCtes) {
-            const d = (dados.total != null && prevTotal != null) ? dados.total - prevTotal : null;
+            const d = (baseDelta != null && prevTotal != null) ? baseDelta - prevTotal : null;
             setDelta(d != null && d > 0 ? d : null);
             setAnimar(true);
             tocarSom();

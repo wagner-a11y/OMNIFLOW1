@@ -818,6 +818,84 @@ export const getFaturamentoCache = async (): Promise<FaturamentoCache | null> =>
     };
 };
 
+// =================== AJUSTE MANUAL DO FATURAMENTO ===================
+// As NFS emitidas FORA do TMS (não viram CTe). O master digita o complemento do
+// mês e ele soma ao total no Dashboard e no Painel TV. Uma linha por mês, e mês
+// sem linha = zero — é assim que vira o mês sem nenhuma rotina de virada.
+
+/**
+ * Mês corrente como 'YYYY-MM' em America/Sao_Paulo.
+ *
+ * Intl com timeZone explícito, não getMonth(): entre 21h e 23h59 do dia 30 (BRT)
+ * o UTC já é dia 1º do mês seguinte, e o ajuste iria para o mês errado — ou
+ * sumiria da tela por três horas, toda virada de mês.
+ */
+export const mesCorrenteBRT = (agora: Date = new Date()): string =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' })
+        .format(agora).slice(0, 7);
+
+export interface AjusteManual {
+    mes: string;
+    valor: number;
+    atualizadoPor: string | null;
+    atualizadoEm: string | null;
+}
+
+/**
+ * Lê o ajuste de um mês. Mês sem linha devolve zero — não é erro, é o estado
+ * normal de todo mês que começa.
+ *
+ * Falha de leitura também devolve zero: o quadro do faturamento tem de aparecer
+ * com o número do TMS mesmo que esta tabela esteja fora do ar.
+ */
+export const getAjusteManual = async (mes: string): Promise<AjusteManual> => {
+    const vazio: AjusteManual = { mes, valor: 0, atualizadoPor: null, atualizadoEm: null };
+    try {
+        const { data, error } = await supabase
+            .from('faturamento_ajuste_manual')
+            .select('mes, valor, atualizado_por, atualizado_em')
+            .eq('mes', mes)
+            .maybeSingle();
+        if (error || !data) {
+            if (error) console.warn('getAjusteManual:', error.message);
+            return vazio;
+        }
+        const valor = Number(data.valor);
+        return {
+            mes: String(data.mes),
+            valor: Number.isFinite(valor) ? valor : 0,
+            atualizadoPor: data.atualizado_por ?? null,
+            atualizadoEm: data.atualizado_em ?? null,
+        };
+    } catch (e) {
+        console.warn('getAjusteManual falhou:', (e as Error).message);
+        return vazio;
+    }
+};
+
+/**
+ * Grava o ajuste do mês. SÓ MASTER — e quem garante isso é a RLS (fam_insert /
+ * fam_update com is_master()), não a tela: esconder o campo é conveniência, a
+ * trava real mora no banco.
+ */
+export const upsertAjusteManual = async (
+    mes: string, valor: number, autor?: string | null,
+): Promise<{ success: boolean; error?: string }> => {
+    const { error } = await supabase
+        .from('faturamento_ajuste_manual')
+        .upsert([{
+            mes,
+            valor,
+            atualizado_por: autor || null,
+            atualizado_em: new Date().toISOString(),
+        }], { onConflict: 'mes' });
+    if (error) {
+        console.error('upsertAjusteManual:', error.message);
+        return { success: false, error: error.message };
+    }
+    return { success: true };
+};
+
 // Token do Painel TV — lido só por usuário logado (RLS authenticated). Usado
 // pra montar o link do menu sem expor o token no bundle público.
 export const getPainelTvToken = async (): Promise<string | null> => {
