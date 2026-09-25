@@ -350,11 +350,15 @@ const PainelTV: React.FC = () => {
                         {dados.total != null ? formatCur(dados.total) : '—'}
                     </p>
 
-                    {/* Destaque secundário: valor travado (CTe pendente/rejeitado, não faturado). */}
+                    {/* Destaque secundário: CTe que ainda não virou faturamento (pendente,
+                        rejeitado ou não transmitido). Na tela chama "Em Emissão", que é como
+                        a operação fala; o campo continua `valorTravado` porque é o nome no
+                        banco e na Edge Function — renomear os dois por causa do rótulo seria
+                        migração, não ajuste de texto. */}
                     {dados.valorTravado != null && dados.valorTravado > 0 && (
                         <p className="mt-8 text-2xl md:text-3xl font-medium text-amber-300/90 flex items-center gap-3">
                             <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400" />
-                            R$ {formatCur(dados.valorTravado)} <span className="text-white/50">travado</span>
+                            R$ {formatCur(dados.valorTravado)} <span className="text-white/50">Em Emissão</span>
                             {dados.pendencias && dados.pendencias.length > 0 && (
                                 <span className="text-white/40 text-lg md:text-xl">· {dados.pendencias.length} CTe(s) pendente(s)</span>
                             )}
