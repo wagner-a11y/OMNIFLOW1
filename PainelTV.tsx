@@ -24,6 +24,11 @@ interface DiaSemana {
 interface Dados {
     total: number | null;
     ctes: number | null;
+    /**
+     * Continua vindo do endpoint, mas NÃO é mais desenhado: virou a barra de
+     * hoje no gráfico da semana, e repetir o mesmo número duas vezes na parede
+     * era ruído. Mantido no tipo porque o contrato do endpoint não mudou.
+     */
     totalHoje: number | null;
     // Dois números: faturamento autorizado e valor travado (pendências não transmitidas/rejeitadas).
     faturamentoAutorizado?: number | null;
@@ -344,13 +349,10 @@ const PainelTV: React.FC = () => {
                         <span className="text-white/60 align-top" style={{ fontSize: '0.4em' }}>R$ </span>
                         {dados.total != null ? formatCur(dados.total) : '—'}
                     </p>
-                    <p className="mt-8 text-3xl md:text-5xl font-medium text-emerald-200">
-                        R$ {dados.totalHoje != null ? formatCur(dados.totalHoje) : '0,00'} <span className="text-white/50">emitidos hoje</span>
-                    </p>
 
                     {/* Destaque secundário: valor travado (CTe pendente/rejeitado, não faturado). */}
                     {dados.valorTravado != null && dados.valorTravado > 0 && (
-                        <p className="mt-5 text-2xl md:text-3xl font-medium text-amber-300/90 flex items-center gap-3">
+                        <p className="mt-8 text-2xl md:text-3xl font-medium text-amber-300/90 flex items-center gap-3">
                             <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400" />
                             R$ {formatCur(dados.valorTravado)} <span className="text-white/50">travado</span>
                             {dados.pendencias && dados.pendencias.length > 0 && (
@@ -358,17 +360,6 @@ const PainelTV: React.FC = () => {
                             )}
                         </p>
                     )}
-                    <div className="mt-12 flex items-center gap-3 text-lg">
-                        <span className={`w-3 h-3 rounded-full ${stale.desatualizado ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
-                        <span className={stale.desatualizado ? 'text-red-300 font-medium' : 'text-white/50'}>
-                            {stale.desatualizado
-                                ? `desatualizado — última coleta OK ${stale.horaSucesso} (${stale.textoIdade})`
-                                : `atualizado ${stale.horaSucesso} (${stale.textoIdade})`}
-                        </span>
-                        {ultimaLeitura && (
-                            <span className="text-white/40 text-sm ml-2">· tela sincronizada {ultimaLeitura.toLocaleTimeString('pt-BR')}</span>
-                        )}
-                    </div>
                     {/* ------------------------------------------------------------------
                         GRÁFICO DA SEMANA — domingo a sábado, faixa horizontal.
 
@@ -393,7 +384,7 @@ const PainelTV: React.FC = () => {
                         // lista cresce e ninguém lembra do porquê.
                         const maxValor = semana.reduce((m, d) => (d.valor > m ? d.valor : m), 0);
                         return (
-                            <div className="mt-10 w-[70vw] max-w-[1600px]">
+                            <div className="mt-14 w-[70vw] max-w-[1600px]">
                                 <div className="flex items-baseline justify-between mb-2">
                                     <p className="text-sm md:text-base font-medium uppercase tracking-[0.2em] text-white/40">
                                         Esta semana
@@ -449,12 +440,36 @@ const PainelTV: React.FC = () => {
                         );
                     })()}
 
-                    {/* Canto inferior direito: total de CTes do mês (discreto) */}
-                    {dados.ctes != null && (
-                        <div className="absolute bottom-6 right-8 text-white/40 text-base md:text-lg font-medium">
-                            {dados.ctes.toLocaleString('pt-BR')} CTes no mês
-                        </div>
-                    )}
+                    {/* ------------------------------------------------------------------
+                        RODAPÉ — o que é serviço, não manchete.
+
+                        A hora da coleta e a contagem de CTes saíram do centro e vieram
+                        para cá juntas: quem olha da parede quer o número do mês e a
+                        forma da semana; a hora da última coleta só importa quando se
+                        desconfia do número, e aí se chega perto.
+
+                        A BOLINHA FICA. Ela é o sinal de vida do painel — verde pulsando
+                        = coletando; vermelha = parado. Foi o que denunciou o cookie
+                        expirado da outra vez, e some junto com o texto se alguém
+                        resolver "limpar" mais.
+
+                        Desatualizado continua GRITANDO: o texto fica vermelho aqui, e o
+                        banner vermelho do topo (que não mudou) é quem avisa de longe.
+                       ------------------------------------------------------------------ */}
+                    <div className="absolute bottom-6 right-8 max-w-[62vw] flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1 text-right text-white/40 text-sm md:text-base font-medium">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${stale.desatualizado ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
+                        <span className={stale.desatualizado ? 'text-red-300' : undefined}>
+                            {stale.desatualizado
+                                ? `desatualizado — última coleta OK ${stale.horaSucesso} (${stale.textoIdade})`
+                                : `atualizado ${stale.horaSucesso} (${stale.textoIdade})`}
+                        </span>
+                        {ultimaLeitura && (
+                            <span className="hidden md:inline text-white/30">· tela {ultimaLeitura.toLocaleTimeString('pt-BR')}</span>
+                        )}
+                        {dados.ctes != null && (
+                            <span className="text-white/30">· {dados.ctes.toLocaleString('pt-BR')} CTes no mês</span>
+                        )}
+                    </div>
                 </>
             )}
 
