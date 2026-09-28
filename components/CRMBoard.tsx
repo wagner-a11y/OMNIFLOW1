@@ -10,12 +10,22 @@ interface CRMBoardProps {
     systemConfig: FederalTaxes;
 }
 
+/**
+ * As colunas do FUNIL DE FATURAMENTO, na ordem em que a operação fala.
+ *
+ * Cards NÃO andam sozinhos: quem move é o comercial, arrastando. Nenhuma coluna
+ * é derivada de data — inclusive "Carregando Hoje", que é estágio manual.
+ *
+ * O que NÃO aparece aqui, de propósito: `spot_simulated` (simulação, não é
+ * cotação real) e `em_operacao` (legado — nenhum fluxo grava mais). Status fora
+ * desta lista não é renderizado, que é o comportamento de sempre.
+ */
 const COLUMNS: { id: QuoteStatus; label: string; color: string; border: string }[] = [
-    { id: 'pending', label: 'Cotações (Novas)', color: 'bg-[#f9fafb] text-slate-600', border: 'border-slate-200' },
-    { id: 'respondida', label: 'Respondidas', color: 'bg-blue-50 text-blue-600', border: 'border-blue-200' },
+    { id: 'pending', label: 'Cotações', color: 'bg-[#f9fafb] text-slate-600', border: 'border-slate-200' },
+    { id: 'respondida', label: 'Negociação', color: 'bg-blue-50 text-blue-600', border: 'border-blue-200' },
     { id: 'aprovada', label: 'Aprovadas', color: 'bg-indigo-50 text-indigo-600', border: 'border-indigo-200' },
-    { id: 'em_operacao', label: 'Em Operação', color: 'bg-amber-50 text-amber-600', border: 'border-amber-200' },
-    { id: 'won', label: 'Ganha (Faturado)', color: 'bg-emerald-50 text-emerald-600', border: 'border-emerald-200' },
+    { id: 'carregando', label: 'Carregando Hoje', color: 'bg-amber-50 text-amber-600', border: 'border-amber-200' },
+    { id: 'won', label: 'Faturado', color: 'bg-emerald-50 text-emerald-600', border: 'border-emerald-200' },
     { id: 'lost', label: 'Perdida', color: 'bg-red-50 text-red-600', border: 'border-red-200' }
 ];
 
@@ -43,7 +53,10 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
 
         // Columns Logic
         const cols: Record<QuoteStatus, FreightCalculation[]> = {
-            pending: [], respondida: [], aprovada: [], em_operacao: [], won: [], lost: [], spot_simulated: []
+            pending: [], respondida: [], aprovada: [], carregando: [],
+            // em_operacao e spot_simulated existem no tipo mas NÃO têm coluna: o que
+            // cai neles fica fora do board, como já era antes desta mudança.
+            em_operacao: [], won: [], lost: [], spot_simulated: []
         };
         filteredQuotes.forEach(q => {
             const status = q.status as QuoteStatus;
@@ -54,8 +67,10 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
         // Insights Logic
         const goalValue = systemConfig.goals?.[selectedMonth] || 0;
 
-        // Realizado = Aprovada + Em Operação + Ganha
-        const realizedValue = [...cols.aprovada, ...cols.em_operacao, ...cols.won]
+        // Realizado = o que já está fechado: Aprovadas + Carregando Hoje + Faturado.
+        // `em_operacao` segue na soma por causa de cotação antiga que possa tê-lo
+        // gravado — tirá-lo faria o realizado do mês passado encolher sozinho.
+        const realizedValue = [...cols.aprovada, ...cols.carregando, ...cols.won, ...cols.em_operacao]
             .reduce((acc, curr) => acc + (curr.totalFreight || 0), 0);
 
         const percentReached = goalValue > 0 ? (realizedValue / goalValue) * 100 : 0;

@@ -1126,14 +1126,26 @@ const App: React.FC = () => {
         }
     };
 
+    /**
+     * Move um card no funil de faturamento. SÓ GRAVA O STATUS.
+     *
+     * Arrastar para "Faturado" (won) NÃO dispara mais nada: nem modal de Carga
+     * Ganha, nem card no Pipefy, nem no Ramper. Quando a carga chega em Faturado
+     * ela já rodou — não há o que abrir. Decisão do Wagner em 28/09/2026, ao
+     * religar o funil.
+     *
+     * O modal de Carga Ganha NÃO foi removido do sistema: continua nos outros dois
+     * caminhos, que são os de verdade para alimentar o Pipefy —
+     *   saveQuote('won')     a tela de cotação fechando a carga;
+     *   handleBotaoPipefy()  o botão PIPEFY, que precisa dos 25 campos do modal.
+     * O que mudou é só que o FUNIL não é mais um desses caminhos.
+     *
+     * "Perdida" continua passando pelo modal de motivo: quem chama já manda
+     * `lostData`, e sem motivo o CRMBoard não deixa concluir o arrasto.
+     */
     const handleCRMStatusUpdate = async (id: string, newStatus: QuoteStatus, lostData?: { reason: any; obs: string; fileUrl: string }) => {
         const quote = history.find(h => h.id === id);
         if (!quote) return;
-
-        if (newStatus === 'won') {
-            openWonModal(quote);
-            return;
-        }
 
         const updatedQuote: FreightCalculation = {
             ...quote,
@@ -2637,7 +2649,7 @@ Disponibilidade: ${disponibilidade}`;
                     <h2 className="text-base font-medium text-[#111827]">
                         {editingId ? 'Editando Registro' :
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
-                                activeTab === 'crm' ? 'CRM' :
+                                activeTab === 'crm' ? 'Funil de Faturamento' :
                                     activeTab === 'tracking' ? 'Acompanhamento PPFY' :
                                         activeTab === 'prospeccao' ? 'Prospecção · Mini CRM' :
                                         activeTab === 'contato-diario' ? 'Contato Diário · Carteira' :
@@ -2660,9 +2672,12 @@ Disponibilidade: ${disponibilidade}`;
                 </header>
 
                 <div className="p-8 max-w-7xl mx-auto space-y-8">
-                    {/* Rota do CRM DESATIVADA (comercial migrou pro Ramper). Componente CRMBoard e dados
-                        preservados. Reversível: troque `false` por `activeTab === 'crm'` pra reativar. */}
-                    {false && (
+                    {/* FUNIL DE FATURAMENTO — religado em 28/09/2026, para substituir o controle
+                        que o comercial fazia no Ramper. Ficou desativado enquanto o comercial
+                        usou o Ramper; o componente e os dados sempre estiveram aqui.
+                        É o funil das cotações fechadas até faturar. O funil de PROSPECÇÃO é
+                        outro (Acompanhamento de Negociações) e segue independente deste. */}
+                    {activeTab === 'crm' && (
                         <div className="h-full animate-fade-in">
                             <CRMBoard
                                 quotes={history}
