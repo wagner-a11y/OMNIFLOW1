@@ -1258,16 +1258,55 @@ export async function carregarHistoricoFastDelivery(
 }
 
 /**
+ * Veículos que a operação FAST atende: os pequenos. Lista FECHADA.
+ *
+ * Fora dela — Truck, Bitruck, qualquer carreta, Rodotrem, e o que ainda não
+ * existe — a carga é pesada e o card vai como "Suzano Mogi". Desconhecido cai em
+ * Mogi de propósito: é o lado seguro. Um pesado rotulado de Fast entra na
+ * esteira errada do board; um leve rotulado de Mogi só chama atenção.
+ */
+const FAST_VEICULOS_LEVES = new Set(
+    ['Fiorino', 'Van', 'HR', 'VUC', '3/4', 'Toco'].map(normalizarNomeVeiculo),
+);
+
+/**
+ * Nome de veículo comparável: sem caixa e sem espaço nenhum.
+ *
+ * DOIS VOCABULÁRIOS chegam aqui e é por isso que a normalização é agressiva. A
+ * cotação guarda `veiculo_tipo_operacao`, que é o nome da tabela de preço do OTM
+ * em MAIÚSCULAS ("TOCO", "CARRETA"), enquanto o resto do sistema usa os nomes
+ * oficiais ("Toco", "Carreta Simples"). Normalizados, os dois caem no mesmo
+ * lugar — e os dois casos que já nos morderam no Fast ('toco' minúsculo e o
+ * '3/4 ' com espaço no fim) deixam de importar.
+ *
+ * A MESMA função normaliza a lista acima, então nome com espaço continuaria
+ * funcionando se um dia entrar nela.
+ */
+function normalizarNomeVeiculo(v: string | null | undefined): string {
+    return (v ?? '').toLowerCase().replace(/\s+/g, '');
+}
+
+/**
  * Título do card no Pipefy, por operação.
  *
- * O Fast manda "Suzano Fast", que é como a operação sempre apareceu no board.
- * As Demais Plantas mandam VAZIO de propósito: a Edge Function, sem título,
- * usa o campo Rota — que agora carrega a origem real. Assim o card sai
- * "Mucuri, BA > SAO LUIS/MA" em vez de um rótulo que não diz de onde a carga
- * saiu. Mudar o padrão é mudar esta função, e só ela.
+ * ISOLAMENTO: a primeira linha é o portão. Operação que não é o FAST sai daqui
+ * com VAZIO, exatamente como antes — Demais Plantas e qualquer outra que venha
+ * não passam nem perto da regra do veículo. O vazio é de propósito: sem título,
+ * a Edge Function usa o campo Rota, e o card sai "Mucuri, BA > SAO LUIS/MA" em
+ * vez de um rótulo que não diz de onde a carga saiu.
+ *
+ * DENTRO DO FAST, o título depende do veículo (regra do Wagner, 28/09/2026): a
+ * operação Fast é só para veículos pequenos, então carga pesada vai rotulada
+ * como "Suzano Mogi" para não entrar no fluxo errado do board.
+ *
+ * Só o TÍTULO muda. Pipe de destino, fase, valores e todos os outros campos
+ * seguem iguais — quem decide o Pipe é a Edge Function, pela `operacao`.
  */
-export function tituloCardPipefy(operacao: string): string {
-    return operacao === OPERACAO ? 'Suzano Fast' : '';
+export function tituloCardPipefy(operacao: string, tipoVeiculo?: string | null): string {
+    if (operacao !== OPERACAO) return '';
+    return FAST_VEICULOS_LEVES.has(normalizarNomeVeiculo(tipoVeiculo))
+        ? 'Suzano Fast'
+        : 'Suzano Mogi';
 }
 
 /**
@@ -1405,7 +1444,9 @@ export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<Resultad
 
     const quem = await clienteESolicitanteDoCard(c);
     const res = await createPipefyCard({
-        titulo: tituloCardPipefy(c.operacao),
+        // O veículo entra só para o TÍTULO (Fast leve x Mogi pesado). Nenhum outro
+        // campo muda por causa dele.
+        titulo: tituloCardPipefy(c.operacao, c.tipoVeiculo),
         // Decide o Pipe de destino no servidor: Fast tem Pipe próprio
         // ("Fretes - Suzano Fast"); Demais Plantas segue no Pipe de sempre.
         operacao: c.operacao,
