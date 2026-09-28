@@ -2671,7 +2671,10 @@ Disponibilidade: ${disponibilidade}`;
                     )}
                 </header>
 
-                <div className="p-8 max-w-7xl mx-auto space-y-8">
+                {/* O funil precisa da tela inteira: seis colunas em max-w-7xl (1280px)
+                    dariam ~200px cada e voltariam a pedir rolagem lateral. Só o CRM
+                    escapa do limite; todas as outras abas seguem centralizadas. */}
+                <div className={`p-8 ${activeTab === 'crm' ? 'max-w-none' : 'max-w-7xl'} mx-auto space-y-8`}>
                     {/* FUNIL DE FATURAMENTO — religado em 28/09/2026, para substituir o controle
                         que o comercial fazia no Ramper. Ficou desativado enquanto o comercial
                         usou o Ramper; o componente e os dados sempre estiveram aqui.
