@@ -244,6 +244,24 @@ const App: React.FC = () => {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
     const [showConfigModal, setShowConfigModal] = useState(false);
     const [isWonModalOpen, setIsWonModalOpen] = useState(false);
+    /**
+     * De onde o modal de Carga Ganha foi aberto.
+     *
+     * 'cotacao' é o caminho de sempre (tela de cotação e botão PIPEFY): fecha a
+     * carga como Ganha, comemora e vai para o Histórico.
+     * 'funil'  é o caminho novo (arrastar para Aprovadas): manda para o Pipefy e
+     * DEVOLVE o operador ao funil, com o card onde ele estava.
+     */
+    const [wonModalModo, setWonModalModo] = useState<'cotacao' | 'funil'>('cotacao');
+    /**
+     * Aprovação em curso, esperando o Pipefy.
+     *
+     * Entrar em "Aprovadas" EXIGE card no Pipefy (decisão do Wagner, 29/09/2026):
+     * o status só é gravado depois que o card nasce. Enquanto isso, guardamos
+     * de onde o card saiu — para devolvê-lo com uma mensagem que diz onde ele
+     * ficou, se o envio não acontecer.
+     */
+    const [aprovacaoPendente, setAprovacaoPendente] = useState<{ id: string; statusAnterior: QuoteStatus } | null>(null);
     const [selectedWonQuote, setSelectedWonQuote] = useState<FreightCalculation | null>(null);
     const [newCustomerName, setNewCustomerName] = useState('');
     const [newCustomerLogo, setNewCustomerLogo] = useState('');
@@ -1126,12 +1144,36 @@ const App: React.FC = () => {
         }
     };
 
+    /**
+     * Move um card no funil de faturamento. SÓ GRAVA O STATUS.
+     *
+     * Arrastar para "Faturado" (won) NÃO dispara mais nada: nem modal de Carga
+     * Ganha, nem card no Pipefy, nem no Ramper. Quando a carga chega em Faturado
+     * ela já rodou — não há o que abrir. Decisão do Wagner em 28/09/2026, ao
+     * religar o funil.
+     *
+     * O modal de Carga Ganha NÃO foi removido do sistema: continua nos outros dois
+     * caminhos, que são os de verdade para alimentar o Pipefy —
+     *   saveQuote('won')     a tela de cotação fechando a carga;
+     *   handleBotaoPipefy()  o botão PIPEFY, que precisa dos 25 campos do modal.
+     * O que mudou é só que o FUNIL não é mais um desses caminhos.
+     *
+     * "Perdida" continua passando pelo modal de motivo: quem chama já manda
+     * `lostData`, e sem motivo o CRMBoard não deixa concluir o arrasto.
+     */
     const handleCRMStatusUpdate = async (id: string, newStatus: QuoteStatus, lostData?: { reason: any; obs: string; fileUrl: string }) => {
         const quote = history.find(h => h.id === id);
         if (!quote) return;
 
-        if (newStatus === 'won') {
-            openWonModal(quote);
+        // PORTÃO DE "APROVADAS": só entra quem tem card no Pipefy.
+        //
+        // Sem card, o status NÃO é gravado aqui — abre-se o modal e a gravação
+        // acontece lá, e só se o card nascer. Enquanto isso o card não se mexe:
+        // o board desenha a partir do histórico, então não gravar é não mover.
+        // Quem já tem card entra direto, sem perguntar nada.
+        if (newStatus === 'aprovada' && !quote.pipefySentAt && !quote.pipefyCardId) {
+            setAprovacaoPendente({ id, statusAnterior: quote.status });
+            openWonModal(quote, 'funil');
             return;
         }
 
@@ -1155,10 +1197,146 @@ const App: React.FC = () => {
         }
     };
 
+    /**
+     * Envio ao Pipefy a partir do FUNIL. Variante de handleWonInfoSubmit.
+     *
+     * Reusa tudo o que importa — o mesmo WonInfoModal, o mesmo openWonModal que
+     * resolve o vínculo do cliente, o mesmo createPipefyCard e a mesma ponte que
+     * aprende o clientePipefyId. O que NÃO faz é o que pertence ao fechamento da
+     * carga, e não ao funil:
+     *   - não força status 'won': o card fica na coluna onde está (Aprovadas).
+     *     Mandar para o Pipefy deixou de ser sinônimo de fechar como Ganha;
+     *   - sem confete, sem reset da calculadora, sem troca de aba — quem estava
+     *     no funil continua no funil, olhando o card que acabou de enviar;
+     *   - nunca toca no Ramper.
+     *
+     * O caminho antigo (handleWonInfoSubmit) segue intacto, celebração inclusive.
+     */
+    const handleWonInfoSubmitFunil = async (wonData: any) => {
+        if (!selectedWonQuote) return;
+        const base = selectedWonQuote;
+
+        // Esta aprovação está esperando o card? Então o status só muda se ele nascer.
+        const aprovando = aprovacaoPendente?.id === base.id;
+
+        // Os dados do modal entram na cotação, MENOS o status: ele continua o que
+        // era. Salvar aqui é de propósito — se o Pipefy falhar depois, o operador
+        // não perde o que digitou, e tenta de novo sem redigitar.
+        const comDados: FreightCalculation = {
+            ...base,
+            ...wonData,
+            status: base.status,
+            updatedAt: new Date().toISOString(),
+            updatedBy: currentUser?.id,
+            updatedByName: currentUser?.name,
+        };
+
+        const salvou = await updateFreightCalculation(comDados);
+        if (!salvou.success) {
+            showFeedback(`Erro ao salvar os dados da carga: ${salvou.error || 'erro desconhecido'}`, 'error');
+            return;
+        }
+
+        // Ponte do Cliente: a mesma do fluxo antigo — aprende o id do Pipefy no
+        // cadastro local para não perguntar de novo na próxima carga do cliente.
+        if (wonData.clientePipefyId && base.customerId) {
+            const cust = customers.find(c => c.id === base.customerId);
+            if (cust && cust.pipefyClientId !== wonData.clientePipefyId) {
+                const atualizado = { ...cust, pipefyClientId: wonData.clientePipefyId };
+                if (await updateCustomer(atualizado)) setCustomers(prev => prev.map(c => c.id === cust.id ? atualizado : c));
+            }
+        }
+
+        let finalQuote = comDados;
+        if (base.pipefyCardId) {
+            showFeedback('Esta carga já tinha card no Pipefy — não dupliquei.', 'info');
+            // Já tinha card: a aprovação pode seguir em frente.
+            if (aprovando) {
+                finalQuote = { ...comDados, status: 'aprovada' };
+                await updateFreightCalculation(finalQuote);
+            }
+        } else {
+            const rota = `${wonData.coletaEndereco || base.origin || '—'} > ${wonData.entregaEndereco || base.destination || '—'}`;
+            const res = await createPipefyCard({
+                rota,
+                receita: Number(wonData.nossoFrete) || 0,
+                freteTerceiro: Number(wonData.freteTerceiro) || 0,
+                valorCarga: Number(wonData.valorCarga) || 0,
+                peso: Number(wonData.pesoCargaOperacao) || undefined,
+                veiculo: wonData.veiculoTipoOperacao || base.vehicleType,
+                mercadoria: wonData.materialTipo || base.merchandiseType,
+                implemento: wonData.carroceriaTipoOperacao,
+                dataColeta: wonData.coletaDate,
+                dataEntrega: wonData.entregaDate,
+                dataFechamento: wonData.dataFechamento,
+                localColeta: wonData.coletaEndereco,
+                localEntrega: wonData.entregaEndereco,
+                observacoes: [
+                    (wonData.observacoesGerais || '').trim(),
+                    (wonData.outrasNecessidades || '').trim() ? `Necessidades: ${(wonData.outrasNecessidades || '').trim()}` : '',
+                ].filter(Boolean).join('\n'),
+                referencia: wonData.referenciaClienteOperacao || base.clientReference,
+                outrasNecessidades: wonData.outrasNecessidades,
+                cliente: wonData.clienteNomeOperacao,
+                clienteId: wonData.clientePipefyId,
+                solicitante: wonData.solicitante,
+                solicitanteId: wonData.solicitantePipefyId,
+                mercadoriaNovaUsada: wonData.mercadoriaNovaUsada,
+                outrasNecessidadesSelect: wonData.outrasNecessidadesPipefy,
+                necessidadeGR: wonData.necessidadeGR,
+                titulo: [wonData.clienteNomeOperacao, rota].map((x: string) => (x || '').trim()).filter(Boolean).join(' — '),
+            });
+            if (res?.ok && res.cardId) {
+                finalQuote = {
+                    ...comDados,
+                    // O card nasceu: é AQUI que a aprovação se concretiza.
+                    status: aprovando ? 'aprovada' : comDados.status,
+                    pipefyCardId: res.cardId,
+                    pipefyCardUrl: res.cardUrl || undefined,
+                    pipefySentAt: new Date().toISOString(),
+                    clientePipefyId: wonData.clientePipefyId,
+                    solicitantePipefyId: wonData.solicitantePipefyId,
+                };
+                await updateFreightCalculation(finalQuote);
+                showFeedback(aprovando ? 'Enviada pro Pipefy. A carga entrou em Aprovadas.' : 'Enviada pro Pipefy.');
+            } else {
+                // O card NÃO nasceu, então a carga NÃO entra em Aprovadas: ela fica
+                // onde estava. Os dados do modal ficaram salvos — dá para tentar de
+                // novo sem redigitar nada.
+                const onde = rotuloColuna(base.status);
+                showFeedback(
+                    `Card não enviado ao Pipefy: ${res?.error || 'erro desconhecido'}. `
+                    + `A cotação continua em ${onde}.`,
+                    'error',
+                );
+            }
+        }
+
+        setHistory(prev => prev.map(h => h.id === base.id ? finalQuote : h));
+        setIsWonModalOpen(false);
+        setSelectedWonQuote(null);
+        setWonModalModo('cotacao');   // volta ao padrão para o próximo uso
+        setAprovacaoPendente(null);
+    };
+
     // Abre o formulário de Carga Ganha já com a ponte do Cliente resolvida: nome do cliente local
     // e, se já vinculado, o id do registro do Pipefy guardado no cadastro desse cliente (vínculo
     // automático). Sem vínculo, o operador confirma uma vez no autocomplete do modal.
-    const openWonModal = (q: FreightCalculation) => {
+    /**
+     * Abre o modal de Carga Ganha. O MODO vem de quem abre, com 'cotacao' por
+     * padrão: assim os dois caminhos antigos (saveQuote('won') e o botão PIPEFY)
+     * seguem no comportamento de sempre sem saber que existe um modo, e não há
+     * como sobrar 'funil' de um uso anterior.
+     */
+    /** Nome da coluna do funil, para falar com o operador na língua da tela. */
+    const rotuloColuna = (st?: QuoteStatus): string => ({
+        pending: 'Cotações', respondida: 'Negociação', aprovada: 'Aprovadas',
+        carregando: 'Carregando Hoje', won: 'Faturado', lost: 'Perdida',
+        em_operacao: 'Em Operação', spot_simulated: 'Spot',
+    }[st || 'pending'] || 'origem');
+
+    const openWonModal = (q: FreightCalculation, modo: 'cotacao' | 'funil' = 'cotacao') => {
+        setWonModalModo(modo);
         const cust = customers.find(c => c.id === q.customerId);
         setSelectedWonQuote({
             ...q,
@@ -2637,7 +2815,7 @@ Disponibilidade: ${disponibilidade}`;
                     <h2 className="text-base font-medium text-[#111827]">
                         {editingId ? 'Editando Registro' :
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
-                                activeTab === 'crm' ? 'CRM' :
+                                activeTab === 'crm' ? 'Funil de Faturamento' :
                                     activeTab === 'tracking' ? 'Acompanhamento PPFY' :
                                         activeTab === 'prospeccao' ? 'Prospecção · Mini CRM' :
                                         activeTab === 'contato-diario' ? 'Contato Diário · Carteira' :
@@ -2659,10 +2837,16 @@ Disponibilidade: ${disponibilidade}`;
                     )}
                 </header>
 
-                <div className="p-8 max-w-7xl mx-auto space-y-8">
-                    {/* Rota do CRM DESATIVADA (comercial migrou pro Ramper). Componente CRMBoard e dados
-                        preservados. Reversível: troque `false` por `activeTab === 'crm'` pra reativar. */}
-                    {false && (
+                {/* O funil precisa da tela inteira: seis colunas em max-w-7xl (1280px)
+                    dariam ~200px cada e voltariam a pedir rolagem lateral. Só o CRM
+                    escapa do limite; todas as outras abas seguem centralizadas. */}
+                <div className={`p-8 ${activeTab === 'crm' ? 'max-w-none' : 'max-w-7xl'} mx-auto space-y-8`}>
+                    {/* FUNIL DE FATURAMENTO — religado em 28/09/2026, para substituir o controle
+                        que o comercial fazia no Ramper. Ficou desativado enquanto o comercial
+                        usou o Ramper; o componente e os dados sempre estiveram aqui.
+                        É o funil das cotações fechadas até faturar. O funil de PROSPECÇÃO é
+                        outro (Acompanhamento de Negociações) e segue independente deste. */}
+                    {activeTab === 'crm' && (
                         <div className="h-full animate-fade-in">
                             <CRMBoard
                                 quotes={history}
@@ -5297,17 +5481,33 @@ Disponibilidade: ${disponibilidade}`;
                     </div>
                 )
             }
+            {/* MESMO modal nos dois caminhos; o que muda é o que acontece ao enviar.
+                'funil' devolve o operador ao funil com o card onde estava; 'cotacao'
+                é o fechamento de carga de sempre, com celebração e ida ao Histórico. */}
             {isWonModalOpen && selectedWonQuote && (
                 <WonInfoModal
                     isOpen={isWonModalOpen}
                     onClose={() => {
+                        // Fechar o modal no meio de uma aprovação = desistir do envio.
+                        // Sem card no Pipefy não há entrada em Aprovadas, então a carga
+                        // fica onde estava — e a mensagem diz onde, para o operador não
+                        // ficar procurando o card que "sumiu".
+                        if (aprovacaoPendente) {
+                            showFeedback(
+                                `Card não enviado ao Pipefy — a cotação continua em ${rotuloColuna(aprovacaoPendente.statusAnterior)}.`,
+                                'info',
+                            );
+                            setAprovacaoPendente(null);
+                        }
                         setIsWonModalOpen(false);
                         setSelectedWonQuote(null);
+                        setWonModalModo('cotacao');
                     }}
-                    onSubmit={handleWonInfoSubmit}
+                    onSubmit={wonModalModo === 'funil' ? handleWonInfoSubmitFunil : handleWonInfoSubmit}
                     quote={selectedWonQuote}
                 />
             )}
+
         </div >
     );
 };

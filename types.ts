@@ -40,7 +40,29 @@ export enum VehicleType {
 }
 
 export type Disponibilidade = "Imediato" | "Conforme programação";
-export type QuoteStatus = "pending" | "respondida" | "aprovada" | "em_operacao" | "won" | "lost" | "spot_simulated";
+/**
+ * Estágios da cotação. São também as COLUNAS do funil de faturamento (CRMBoard).
+ *
+ * A coluna `status` do banco é TEXTO LIVRE (não há CHECK constraint), então
+ * acrescentar valor aqui é aditivo: nenhuma migration, e cotação antiga em
+ * qualquer um dos valores continua válida.
+ *
+ *   pending     Cotações        — entrou, ainda não respondida
+ *   respondida  Negociação      — proposta na mão do cliente
+ *   aprovada    Aprovadas       — cliente aprovou
+ *   carregando  Carregando Hoje — carga do dia (28/09/2026)
+ *   won         Faturado        — faturado; era rotulado "Ganha"
+ *   lost        Perdida         — com motivo obrigatório (LOST_REASONS)
+ *
+ * `em_operacao` NÃO é mais usado: nenhum fluxo grava esse valor. Fica declarado
+ * porque o Acompanhamento de Negociações ainda o LÊ (negociacoes.ts) e porque
+ * cotação antiga pode tê-lo gravado. "Carregando Hoje" ganhou chave própria de
+ * propósito: em `em_operacao`, mover um card no funil de faturamento fecharia a
+ * negociação do OUTRO funil como ganha, e os dois são independentes.
+ *
+ * `spot_simulated` é simulação, e por isso fica FORA do funil.
+ */
+export type QuoteStatus = "pending" | "respondida" | "aprovada" | "carregando" | "em_operacao" | "won" | "lost" | "spot_simulated";
 export type LostReason = "preco_alto" | "prazo_entrega" | "concorrencia" | "disponibilidade" | "outros" | "";
 
 export const LOST_REASONS: Record<string, string> = {

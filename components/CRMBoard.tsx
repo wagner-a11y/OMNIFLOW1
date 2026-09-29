@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { FreightCalculation, QuoteStatus, LOST_REASONS, LostReason, FederalTaxes } from '../types';
-import { Paperclip, X, FileText, Calendar, DollarSign, MapPin, AlertCircle, TrendingUp, Target, Activity, BarChart3, Clock, PieChart, ShieldCheck, Zap, Info, Scale } from 'lucide-react';
+import { Paperclip, X, FileText, Calendar, DollarSign, MapPin, AlertCircle, TrendingUp, Target, Activity, BarChart3, Clock, PieChart, ShieldCheck, Zap, Info, Scale, Send } from 'lucide-react';
 
 interface CRMBoardProps {
     quotes: FreightCalculation[];
@@ -10,14 +10,42 @@ interface CRMBoardProps {
     systemConfig: FederalTaxes;
 }
 
-const COLUMNS: { id: QuoteStatus; label: string; color: string; border: string }[] = [
-    { id: 'pending', label: 'Cotações (Novas)', color: 'bg-[#f9fafb] text-slate-600', border: 'border-slate-200' },
-    { id: 'respondida', label: 'Respondidas', color: 'bg-blue-50 text-blue-600', border: 'border-blue-200' },
-    { id: 'aprovada', label: 'Aprovadas', color: 'bg-indigo-50 text-indigo-600', border: 'border-indigo-200' },
-    { id: 'em_operacao', label: 'Em Operação', color: 'bg-amber-50 text-amber-600', border: 'border-amber-200' },
-    { id: 'won', label: 'Ganha (Faturado)', color: 'bg-emerald-50 text-emerald-600', border: 'border-emerald-200' },
-    { id: 'lost', label: 'Perdida', color: 'bg-red-50 text-red-600', border: 'border-red-200' }
+/**
+ * As colunas do FUNIL DE FATURAMENTO, na ordem em que a operação fala.
+ *
+ * Cards NÃO andam sozinhos: quem move é o comercial, arrastando. Nenhuma coluna
+ * é derivada de data — inclusive "Carregando Hoje", que é estágio manual.
+ *
+ * O que NÃO aparece aqui, de propósito: `spot_simulated` (simulação, não é
+ * cotação real) e `em_operacao` (legado — nenhum fluxo grava mais). Status fora
+ * desta lista não é renderizado, que é o comportamento de sempre.
+ */
+const COLUMNS: { id: QuoteStatus; label: string; color: string; border: string; bar: string }[] = [
+    { id: 'pending', label: 'Cotações', color: 'bg-[#f9fafb] text-slate-600', border: 'border-slate-200', bar: 'bg-slate-300' },
+    { id: 'respondida', label: 'Negociação', color: 'bg-blue-50 text-blue-600', border: 'border-blue-200', bar: 'bg-blue-400' },
+    { id: 'aprovada', label: 'Aprovadas', color: 'bg-indigo-50 text-indigo-600', border: 'border-indigo-200', bar: 'bg-indigo-400' },
+    { id: 'carregando', label: 'Carregando Hoje', color: 'bg-amber-50 text-amber-600', border: 'border-amber-200', bar: 'bg-amber-400' },
+    { id: 'won', label: 'Faturado', color: 'bg-emerald-50 text-emerald-600', border: 'border-emerald-200', bar: 'bg-emerald-400' },
+    { id: 'lost', label: 'Perdida', color: 'bg-red-50 text-red-600', border: 'border-red-200', bar: 'bg-red-400' }
 ];
+
+/**
+ * Colunas em que o card mostra o selo do Pipefy.
+ *
+ * De Aprovadas em diante: antes disso a carga ainda não foi fechada e ninguém
+ * espera card na operação. Perdida fica fora pelo motivo óbvio.
+ *
+ * O selo agora é SÓ o verde. Desde que entrar em Aprovadas passou a exigir card
+ * no Pipefy, "não enviado" nessa coluna virou estado impossível; e nas colunas
+ * seguintes o card chega por Aprovadas, então também já tem. Carga antiga, de
+ * antes da regra, simplesmente não mostra selo — melhor do que um alerta âmbar
+ * sobre algo que não dá mais para acontecer.
+ */
+const COLUNAS_COM_SELO_PIPEFY: QuoteStatus[] = ['aprovada', 'carregando', 'won'];
+
+/** Iniciais do responsável, para o selo pequeno no card. "Wagner Ribeiro" -> "WR". */
+const iniciais = (nome?: string): string =>
+    (nome || '').trim().split(/\s+/).slice(0, 2).map(p => p.charAt(0).toUpperCase()).join('') || '—';
 
 export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, customers, systemConfig }) => {
     const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -43,7 +71,10 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
 
         // Columns Logic
         const cols: Record<QuoteStatus, FreightCalculation[]> = {
-            pending: [], respondida: [], aprovada: [], em_operacao: [], won: [], lost: [], spot_simulated: []
+            pending: [], respondida: [], aprovada: [], carregando: [],
+            // em_operacao e spot_simulated existem no tipo mas NÃO têm coluna: o que
+            // cai neles fica fora do board, como já era antes desta mudança.
+            em_operacao: [], won: [], lost: [], spot_simulated: []
         };
         filteredQuotes.forEach(q => {
             const status = q.status as QuoteStatus;
@@ -54,8 +85,10 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
         // Insights Logic
         const goalValue = systemConfig.goals?.[selectedMonth] || 0;
 
-        // Realizado = Aprovada + Em Operação + Ganha
-        const realizedValue = [...cols.aprovada, ...cols.em_operacao, ...cols.won]
+        // Realizado = o que já está fechado: Aprovadas + Carregando Hoje + Faturado.
+        // `em_operacao` segue na soma por causa de cotação antiga que possa tê-lo
+        // gravado — tirá-lo faria o realizado do mês passado encolher sozinho.
+        const realizedValue = [...cols.aprovada, ...cols.carregando, ...cols.won, ...cols.em_operacao]
             .reduce((acc, curr) => acc + (curr.totalFreight || 0), 0);
 
         const percentReached = goalValue > 0 ? (realizedValue / goalValue) * 100 : 0;
@@ -194,8 +227,19 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                 </div>
             </div>
 
-            {/* Kanban Board */}
-            <div className="flex-1 flex overflow-x-auto gap-4 pb-4">
+            {/* ------------------------------------------------------------------
+                KANBAN — as SEIS colunas na mesma tela, sem rolagem lateral.
+
+                As colunas dividem a largura em partes iguais (`flex-1` + `min-w-0`,
+                que é o que permite o conteúdo encolher em vez de empurrar a linha).
+                O que rola é o MIOLO de cada coluna, na vertical: a altura vem do
+                viewport (`calc(100vh-…)`) porque a página inteira já rola, e sem
+                altura determinada o `overflow-y` de dentro nunca teria o que cortar.
+
+                Cards enxutos de propósito: numa coluna de ~1/6 da tela cabe cliente,
+                rota, valor e data. O resto está no detalhe, a um clique.
+               ------------------------------------------------------------------ */}
+            <div className="flex gap-3 h-[calc(100vh-19rem)] min-h-[420px]">
                 {COLUMNS.map(col => {
                     const items = columns[col.id];
                     const totalValue = items.reduce((acc, curr) => acc + (curr.totalFreight || 0), 0);
@@ -203,87 +247,101 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                     return (
                         <div
                             key={col.id}
-                            className={`min-w-[320px] w-[320px] flex flex-col rounded-xl border ${col.border} shadow-sm bg-white overflow-hidden`}
+                            className={`flex-1 min-w-0 flex flex-col rounded-xl border ${col.border} shadow-sm bg-white overflow-hidden`}
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, col.id)}
                         >
-                            {/* Column Header */}
-                            <div className={`p-5 flex flex-col gap-2 ${col.color}`}>
-                                <div className="flex justify-between items-center">
-                                    <span className="font-medium text-sm uppercase tracking-wide">{col.label}</span>
-                                    <span className="bg-white/40 px-3 py-1 rounded-full text-xs font-medium">{items.length}</span>
+                            {/* faixa de cor: identifica a coluna sem gastar altura */}
+                            <div className={`h-[3px] w-full ${col.bar} flex-shrink-0`} />
+
+                            {/* Cabeçalho compacto: nome · total · contagem */}
+                            <div className={`px-3 py-2.5 flex flex-col gap-0.5 flex-shrink-0 ${col.color}`}>
+                                <div className="flex justify-between items-center gap-2">
+                                    <span className="font-semibold text-xs uppercase tracking-wide truncate" title={col.label}>{col.label}</span>
+                                    <span className="bg-white/50 px-2 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0">{items.length}</span>
                                 </div>
-                                <div className="text-xs font-medium opacity-80 mt-1">
-                                    Total: {formatCurrency(totalValue)}
+                                <div className="text-[11px] font-medium opacity-80 truncate" title={formatCurrency(totalValue)}>
+                                    {formatCurrency(totalValue)}
+                                </div>
+                                <div className="text-[9px] font-medium opacity-60">
+                                    {items.length === 1 ? '1 oportunidade' : `${items.length} oportunidades`}
                                 </div>
                             </div>
 
-                            {/* Cards Container */}
-                            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 bg-[#f9fafb]/50">
+                            {/* Miolo: é AQUI que rola, na vertical */}
+                            <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-2 bg-[#f9fafb]/60">
                                 {items.map(quote => {
                                     const customer = customers.find(c => c.id === quote.customerId);
                                     const loadingDate = quote.createdAt ? new Date(quote.createdAt) : null;
                                     const daysUntilLoad = loadingDate ? Math.ceil((loadingDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
                                     const isUrgentDate = daysUntilLoad !== null && daysUntilLoad <= 3 && daysUntilLoad >= 0;
+                                    const rota = `${(quote.origin || '').split(',')[0]} × ${(quote.destination || '').split(',')[0]}`;
+                                    const mostraSelo = COLUNAS_COM_SELO_PIPEFY.includes(col.id);
+                                    const noPipefy = !!(quote.pipefySentAt || quote.pipefyCardId);
                                     return (
                                         <div
                                             key={quote.id}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, quote.id)}
                                             onClick={() => setSelectedQuote(quote)}
-                                            className="bg-white p-4 rounded-lg shadow-sm border border-[#e5e7eb] cursor-pointer hover:shadow-sm hover:-translate-y-1 transition-all active:cursor-grabbing group relative overflow-hidden"
+                                            className="bg-white px-2.5 py-2 rounded-lg shadow-sm border border-[#e5e7eb] cursor-pointer hover:border-blue-300 hover:shadow transition-all active:cursor-grabbing"
                                         >
-                                            <div className="absolute top-0 left-0 w-1 h-full bg-slate-200 group-hover:bg-blue-400 transition-colors"></div>
-                                            <div className="pl-3">
-                                                {/* Header: Logo + Info */}
-                                                <div className="flex items-start gap-3 mb-3">
-                                                    {/* Customer Logo */}
-                                                    <div className="w-10 h-10 rounded-xl bg-[#f9fafb] border border-[#e5e7eb] flex items-center justify-center overflow-hidden flex-shrink-0">
-                                                        {customer?.logoUrl ? (
-                                                            <img src={customer.logoUrl} className="w-full h-full object-contain" alt={customer.name} />
-                                                        ) : (
-                                                            <span className="font-medium text-slate-300 text-sm">{(customer?.name || '?').charAt(0)}</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex justify-between items-start">
-                                                            <h4 className="font-medium text-[#111827] text-sm line-clamp-1">{customer?.name || 'Cliente'}</h4>
-                                                            {quote.disponibilidade === 'Imediato' && (
-                                                                <span className="bg-red-50 text-red-600 text-[9px] px-2 py-1 rounded-lg font-medium flex items-center gap-1 uppercase tracking-tighter ml-1 flex-shrink-0">
-                                                                    <AlertCircle className="w-3 h-3" /> Urgente
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <span className="text-[10px] font-medium text-[#6b7280]">#{quote.proposalNumber}</span>
-                                                    </div>
-                                                </div>
-
-                                                {/* Route */}
-                                                <div className="flex items-center gap-1 text-[10px] font-medium text-[#6b7280] mb-3">
-                                                    <MapPin className="w-3 h-3 flex-shrink-0" />
-                                                    <span className="truncate">{(quote.origin || '').split(',')[0]} × {(quote.destination || '').split(',')[0]}</span>
-                                                </div>
-
-                                                {/* Value */}
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] text-[#6b7280] font-medium uppercase tracking-wider">{quote.vehicleType.split('-')[0]}</span>
-                                                        <span className="text-base font-medium text-[#111827]">{formatCurrency(quote.totalFreight)}</span>
-                                                    </div>
-                                                </div>
-
-                                                {/* Date */}
-                                                <div className={`flex items-center gap-1.5 pt-2 border-t border-slate-50 ${isUrgentDate ? 'text-amber-500' : 'text-slate-300'}`}>
-                                                    <Calendar className="w-3 h-3" />
-                                                    <span className="text-[10px] font-medium">
-                                                        {loadingDate ? loadingDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '---'}
+                                            {/* linha 1 — cliente + urgência */}
+                                            <div className="flex items-center gap-1.5">
+                                                <h4 className="font-semibold text-[#111827] text-[11px] leading-tight truncate flex-1" title={customer?.name || 'Cliente'}>
+                                                    {customer?.name || 'Cliente'}
+                                                </h4>
+                                                {quote.disponibilidade === 'Imediato' && (
+                                                    // title no <span>, nao no icone: o lucide nao aceita title como prop
+                                                    <span title="Imediato" className="flex-shrink-0 leading-none">
+                                                        <AlertCircle className="w-3 h-3 text-red-500" />
                                                     </span>
-                                                    {isUrgentDate && <AlertCircle className="w-3 h-3 text-amber-500" />}
+                                                )}
+                                            </div>
+
+                                            {/* selo do Pipefy: só de Aprovadas em diante, e só o verde */}
+                                            {mostraSelo && noPipefy && (
+                                                <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-600"
+                                                    title="Card criado no Pipefy">
+                                                    <Send className="w-2.5 h-2.5" />
+                                                    no Pipefy
+                                                </div>
+                                            )}
+
+                                            {/* linha 2 — rota, truncada */}
+                                            <div className="flex items-center gap-1 text-[10px] font-medium text-[#6b7280] mt-1 min-w-0">
+                                                <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
+                                                <span className="truncate" title={rota}>{rota}</span>
+                                            </div>
+
+                                            {/* linha 3 — valor + data + responsável */}
+                                            <div className="flex items-end justify-between gap-1.5 mt-1.5">
+                                                <span className="text-[13px] font-semibold text-[#111827] leading-none truncate" title={formatCurrency(quote.totalFreight)}>
+                                                    {formatCurrency(quote.totalFreight)}
+                                                </span>
+                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                    <span className={`text-[9px] font-medium flex items-center gap-0.5 ${isUrgentDate ? 'text-amber-500' : 'text-[#9ca3af]'}`}>
+                                                        <Calendar className="w-2.5 h-2.5" />
+                                                        {loadingDate ? loadingDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '--/--'}
+                                                    </span>
+                                                    {/* Responsável: quem CRIOU a cotação (createdByName) */}
+                                                    <span
+                                                        className="w-4 h-4 rounded-full bg-slate-100 text-[7px] font-bold text-slate-500 flex items-center justify-center flex-shrink-0"
+                                                        title={quote.createdByName || 'sem responsável'}
+                                                    >
+                                                        {iniciais(quote.createdByName)}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
                                     );
                                 })}
+                                {/* coluna vazia continua sendo alvo de drop: a área precisa existir */}
+                                {items.length === 0 && (
+                                    <div className="flex-1 min-h-[80px] rounded-lg border border-dashed border-slate-200 flex items-center justify-center">
+                                        <span className="text-[10px] font-medium text-slate-300">arraste aqui</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     );

@@ -83,6 +83,9 @@ export function montarMenu(ctx: ContextoMenu): { secoes: SecaoMenu[]; soltos: It
         {
             id: 'comercial', titulo: 'Comercial', itens: [
                 { id: 'prospeccao', label: 'Meu CRM', master: true },
+                // Funil de FATURAMENTO: as cotações fechadas andando até faturar. Não é o
+                // mesmo que "Acompanhamento de Negociações", que é o funil de prospecção.
+                { id: 'crm', label: 'Funil de Faturamento' },
                 { id: 'new', label: 'Nova Cotação' },
                 { id: 'dashboard', label: 'Dashboard' },
                 ...acoesComercial,

@@ -11,7 +11,7 @@ export interface AlteracaoCotacao {
     statusNoMomento: string | null; mudancas: Mudanca[];
 }
 
-const STATUS_LABEL: Record<string, string> = { pending: 'Pauta', won: 'Ganha', lost: 'Perdida', em_operacao: 'Em operação', respondida: 'Respondida', aprovada: 'Aprovada', spot_simulated: 'Spot' };
+const STATUS_LABEL: Record<string, string> = { pending: 'Pauta', won: 'Faturado', lost: 'Perdida', carregando: 'Carregando Hoje', em_operacao: 'Em operação', respondida: 'Respondida', aprovada: 'Aprovada', spot_simulated: 'Spot' };
 const rota = (q: FreightCalculation) => `${q.origin || '—'} → ${q.destination || '—'}`;
 const totalCustos = (q: FreightCalculation) => (q.extraCosts || 0) + (q.otherCosts || []).reduce((s, c) => s + (c.value || 0), 0);
 // Compara números tolerando 2 casas (evita ruído de ponto flutuante).
