@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { FreightCalculation, QuoteStatus, LOST_REASONS, LostReason, FederalTaxes } from '../types';
-import { Paperclip, X, FileText, Calendar, DollarSign, MapPin, AlertCircle, TrendingUp, Target, Activity, BarChart3, Clock, PieChart, ShieldCheck, Zap, Info, Scale } from 'lucide-react';
+import { Paperclip, X, FileText, Calendar, DollarSign, MapPin, AlertCircle, TrendingUp, Target, Activity, BarChart3, Clock, PieChart, ShieldCheck, Zap, Info, Scale, Send } from 'lucide-react';
 
 interface CRMBoardProps {
     quotes: FreightCalculation[];
@@ -28,6 +28,15 @@ const COLUMNS: { id: QuoteStatus; label: string; color: string; border: string; 
     { id: 'won', label: 'Faturado', color: 'bg-emerald-50 text-emerald-600', border: 'border-emerald-200', bar: 'bg-emerald-400' },
     { id: 'lost', label: 'Perdida', color: 'bg-red-50 text-red-600', border: 'border-red-200', bar: 'bg-red-400' }
 ];
+
+/**
+ * Colunas em que o card mostra o selo do Pipefy.
+ *
+ * De Aprovadas em diante: antes disso a carga ainda não foi fechada e ninguém
+ * espera card na operação — "não enviado" ali seria alarme falso em toda cotação
+ * nova. Perdida também fica fora, pelo motivo óbvio.
+ */
+const COLUNAS_COM_SELO_PIPEFY: QuoteStatus[] = ['aprovada', 'carregando', 'won'];
 
 /** Iniciais do responsável, para o selo pequeno no card. "Wagner Ribeiro" -> "WR". */
 const iniciais = (nome?: string): string =>
@@ -262,6 +271,8 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                     const daysUntilLoad = loadingDate ? Math.ceil((loadingDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
                                     const isUrgentDate = daysUntilLoad !== null && daysUntilLoad <= 3 && daysUntilLoad >= 0;
                                     const rota = `${(quote.origin || '').split(',')[0]} × ${(quote.destination || '').split(',')[0]}`;
+                                    const mostraSelo = COLUNAS_COM_SELO_PIPEFY.includes(col.id);
+                                    const noPipefy = !!(quote.pipefySentAt || quote.pipefyCardId);
                                     return (
                                         <div
                                             key={quote.id}
@@ -282,6 +293,15 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                                     </span>
                                                 )}
                                             </div>
+
+                                            {/* selo do Pipefy: só de Aprovadas em diante */}
+                                            {mostraSelo && (
+                                                <div className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold ${noPipefy ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}
+                                                    title={noPipefy ? 'Card criado no Pipefy' : 'Ainda não enviada ao Pipefy'}>
+                                                    <Send className="w-2.5 h-2.5" />
+                                                    {noPipefy ? 'no Pipefy' : 'não enviado'}
+                                                </div>
+                                            )}
 
                                             {/* linha 2 — rota, truncada */}
                                             <div className="flex items-center gap-1 text-[10px] font-medium text-[#6b7280] mt-1 min-w-0">

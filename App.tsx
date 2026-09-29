@@ -244,6 +244,17 @@ const App: React.FC = () => {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
     const [showConfigModal, setShowConfigModal] = useState(false);
     const [isWonModalOpen, setIsWonModalOpen] = useState(false);
+    /**
+     * De onde o modal de Carga Ganha foi aberto.
+     *
+     * 'cotacao' é o caminho de sempre (tela de cotação e botão PIPEFY): fecha a
+     * carga como Ganha, comemora e vai para o Histórico.
+     * 'funil'  é o caminho novo (arrastar para Aprovadas): manda para o Pipefy e
+     * DEVOLVE o operador ao funil, com o card onde ele estava.
+     */
+    const [wonModalModo, setWonModalModo] = useState<'cotacao' | 'funil'>('cotacao');
+    /** Cotação que acabou de chegar em Aprovadas e está esperando a decisão do Pipefy. */
+    const [pipefyPrompt, setPipefyPrompt] = useState<FreightCalculation | null>(null);
     const [selectedWonQuote, setSelectedWonQuote] = useState<FreightCalculation | null>(null);
     const [newCustomerName, setNewCustomerName] = useState('');
     const [newCustomerLogo, setNewCustomerLogo] = useState('');
@@ -1162,15 +1173,131 @@ const App: React.FC = () => {
         if (result.success) {
             setHistory(prev => prev.map(h => h.id === id ? updatedQuote : h));
             showFeedback('Status atualizado!');
+            // Chegou em Aprovadas e ainda não tem card: oferece o envio ao Pipefy.
+            // O status JÁ foi gravado acima — a telinha é opcional, e recusar não
+            // desfaz o movimento do card.
+            // Já enviado antes não pergunta de novo: o card mostra "✓ no Pipefy".
+            if (newStatus === 'aprovada' && !updatedQuote.pipefySentAt && !updatedQuote.pipefyCardId) {
+                setPipefyPrompt(updatedQuote);
+            }
         } else {
             showFeedback(`Erro ao atualizar status: ${result.error}`, 'error');
         }
     };
 
+    /**
+     * Envio ao Pipefy a partir do FUNIL. Variante de handleWonInfoSubmit.
+     *
+     * Reusa tudo o que importa — o mesmo WonInfoModal, o mesmo openWonModal que
+     * resolve o vínculo do cliente, o mesmo createPipefyCard e a mesma ponte que
+     * aprende o clientePipefyId. O que NÃO faz é o que pertence ao fechamento da
+     * carga, e não ao funil:
+     *   - não força status 'won': o card fica na coluna onde está (Aprovadas).
+     *     Mandar para o Pipefy deixou de ser sinônimo de fechar como Ganha;
+     *   - sem confete, sem reset da calculadora, sem troca de aba — quem estava
+     *     no funil continua no funil, olhando o card que acabou de enviar;
+     *   - nunca toca no Ramper.
+     *
+     * O caminho antigo (handleWonInfoSubmit) segue intacto, celebração inclusive.
+     */
+    const handleWonInfoSubmitFunil = async (wonData: any) => {
+        if (!selectedWonQuote) return;
+        const base = selectedWonQuote;
+
+        // Os dados do modal entram na cotação, MENOS o status: ele continua o que era.
+        const comDados: FreightCalculation = {
+            ...base,
+            ...wonData,
+            status: base.status,
+            updatedAt: new Date().toISOString(),
+            updatedBy: currentUser?.id,
+            updatedByName: currentUser?.name,
+        };
+
+        const salvou = await updateFreightCalculation(comDados);
+        if (!salvou.success) {
+            showFeedback(`Erro ao salvar os dados da carga: ${salvou.error || 'erro desconhecido'}`, 'error');
+            return;
+        }
+
+        // Ponte do Cliente: a mesma do fluxo antigo — aprende o id do Pipefy no
+        // cadastro local para não perguntar de novo na próxima carga do cliente.
+        if (wonData.clientePipefyId && base.customerId) {
+            const cust = customers.find(c => c.id === base.customerId);
+            if (cust && cust.pipefyClientId !== wonData.clientePipefyId) {
+                const atualizado = { ...cust, pipefyClientId: wonData.clientePipefyId };
+                if (await updateCustomer(atualizado)) setCustomers(prev => prev.map(c => c.id === cust.id ? atualizado : c));
+            }
+        }
+
+        let finalQuote = comDados;
+        if (base.pipefyCardId) {
+            showFeedback('Esta carga já tinha card no Pipefy — não dupliquei.', 'info');
+        } else {
+            const rota = `${wonData.coletaEndereco || base.origin || '—'} > ${wonData.entregaEndereco || base.destination || '—'}`;
+            const res = await createPipefyCard({
+                rota,
+                receita: Number(wonData.nossoFrete) || 0,
+                freteTerceiro: Number(wonData.freteTerceiro) || 0,
+                valorCarga: Number(wonData.valorCarga) || 0,
+                peso: Number(wonData.pesoCargaOperacao) || undefined,
+                veiculo: wonData.veiculoTipoOperacao || base.vehicleType,
+                mercadoria: wonData.materialTipo || base.merchandiseType,
+                implemento: wonData.carroceriaTipoOperacao,
+                dataColeta: wonData.coletaDate,
+                dataEntrega: wonData.entregaDate,
+                dataFechamento: wonData.dataFechamento,
+                localColeta: wonData.coletaEndereco,
+                localEntrega: wonData.entregaEndereco,
+                observacoes: [
+                    (wonData.observacoesGerais || '').trim(),
+                    (wonData.outrasNecessidades || '').trim() ? `Necessidades: ${(wonData.outrasNecessidades || '').trim()}` : '',
+                ].filter(Boolean).join('\n'),
+                referencia: wonData.referenciaClienteOperacao || base.clientReference,
+                outrasNecessidades: wonData.outrasNecessidades,
+                cliente: wonData.clienteNomeOperacao,
+                clienteId: wonData.clientePipefyId,
+                solicitante: wonData.solicitante,
+                solicitanteId: wonData.solicitantePipefyId,
+                mercadoriaNovaUsada: wonData.mercadoriaNovaUsada,
+                outrasNecessidadesSelect: wonData.outrasNecessidadesPipefy,
+                necessidadeGR: wonData.necessidadeGR,
+                titulo: [wonData.clienteNomeOperacao, rota].map((x: string) => (x || '').trim()).filter(Boolean).join(' — '),
+            });
+            if (res?.ok && res.cardId) {
+                finalQuote = {
+                    ...comDados,
+                    pipefyCardId: res.cardId,
+                    pipefyCardUrl: res.cardUrl || undefined,
+                    pipefySentAt: new Date().toISOString(),
+                    clientePipefyId: wonData.clientePipefyId,
+                    solicitantePipefyId: wonData.solicitantePipefyId,
+                };
+                await updateFreightCalculation(finalQuote);
+                showFeedback('Enviada pro Pipefy. O card segue em Aprovadas.');
+            } else {
+                // Os dados do modal FICARAM salvos; só o card falhou. Dá para tentar de novo.
+                showFeedback(`Dados salvos, mas falhou enviar pro Pipefy: ${res?.error || 'erro desconhecido'}`, 'error');
+            }
+        }
+
+        setHistory(prev => prev.map(h => h.id === base.id ? finalQuote : h));
+        setIsWonModalOpen(false);
+        setSelectedWonQuote(null);
+        setWonModalModo('cotacao');   // volta ao padrão para o próximo uso
+    };
+
     // Abre o formulário de Carga Ganha já com a ponte do Cliente resolvida: nome do cliente local
     // e, se já vinculado, o id do registro do Pipefy guardado no cadastro desse cliente (vínculo
     // automático). Sem vínculo, o operador confirma uma vez no autocomplete do modal.
-    const openWonModal = (q: FreightCalculation) => {
+    /**
+     * Abre o modal de Carga Ganha. O MODO vem de quem abre, com 'cotacao' por
+     * padrão: assim os dois caminhos antigos (saveQuote('won') e o botão PIPEFY)
+     * seguem no comportamento de sempre sem saber que existe um modo, e não há
+     * como sobrar 'funil' de um uso anterior.
+     */
+    const openWonModal = (q: FreightCalculation, modo: 'cotacao' | 'funil' = 'cotacao') => {
+        setWonModalModo(modo);
         const cust = customers.find(c => c.id === q.customerId);
         setSelectedWonQuote({
             ...q,
@@ -5315,16 +5442,67 @@ Disponibilidade: ${disponibilidade}`;
                     </div>
                 )
             }
+            {/* MESMO modal nos dois caminhos; o que muda é o que acontece ao enviar.
+                'funil' devolve o operador ao funil com o card onde estava; 'cotacao'
+                é o fechamento de carga de sempre, com celebração e ida ao Histórico. */}
             {isWonModalOpen && selectedWonQuote && (
                 <WonInfoModal
                     isOpen={isWonModalOpen}
                     onClose={() => {
                         setIsWonModalOpen(false);
                         setSelectedWonQuote(null);
+                        setWonModalModo('cotacao');
                     }}
-                    onSubmit={handleWonInfoSubmit}
+                    onSubmit={wonModalModo === 'funil' ? handleWonInfoSubmitFunil : handleWonInfoSubmit}
                     quote={selectedWonQuote}
                 />
+            )}
+
+            {/* ------------------------------------------------------------------
+                TELINHA do Pipefy — aparece ao soltar um card em "Aprovadas".
+
+                É OPCIONAL de propósito: o status já foi gravado antes de ela
+                abrir, então "Agora não" não desfaz nada. O card fica marcado como
+                não enviado e a pergunta volta quando o operador quiser, pelo
+                próprio card.
+               ------------------------------------------------------------------ */}
+            {pipefyPrompt && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 animate-scale-in">
+                        <div className="flex items-start gap-3 mb-4">
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600 shrink-0"><Send className="w-5 h-5" /></div>
+                            <div className="min-w-0">
+                                <h3 className="text-base font-medium text-[#111827]">Enviar ao Pipefy?</h3>
+                                <p className="text-sm font-normal text-[#6b7280] mt-0.5">
+                                    A carga entrou em <span className="font-medium">Aprovadas</span>. Quer criar o card da
+                                    operação agora? Você completa carroceria, datas e o vínculo do cliente no formulário.
+                                </p>
+                            </div>
+                        </div>
+                        <p className="text-xs font-medium text-[#9ca3af] mb-5 truncate">
+                            {pipefyPrompt.proposalNumber ? `#${pipefyPrompt.proposalNumber} · ` : ''}
+                            {pipefyPrompt.origin || '—'} × {pipefyPrompt.destination || '—'}
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setPipefyPrompt(null)}
+                                className="flex-1 px-4 py-2.5 rounded-lg border border-[#e5e7eb] text-sm font-medium text-[#6b7280] hover:bg-[#f9fafb] transition-colors"
+                            >
+                                Agora não
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const q = pipefyPrompt;
+                                    setPipefyPrompt(null);
+                                    openWonModal(q, 'funil');   // mesmo modal, já preenchido
+                                }}
+                                className="flex-1 px-4 py-2.5 rounded-lg bg-[#1d6fb8] text-white text-sm font-medium hover:bg-[#155a99] transition-colors"
+                            >
+                                Enviar ao Pipefy
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div >
     );
