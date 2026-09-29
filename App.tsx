@@ -253,8 +253,15 @@ const App: React.FC = () => {
      * DEVOLVE o operador ao funil, com o card onde ele estava.
      */
     const [wonModalModo, setWonModalModo] = useState<'cotacao' | 'funil'>('cotacao');
-    /** Cotação que acabou de chegar em Aprovadas e está esperando a decisão do Pipefy. */
-    const [pipefyPrompt, setPipefyPrompt] = useState<FreightCalculation | null>(null);
+    /**
+     * Aprovação em curso, esperando o Pipefy.
+     *
+     * Entrar em "Aprovadas" EXIGE card no Pipefy (decisão do Wagner, 29/09/2026):
+     * o status só é gravado depois que o card nasce. Enquanto isso, guardamos
+     * de onde o card saiu — para devolvê-lo com uma mensagem que diz onde ele
+     * ficou, se o envio não acontecer.
+     */
+    const [aprovacaoPendente, setAprovacaoPendente] = useState<{ id: string; statusAnterior: QuoteStatus } | null>(null);
     const [selectedWonQuote, setSelectedWonQuote] = useState<FreightCalculation | null>(null);
     const [newCustomerName, setNewCustomerName] = useState('');
     const [newCustomerLogo, setNewCustomerLogo] = useState('');
@@ -1158,6 +1165,18 @@ const App: React.FC = () => {
         const quote = history.find(h => h.id === id);
         if (!quote) return;
 
+        // PORTÃO DE "APROVADAS": só entra quem tem card no Pipefy.
+        //
+        // Sem card, o status NÃO é gravado aqui — abre-se o modal e a gravação
+        // acontece lá, e só se o card nascer. Enquanto isso o card não se mexe:
+        // o board desenha a partir do histórico, então não gravar é não mover.
+        // Quem já tem card entra direto, sem perguntar nada.
+        if (newStatus === 'aprovada' && !quote.pipefySentAt && !quote.pipefyCardId) {
+            setAprovacaoPendente({ id, statusAnterior: quote.status });
+            openWonModal(quote, 'funil');
+            return;
+        }
+
         const updatedQuote: FreightCalculation = {
             ...quote,
             status: newStatus,
@@ -1173,13 +1192,6 @@ const App: React.FC = () => {
         if (result.success) {
             setHistory(prev => prev.map(h => h.id === id ? updatedQuote : h));
             showFeedback('Status atualizado!');
-            // Chegou em Aprovadas e ainda não tem card: oferece o envio ao Pipefy.
-            // O status JÁ foi gravado acima — a telinha é opcional, e recusar não
-            // desfaz o movimento do card.
-            // Já enviado antes não pergunta de novo: o card mostra "✓ no Pipefy".
-            if (newStatus === 'aprovada' && !updatedQuote.pipefySentAt && !updatedQuote.pipefyCardId) {
-                setPipefyPrompt(updatedQuote);
-            }
         } else {
             showFeedback(`Erro ao atualizar status: ${result.error}`, 'error');
         }
@@ -1204,7 +1216,12 @@ const App: React.FC = () => {
         if (!selectedWonQuote) return;
         const base = selectedWonQuote;
 
-        // Os dados do modal entram na cotação, MENOS o status: ele continua o que era.
+        // Esta aprovação está esperando o card? Então o status só muda se ele nascer.
+        const aprovando = aprovacaoPendente?.id === base.id;
+
+        // Os dados do modal entram na cotação, MENOS o status: ele continua o que
+        // era. Salvar aqui é de propósito — se o Pipefy falhar depois, o operador
+        // não perde o que digitou, e tenta de novo sem redigitar.
         const comDados: FreightCalculation = {
             ...base,
             ...wonData,
@@ -1233,6 +1250,11 @@ const App: React.FC = () => {
         let finalQuote = comDados;
         if (base.pipefyCardId) {
             showFeedback('Esta carga já tinha card no Pipefy — não dupliquei.', 'info');
+            // Já tinha card: a aprovação pode seguir em frente.
+            if (aprovando) {
+                finalQuote = { ...comDados, status: 'aprovada' };
+                await updateFreightCalculation(finalQuote);
+            }
         } else {
             const rota = `${wonData.coletaEndereco || base.origin || '—'} > ${wonData.entregaEndereco || base.destination || '—'}`;
             const res = await createPipefyCard({
@@ -1267,6 +1289,8 @@ const App: React.FC = () => {
             if (res?.ok && res.cardId) {
                 finalQuote = {
                     ...comDados,
+                    // O card nasceu: é AQUI que a aprovação se concretiza.
+                    status: aprovando ? 'aprovada' : comDados.status,
                     pipefyCardId: res.cardId,
                     pipefyCardUrl: res.cardUrl || undefined,
                     pipefySentAt: new Date().toISOString(),
@@ -1274,10 +1298,17 @@ const App: React.FC = () => {
                     solicitantePipefyId: wonData.solicitantePipefyId,
                 };
                 await updateFreightCalculation(finalQuote);
-                showFeedback('Enviada pro Pipefy. O card segue em Aprovadas.');
+                showFeedback(aprovando ? 'Enviada pro Pipefy. A carga entrou em Aprovadas.' : 'Enviada pro Pipefy.');
             } else {
-                // Os dados do modal FICARAM salvos; só o card falhou. Dá para tentar de novo.
-                showFeedback(`Dados salvos, mas falhou enviar pro Pipefy: ${res?.error || 'erro desconhecido'}`, 'error');
+                // O card NÃO nasceu, então a carga NÃO entra em Aprovadas: ela fica
+                // onde estava. Os dados do modal ficaram salvos — dá para tentar de
+                // novo sem redigitar nada.
+                const onde = rotuloColuna(base.status);
+                showFeedback(
+                    `Card não enviado ao Pipefy: ${res?.error || 'erro desconhecido'}. `
+                    + `A cotação continua em ${onde}.`,
+                    'error',
+                );
             }
         }
 
@@ -1285,6 +1316,7 @@ const App: React.FC = () => {
         setIsWonModalOpen(false);
         setSelectedWonQuote(null);
         setWonModalModo('cotacao');   // volta ao padrão para o próximo uso
+        setAprovacaoPendente(null);
     };
 
     // Abre o formulário de Carga Ganha já com a ponte do Cliente resolvida: nome do cliente local
@@ -1296,6 +1328,13 @@ const App: React.FC = () => {
      * seguem no comportamento de sempre sem saber que existe um modo, e não há
      * como sobrar 'funil' de um uso anterior.
      */
+    /** Nome da coluna do funil, para falar com o operador na língua da tela. */
+    const rotuloColuna = (st?: QuoteStatus): string => ({
+        pending: 'Cotações', respondida: 'Negociação', aprovada: 'Aprovadas',
+        carregando: 'Carregando Hoje', won: 'Faturado', lost: 'Perdida',
+        em_operacao: 'Em Operação', spot_simulated: 'Spot',
+    }[st || 'pending'] || 'origem');
+
     const openWonModal = (q: FreightCalculation, modo: 'cotacao' | 'funil' = 'cotacao') => {
         setWonModalModo(modo);
         const cust = customers.find(c => c.id === q.customerId);
@@ -5449,6 +5488,17 @@ Disponibilidade: ${disponibilidade}`;
                 <WonInfoModal
                     isOpen={isWonModalOpen}
                     onClose={() => {
+                        // Fechar o modal no meio de uma aprovação = desistir do envio.
+                        // Sem card no Pipefy não há entrada em Aprovadas, então a carga
+                        // fica onde estava — e a mensagem diz onde, para o operador não
+                        // ficar procurando o card que "sumiu".
+                        if (aprovacaoPendente) {
+                            showFeedback(
+                                `Card não enviado ao Pipefy — a cotação continua em ${rotuloColuna(aprovacaoPendente.statusAnterior)}.`,
+                                'info',
+                            );
+                            setAprovacaoPendente(null);
+                        }
                         setIsWonModalOpen(false);
                         setSelectedWonQuote(null);
                         setWonModalModo('cotacao');
@@ -5458,52 +5508,6 @@ Disponibilidade: ${disponibilidade}`;
                 />
             )}
 
-            {/* ------------------------------------------------------------------
-                TELINHA do Pipefy — aparece ao soltar um card em "Aprovadas".
-
-                É OPCIONAL de propósito: o status já foi gravado antes de ela
-                abrir, então "Agora não" não desfaz nada. O card fica marcado como
-                não enviado e a pergunta volta quando o operador quiser, pelo
-                próprio card.
-               ------------------------------------------------------------------ */}
-            {pipefyPrompt && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 animate-scale-in">
-                        <div className="flex items-start gap-3 mb-4">
-                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600 shrink-0"><Send className="w-5 h-5" /></div>
-                            <div className="min-w-0">
-                                <h3 className="text-base font-medium text-[#111827]">Enviar ao Pipefy?</h3>
-                                <p className="text-sm font-normal text-[#6b7280] mt-0.5">
-                                    A carga entrou em <span className="font-medium">Aprovadas</span>. Quer criar o card da
-                                    operação agora? Você completa carroceria, datas e o vínculo do cliente no formulário.
-                                </p>
-                            </div>
-                        </div>
-                        <p className="text-xs font-medium text-[#9ca3af] mb-5 truncate">
-                            {pipefyPrompt.proposalNumber ? `#${pipefyPrompt.proposalNumber} · ` : ''}
-                            {pipefyPrompt.origin || '—'} × {pipefyPrompt.destination || '—'}
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setPipefyPrompt(null)}
-                                className="flex-1 px-4 py-2.5 rounded-lg border border-[#e5e7eb] text-sm font-medium text-[#6b7280] hover:bg-[#f9fafb] transition-colors"
-                            >
-                                Agora não
-                            </button>
-                            <button
-                                onClick={() => {
-                                    const q = pipefyPrompt;
-                                    setPipefyPrompt(null);
-                                    openWonModal(q, 'funil');   // mesmo modal, já preenchido
-                                }}
-                                className="flex-1 px-4 py-2.5 rounded-lg bg-[#1d6fb8] text-white text-sm font-medium hover:bg-[#155a99] transition-colors"
-                            >
-                                Enviar ao Pipefy
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div >
     );
 };

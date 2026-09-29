@@ -33,8 +33,13 @@ const COLUMNS: { id: QuoteStatus; label: string; color: string; border: string; 
  * Colunas em que o card mostra o selo do Pipefy.
  *
  * De Aprovadas em diante: antes disso a carga ainda não foi fechada e ninguém
- * espera card na operação — "não enviado" ali seria alarme falso em toda cotação
- * nova. Perdida também fica fora, pelo motivo óbvio.
+ * espera card na operação. Perdida fica fora pelo motivo óbvio.
+ *
+ * O selo agora é SÓ o verde. Desde que entrar em Aprovadas passou a exigir card
+ * no Pipefy, "não enviado" nessa coluna virou estado impossível; e nas colunas
+ * seguintes o card chega por Aprovadas, então também já tem. Carga antiga, de
+ * antes da regra, simplesmente não mostra selo — melhor do que um alerta âmbar
+ * sobre algo que não dá mais para acontecer.
  */
 const COLUNAS_COM_SELO_PIPEFY: QuoteStatus[] = ['aprovada', 'carregando', 'won'];
 
@@ -294,12 +299,12 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                                 )}
                                             </div>
 
-                                            {/* selo do Pipefy: só de Aprovadas em diante */}
-                                            {mostraSelo && (
-                                                <div className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold ${noPipefy ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}
-                                                    title={noPipefy ? 'Card criado no Pipefy' : 'Ainda não enviada ao Pipefy'}>
+                                            {/* selo do Pipefy: só de Aprovadas em diante, e só o verde */}
+                                            {mostraSelo && noPipefy && (
+                                                <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-600"
+                                                    title="Card criado no Pipefy">
                                                     <Send className="w-2.5 h-2.5" />
-                                                    {noPipefy ? 'no Pipefy' : 'não enviado'}
+                                                    no Pipefy
                                                 </div>
                                             )}
 
