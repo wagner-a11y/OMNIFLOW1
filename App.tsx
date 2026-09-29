@@ -59,15 +59,26 @@ const MOSTRAR_NEGOCIACOES = true;
 const pipefyCardLink = (q?: { pipefyCardUrl?: string; pipefyCardId?: string }): string | null =>
     q?.pipefyCardUrl || (q?.pipefyCardId ? `https://app.pipefy.com/open-cards/${q.pipefyCardId}` : null);
 
-// Próximo número de proposta = MAIOR número existente + 1. Não usa history.length (que conta
-// duplicados/apagados e por isso colidia). Só afeta a PRÓXIMA criação — NÃO renumera as antigas.
-const nextProposalNumber = (hist: { proposalNumber?: string }[]): string => {
+/**
+ * Próximo número da série MANUAL (CT-). Maior existente + 1 — não usa
+ * history.length, que conta duplicado e apagado, e por isso colidia.
+ *
+ * O REGEX É ANCORADO NO PREFIXO, e isso importa desde que existe uma segunda
+ * série. Antes ele pegava "os dígitos finais de qualquer número": com a série
+ * EM- da entrada por e-mail convivendo no mesmo histórico, um EM-2026-0800
+ * empurraria a próxima cotação manual para CT-2026-0801, e a numeração que o
+ * time usa para se localizar passaria a ser arrastada pelo volume do robô.
+ * Ancorado, cada série tem o seu contador e o robô nunca mexe no da calculadora.
+ *
+ * Só afeta a PRÓXIMA criação — não renumera nada.
+ */
+export const nextProposalNumber = (hist: { proposalNumber?: string }[], ano = new Date().getFullYear()): string => {
     const maxN = hist.reduce((mx, h) => {
-        const m = /(\d+)\s*$/.exec(h.proposalNumber || '');
+        const m = /^CT-\d{4}-(\d+)$/.exec((h.proposalNumber || '').trim());
         const n = m ? parseInt(m[1], 10) : 0;
         return n > mx ? n : mx;
     }, 0);
-    return `CT-${new Date().getFullYear()}-${(maxN + 1).toString().padStart(4, '0')}`;
+    return `CT-${ano}-${(maxN + 1).toString().padStart(4, '0')}`;
 };
 
 import { WonInfoModal } from './components/WonInfoModal';
@@ -2855,6 +2866,10 @@ Disponibilidade: ${disponibilidade}`;
                                 onUpdateStatus={handleCRMStatusUpdate}
                                 customers={customers}
                                 systemConfig={fedTaxes}
+                                // Card que veio de e-mail abre na calculadora, já preenchido
+                                // com o que o modelo extraiu: ele nasce sem preço nenhum, e o
+                                // próximo passo é cotar, não ler um resumo.
+                                onAbrirNaCalculadora={(q) => { loadQuote(q); setActiveTab('new'); }}
                             />
                         </div>
                     )}

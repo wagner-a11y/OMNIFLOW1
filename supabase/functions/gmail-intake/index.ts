@@ -151,6 +151,86 @@ async function extrair(tk: string, msg: GmailMessage): Promise<{ dados: any; par
   return { dados: JSON.parse(texto), partes: parts.length };
 }
 
+/** Número da série do e-mail, EM-AAAA-####. Contador PRÓPRIO, por ano. */
+async function proximoNumeroEmail(db: any, ano: number): Promise<string> {
+  // `like 'EM-<ano>-%'` é o que mantém as séries independentes: o contador do
+  // e-mail nunca olha CT-, e o da calculadora (nextProposalNumber, ancorado no
+  // prefixo) nunca olha EM-. Sem isso, o volume do robô empurraria a numeração
+  // manual centenas de números para frente.
+  const { data } = await db
+    .from('freight_calculations')
+    .select('proposal_number')
+    .like('proposal_number', `EM-${ano}-%`)
+    .order('proposal_number', { ascending: false })
+    .limit(1);
+  const ultimo = data?.[0]?.proposal_number as string | undefined;
+  const m = /^EM-\d{4}-(\d+)$/.exec((ultimo || '').trim());
+  const n = m ? parseInt(m[1], 10) : 0;
+  return `EM-${ano}-${String(n + 1).padStart(4, '0')}`;
+}
+
+/** Ano corrente em America/Sao_Paulo — o contador é por ano civil daqui. */
+const anoBRT = (): number =>
+  Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric' }).format(new Date()));
+
+const numero = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Cria a cotação a partir do que o Gemini extraiu. ETAPA 1b.
+ *
+ * Só roda com `ativo = true`. Nasce em "Cotações" (pending) e SEM DONO
+ * (created_by nulo): ninguém reivindicou esse lead ainda, e atribuir a alguém
+ * no automático seria inventar responsável.
+ *
+ * Baixa confiança NÃO impede o card: lead perdido é pior que lead para
+ * conferir. A confiança vai gravada e o funil marca o card com "confira".
+ */
+async function criarCotacao(db: any, msgId: string, dados: any, confianca: number | null) {
+  const ano = anoBRT();
+  const agora = Date.now();
+  const linha = {
+    id: `${agora}${Math.floor(Math.random() * 1000)}`,
+    proposal_number: await proximoNumeroEmail(db, ano),
+    status: 'pending',
+    origem_entrada: 'email',
+    gmail_message_id: msgId,
+    gmail_confianca: confianca,
+    // O que o e-mail disse. Campo sem informação fica vazio de propósito: quem
+    // abrir o card vê o buraco em vez de um palpite.
+    origin: dados?.origem || '',
+    destination: dados?.destino || '',
+    vehicle_type: dados?.veiculo || '',
+    merchandise_type: dados?.tipoCarga || null,
+    cliente_nome_operacao: dados?.cliente || null,
+    solicitante: dados?.solicitante || null,
+    coleta_date: dados?.prazoColeta || null,
+    observacoes_gerais: dados?.observacoes || null,
+    disponibilidade: dados?.disponibilidade === 'imediato' ? 'Imediato' : 'Conforme programação',
+    weight: numero(dados?.peso) ?? 0,
+    goods_value: numero(dados?.valorMercadoria) ?? 0,
+    // Nada de preço: a cotação ainda vai ser calculada por gente. Zerar é
+    // diferente de inventar — e é o que o resto do sistema espera em numérico.
+    distance_km: 0, base_freight: 0, tolls: 0, extra_costs: 0,
+    insurance_percent: 0, profit_margin: 0, icms_percent: 0,
+    pis_percent: 0, cofins_percent: 0, csll_percent: 0, irpj_percent: 0,
+    suggested_freight: 0, total_freight: 0,
+    created_at: agora,
+    // created_by fica NULO: card sem dono, para alguém pegar.
+  };
+  const { error } = await db.from('freight_calculations').insert([linha]);
+  if (error) {
+    // 23505 = violação de índice único. O índice parcial em gmail_message_id é a
+    // trava final contra o mesmo e-mail virar duas cotações; se bateu nele, o
+    // card já existe e não há nada a fazer.
+    if (String(error.code) === '23505') return { criada: false, motivo: 'ja existia' };
+    throw new Error(`insert da cotação falhou: ${error.message}`);
+  }
+  return { criada: true, numero: linha.proposal_number };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -204,7 +284,8 @@ Deno.serve(async (req) => {
     // execução dentro do tempo e, de quebra, é a trava de volume.
     const pendentes = ids.filter(id => !vistos.has(id)).slice(0, teto);
 
-    let gravados = 0, comErro = 0;
+    const cutoffISO = cfg.cutoff ? new Date(cfg.cutoff).toISOString() : null;
+    let gravados = 0, comErro = 0, criadas = 0;
     for (const id of pendentes) {
       let linha: Record<string, unknown> = { message_id: id };
       try {
@@ -218,9 +299,26 @@ Deno.serve(async (req) => {
         };
         const { dados, partes } = await extrair(tk, msg);
         const c = Number(dados?.confianca);
+        const confianca = Number.isFinite(c) ? Math.max(0, Math.min(1, c)) : null;
         linha.json_extraido = dados;
-        linha.confianca = Number.isFinite(c) ? Math.max(0, Math.min(1, c)) : null;
+        linha.confianca = confianca;
         linha.partes = partes;
+
+        // ---- ETAPA 1b: a cotação ----
+        // Três condições, todas necessárias: o interruptor ligado, o modelo ter
+        // reconhecido um pedido de frete, e o e-mail ser posterior ao cutoff.
+        // O cutoff aqui é a trava que impede os ~2.900 históricos de virarem
+        // card mesmo se alguém rodar um backfill com o interruptor ligado.
+        const recebido = recebidoEm(msg);
+        const dentroDoCutoff = !cutoffISO || !recebido || recebido >= cutoffISO;
+        if (cfg.ativo === true && dados?.ehCotacao === true && dentroDoCutoff) {
+          const r = await criarCotacao(db, id, dados, confianca);
+          linha.cotacao_criada = r.criada;
+          linha.cotacao_numero = r.criada ? r.numero : null;
+          if (r.criada) criadas++;
+        } else {
+          linha.cotacao_criada = false;
+        }
       } catch (e) {
         // E-mail que falhou fica registrado COM o motivo: saber que quebrou é
         // parte do que se está avaliando nesta etapa.
@@ -235,8 +333,8 @@ Deno.serve(async (req) => {
     return json({
       ok: true,
       modo: backfill ? 'backfill' : 'incremental',
-      modoSeco: true,              // nesta etapa é sempre true; a 1b muda isto
-      cotacoesCriadas: 0,          // explícito: nenhuma, por desenho
+      modoSeco: cfg.ativo !== true,
+      cotacoesCriadas: criadas,
       naJanela: ids.length,
       jaNoLog: ids.length - (ids.length - vistos.size) === 0 ? vistos.size : vistos.size,
       processadosAgora: pendentes.length,

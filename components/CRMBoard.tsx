@@ -1,14 +1,25 @@
 
 import React, { useState, useMemo } from 'react';
 import { FreightCalculation, QuoteStatus, LOST_REASONS, LostReason, FederalTaxes } from '../types';
-import { Paperclip, X, FileText, Calendar, DollarSign, MapPin, AlertCircle, TrendingUp, Target, Activity, BarChart3, Clock, PieChart, ShieldCheck, Zap, Info, Scale, Send } from 'lucide-react';
+import { Paperclip, X, FileText, Calendar, DollarSign, MapPin, AlertCircle, TrendingUp, Target, Activity, BarChart3, Clock, PieChart, ShieldCheck, Zap, Info, Scale, Send, Mail, Eye } from 'lucide-react';
 
 interface CRMBoardProps {
     quotes: FreightCalculation[];
     onUpdateStatus: (id: string, newStatus: QuoteStatus, lostData?: { reason: LostReason; obs: string; fileUrl: string }) => void;
     customers: any[];
     systemConfig: FederalTaxes;
+    /**
+     * Abre a cotação na CALCULADORA, já preenchida.
+     *
+     * Card que veio de e-mail nasce só com o que o modelo extraiu e sem preço
+     * nenhum — o próximo passo dele é ser cotado, não lido. Por isso o clique
+     * leva direto à calculadora, em vez do resumo que serve aos demais.
+     */
+    onAbrirNaCalculadora?: (quote: FreightCalculation) => void;
 }
+
+/** Abaixo disto, o card pede conferência humana antes de virar proposta. */
+const CONFIANCA_MINIMA = 0.7;
 
 /**
  * As colunas do FUNIL DE FATURAMENTO, na ordem em que a operação fala.
@@ -47,7 +58,7 @@ const COLUNAS_COM_SELO_PIPEFY: QuoteStatus[] = ['aprovada', 'carregando', 'won']
 const iniciais = (nome?: string): string =>
     (nome || '').trim().split(/\s+/).slice(0, 2).map(p => p.charAt(0).toUpperCase()).join('') || '—';
 
-export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, customers, systemConfig }) => {
+export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, customers, systemConfig, onAbrirNaCalculadora }) => {
     const [draggedId, setDraggedId] = useState<string | null>(null);
     const [showLostModal, setShowLostModal] = useState<string | null>(null);
     const [selectedQuote, setSelectedQuote] = useState<FreightCalculation | null>(null);
@@ -278,13 +289,20 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                     const rota = `${(quote.origin || '').split(',')[0]} × ${(quote.destination || '').split(',')[0]}`;
                                     const mostraSelo = COLUNAS_COM_SELO_PIPEFY.includes(col.id);
                                     const noPipefy = !!(quote.pipefySentAt || quote.pipefyCardId);
+                                    const deEmail = quote.origemEntrada === 'email';
+                                    // Confiança baixa NÃO esconde o card: lead para conferir é
+                                    // melhor que lead perdido. Só pede uma olhada antes.
+                                    const confira = deEmail && (quote.gmailConfianca ?? 1) < CONFIANCA_MINIMA;
                                     return (
                                         <div
                                             key={quote.id}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, quote.id)}
-                                            onClick={() => setSelectedQuote(quote)}
-                                            className="bg-white px-2.5 py-2 rounded-lg shadow-sm border border-[#e5e7eb] cursor-pointer hover:border-blue-300 hover:shadow transition-all active:cursor-grabbing"
+                                            onClick={() => (deEmail && onAbrirNaCalculadora)
+                                                ? onAbrirNaCalculadora(quote)
+                                                : setSelectedQuote(quote)}
+                                            title={deEmail ? 'Veio de e-mail — abrir na calculadora' : undefined}
+                                            className={`bg-white px-2.5 py-2 rounded-lg shadow-sm border cursor-pointer hover:shadow transition-all active:cursor-grabbing ${deEmail ? 'border-l-[3px] border-l-blue-400 border-[#e5e7eb] hover:border-blue-300' : 'border-[#e5e7eb] hover:border-blue-300'}`}
                                         >
                                             {/* linha 1 — cliente + urgência */}
                                             <div className="flex items-center gap-1.5">
@@ -298,6 +316,22 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                                     </span>
                                                 )}
                                             </div>
+
+                                            {/* veio de e-mail: a TAG e, quando o modelo titubeou, o pedido de conferência */}
+                                            {deEmail && (
+                                                <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-50 text-blue-600"
+                                                        title="Cotação criada a partir de e-mail">
+                                                        <Mail className="w-2.5 h-2.5" /> e-mail
+                                                    </span>
+                                                    {confira && (
+                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 text-amber-600"
+                                                            title={`O modelo declarou ${Math.round((quote.gmailConfianca ?? 0) * 100)}% de confiança nesta leitura — confira os dados antes de cotar`}>
+                                                            <Eye className="w-2.5 h-2.5" /> confira
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
 
                                             {/* selo do Pipefy: só de Aprovadas em diante, e só o verde */}
                                             {mostraSelo && noPipefy && (

@@ -205,6 +205,12 @@ export interface FreightCalculation {
     outrasNecessidades?: string;
     observacoesGerais?: string;
     pipelineStage?: string;
+    /** 'email' = nasceu da leitura da caixa de cotações; ausente = calculadora ou planilha. */
+    origemEntrada?: string;
+    /** Id da mensagem no Gmail que gerou esta cotação (dedup e rastro). */
+    gmailMessageId?: string;
+    /** Confiança 0..1 AUTODECLARADA pelo modelo na extração. Não é probabilidade. */
+    gmailConfianca?: number | null;
     motoristaNome?: string;
     motoristaCPF?: string;
     motoristaTelefone?: string;

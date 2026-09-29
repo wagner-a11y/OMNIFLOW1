@@ -369,6 +369,9 @@ const mapFreightRow = (item: any): FreightCalculation => ({
         outrasNecessidades: item.outras_necessidades,
         observacoesGerais: item.observacoes_gerais,
         pipelineStage: item.pipeline_stage,
+        origemEntrada: item.origem_entrada || undefined,
+        gmailMessageId: item.gmail_message_id || undefined,
+        gmailConfianca: item.gmail_confianca !== null && item.gmail_confianca !== undefined ? Number(item.gmail_confianca) : null,
         motoristaNome: item.motorista_nome,
         motoristaCPF: item.motorista_cpf,
         motoristaTelefone: item.motorista_telefone,
@@ -504,6 +507,13 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         real_margin_percent: calc.realMarginPercent || 0,
         elaboration_seconds: calc.elaborationSeconds || 0,
         origem_dados: calc.origemDados || null,
+        // Preservados explicitamente: abrir um card de e-mail leva à calculadora,
+        // e salvar de lá é um upsert. Sem mandar estes de volta, a origem e o
+        // rastro do e-mail se perderiam no primeiro save — junto com a TAG e a
+        // trava de duplicata.
+        origem_entrada: calc.origemEntrada || null,
+        gmail_message_id: calc.gmailMessageId || null,
+        gmail_confianca: calc.gmailConfianca ?? null,
         tipo_precificacao: calc.tipoPrecificacao || null,
         // Só entra quando existe. Escrever `|| null` aqui APAGARIA o marcador de
         // uma cotação Fast Delivery salva pelo fluxo normal — que foi como duas
@@ -626,6 +636,13 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         real_margin_percent: sanitize(calc.realMarginPercent) || 0,
         elaboration_seconds: sanitize(calc.elaborationSeconds) || 0,
         origem_dados: calc.origemDados || null,
+        // Preservados explicitamente: abrir um card de e-mail leva à calculadora,
+        // e salvar de lá é um upsert. Sem mandar estes de volta, a origem e o
+        // rastro do e-mail se perderiam no primeiro save — junto com a TAG e a
+        // trava de duplicata.
+        origem_entrada: calc.origemEntrada || null,
+        gmail_message_id: calc.gmailMessageId || null,
+        gmail_confianca: calc.gmailConfianca ?? null,
         tipo_precificacao: calc.tipoPrecificacao || null,
         // Só entra quando existe. Escrever `|| null` aqui APAGARIA o marcador de
         // uma cotação Fast Delivery salva pelo fluxo normal — que foi como duas
