@@ -6,6 +6,7 @@ import {
     Activity, AlertTriangle, ArrowDown, ArrowRight, Award, BarChart3, Calendar, Check, CheckCircle, ChevronDown, Clock, Copy as ClipboardCopy, CopyPlus, DollarSign, Download, Edit3, FileDown, FileText, Factory, Hash, History, IdCard, ImageIcon, Info, Key, Layers, Link2, Lock, LogOut, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, Save, Scale, Search, Send, Settings, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, UserCheck, Users, Wrench, X, Zap
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
+import { GmailIntakeBoard } from './components/GmailIntakeBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
 import { CarteiraBoard } from './components/CarteiraBoard';
 import { RegistroContatoBoard } from './components/RegistroContatoBoard';
@@ -235,7 +236,7 @@ const App: React.FC = () => {
     // Só o setter é usado: o valor alimenta o banco, não a tela.
     const [, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-proprietario' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery' | 'suzano-plantas' | 'demais-plantas'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-proprietario' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery' | 'suzano-plantas' | 'demais-plantas' | 'gmail-intake'>('dashboard');
     // Seções da barra lateral. Mapa vazio = TODAS recolhidas, que é como a tela nasce.
     // A mesma chave serve pro subgrupo "Ações do Comercial" dentro de Comercial.
     const [secoesAbertas, setSecoesAbertas] = useState<Record<string, boolean>>({});
@@ -2816,6 +2817,7 @@ Disponibilidade: ${disponibilidade}`;
                         {editingId ? 'Editando Registro' :
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
                                 activeTab === 'crm' ? 'Funil de Faturamento' :
+                                activeTab === 'gmail-intake' ? 'Leitura de E-mail · revisão' :
                                     activeTab === 'tracking' ? 'Acompanhamento PPFY' :
                                         activeTab === 'prospeccao' ? 'Prospecção · Mini CRM' :
                                         activeTab === 'contato-diario' ? 'Contato Diário · Carteira' :
@@ -2856,6 +2858,10 @@ Disponibilidade: ${disponibilidade}`;
                             />
                         </div>
                     )}
+
+                    {/* Revisão da leitura de e-mail (etapa 1a, modo seco): leitura pura do
+                        log, não cria nem altera cotação nenhuma. */}
+                    {activeTab === 'gmail-intake' && <GmailIntakeBoard />}
 
                     {activeTab === 'tracking' && <PipefyBoard />}
 

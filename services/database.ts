@@ -896,6 +896,48 @@ export const upsertAjusteManual = async (
     return { success: true };
 };
 
+// =================== ENTRADA POR E-MAIL (etapa 1a, modo seco) ===================
+// O que a gmail-intake entendeu de cada e-mail da caixa de cotações. NADA aqui
+// virou cotação: esta etapa existe para julgar a qualidade da extração antes de
+// qualquer coisa entrar no funil.
+
+export interface GmailIntakeItem {
+    messageId: string;
+    remetente: string | null;
+    assunto: string | null;
+    recebidoEm: string | null;
+    /** O JSON cru do Gemini. Campos podem faltar — é dado de modelo, não contrato. */
+    extraido: Record<string, any> | null;
+    /** 0..1, autodeclarada pelo modelo. Não é probabilidade calculada. */
+    confianca: number | null;
+    partes: number;
+    erro: string | null;
+    processadoEm: string;
+}
+
+export const getGmailIntakeLog = async (limite = 100): Promise<GmailIntakeItem[]> => {
+    const { data, error } = await supabase
+        .from('gmail_intake_log')
+        .select('message_id, remetente, assunto, recebido_em, json_extraido, confianca, partes, erro, processado_em')
+        .order('recebido_em', { ascending: false, nullsFirst: false })
+        .limit(limite);
+    if (error) {
+        console.error('getGmailIntakeLog:', error.message);
+        return [];
+    }
+    return (data || []).map((r: any) => ({
+        messageId: String(r.message_id),
+        remetente: r.remetente ?? null,
+        assunto: r.assunto ?? null,
+        recebidoEm: r.recebido_em ?? null,
+        extraido: r.json_extraido ?? null,
+        confianca: r.confianca !== null && r.confianca !== undefined ? Number(r.confianca) : null,
+        partes: Number(r.partes || 0),
+        erro: r.erro ?? null,
+        processadoEm: r.processado_em,
+    }));
+};
+
 // Token do Painel TV — lido só por usuário logado (RLS authenticated). Usado
 // pra montar o link do menu sem expor o token no bundle público.
 export const getPainelTvToken = async (): Promise<string | null> => {
