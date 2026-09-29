@@ -369,6 +369,9 @@ const mapFreightRow = (item: any): FreightCalculation => ({
         outrasNecessidades: item.outras_necessidades,
         observacoesGerais: item.observacoes_gerais,
         pipelineStage: item.pipeline_stage,
+        origemEntrada: item.origem_entrada || undefined,
+        gmailMessageId: item.gmail_message_id || undefined,
+        gmailConfianca: item.gmail_confianca !== null && item.gmail_confianca !== undefined ? Number(item.gmail_confianca) : null,
         motoristaNome: item.motorista_nome,
         motoristaCPF: item.motorista_cpf,
         motoristaTelefone: item.motorista_telefone,
@@ -504,6 +507,13 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         real_margin_percent: calc.realMarginPercent || 0,
         elaboration_seconds: calc.elaborationSeconds || 0,
         origem_dados: calc.origemDados || null,
+        // Preservados explicitamente: abrir um card de e-mail leva à calculadora,
+        // e salvar de lá é um upsert. Sem mandar estes de volta, a origem e o
+        // rastro do e-mail se perderiam no primeiro save — junto com a TAG e a
+        // trava de duplicata.
+        origem_entrada: calc.origemEntrada || null,
+        gmail_message_id: calc.gmailMessageId || null,
+        gmail_confianca: calc.gmailConfianca ?? null,
         tipo_precificacao: calc.tipoPrecificacao || null,
         // Só entra quando existe. Escrever `|| null` aqui APAGARIA o marcador de
         // uma cotação Fast Delivery salva pelo fluxo normal — que foi como duas
@@ -626,6 +636,13 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         real_margin_percent: sanitize(calc.realMarginPercent) || 0,
         elaboration_seconds: sanitize(calc.elaborationSeconds) || 0,
         origem_dados: calc.origemDados || null,
+        // Preservados explicitamente: abrir um card de e-mail leva à calculadora,
+        // e salvar de lá é um upsert. Sem mandar estes de volta, a origem e o
+        // rastro do e-mail se perderiam no primeiro save — junto com a TAG e a
+        // trava de duplicata.
+        origem_entrada: calc.origemEntrada || null,
+        gmail_message_id: calc.gmailMessageId || null,
+        gmail_confianca: calc.gmailConfianca ?? null,
         tipo_precificacao: calc.tipoPrecificacao || null,
         // Só entra quando existe. Escrever `|| null` aqui APAGARIA o marcador de
         // uma cotação Fast Delivery salva pelo fluxo normal — que foi como duas
@@ -894,6 +911,48 @@ export const upsertAjusteManual = async (
         return { success: false, error: error.message };
     }
     return { success: true };
+};
+
+// =================== ENTRADA POR E-MAIL (etapa 1a, modo seco) ===================
+// O que a gmail-intake entendeu de cada e-mail da caixa de cotações. NADA aqui
+// virou cotação: esta etapa existe para julgar a qualidade da extração antes de
+// qualquer coisa entrar no funil.
+
+export interface GmailIntakeItem {
+    messageId: string;
+    remetente: string | null;
+    assunto: string | null;
+    recebidoEm: string | null;
+    /** O JSON cru do Gemini. Campos podem faltar — é dado de modelo, não contrato. */
+    extraido: Record<string, any> | null;
+    /** 0..1, autodeclarada pelo modelo. Não é probabilidade calculada. */
+    confianca: number | null;
+    partes: number;
+    erro: string | null;
+    processadoEm: string;
+}
+
+export const getGmailIntakeLog = async (limite = 100): Promise<GmailIntakeItem[]> => {
+    const { data, error } = await supabase
+        .from('gmail_intake_log')
+        .select('message_id, remetente, assunto, recebido_em, json_extraido, confianca, partes, erro, processado_em')
+        .order('recebido_em', { ascending: false, nullsFirst: false })
+        .limit(limite);
+    if (error) {
+        console.error('getGmailIntakeLog:', error.message);
+        return [];
+    }
+    return (data || []).map((r: any) => ({
+        messageId: String(r.message_id),
+        remetente: r.remetente ?? null,
+        assunto: r.assunto ?? null,
+        recebidoEm: r.recebido_em ?? null,
+        extraido: r.json_extraido ?? null,
+        confianca: r.confianca !== null && r.confianca !== undefined ? Number(r.confianca) : null,
+        partes: Number(r.partes || 0),
+        erro: r.erro ?? null,
+        processadoEm: r.processado_em,
+    }));
 };
 
 // Token do Painel TV — lido só por usuário logado (RLS authenticated). Usado

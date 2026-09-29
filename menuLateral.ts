@@ -86,6 +86,8 @@ export function montarMenu(ctx: ContextoMenu): { secoes: SecaoMenu[]; soltos: It
                 // Funil de FATURAMENTO: as cotações fechadas andando até faturar. Não é o
                 // mesmo que "Acompanhamento de Negociações", que é o funil de prospecção.
                 { id: 'crm', label: 'Funil de Faturamento' },
+                // Etapa 1a da entrada por e-mail: so revisao da extracao, modo seco.
+                { id: 'gmail-intake', label: 'Leitura de E-mail (teste)', master: true },
                 { id: 'new', label: 'Nova Cotação' },
                 { id: 'dashboard', label: 'Dashboard' },
                 ...acoesComercial,
