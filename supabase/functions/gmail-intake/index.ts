@@ -213,10 +213,20 @@ async function criarCotacao(db: any, msgId: string, dados: any, confianca: numbe
     goods_value: numero(dados?.valorMercadoria) ?? 0,
     // Nada de preço: a cotação ainda vai ser calculada por gente. Zerar é
     // diferente de inventar — e é o que o resto do sistema espera em numérico.
+    //
+    // A lista espelha o insert da calculadora (createFreightCalculation) de
+    // propósito. A tabela não está versionada no repo, então quais colunas são
+    // NOT NULL só se descobre tentando: `ad_valorem` derrubou o primeiro card
+    // de verdade. Mandar o mesmo conjunto que a tela manda é a única forma
+    // segura de não descobrir mais uma, uma de cada vez.
     distance_km: 0, base_freight: 0, tolls: 0, extra_costs: 0,
-    insurance_percent: 0, profit_margin: 0, icms_percent: 0,
+    insurance_percent: 0, ad_valorem: 0, profit_margin: 0,
+    icms_percent: 0, icms_manual: false, pagador_mg: false,
     pis_percent: 0, cofins_percent: 0, csll_percent: 0, irpj_percent: 0,
     suggested_freight: 0, total_freight: 0,
+    real_profit: 0, real_margin_percent: 0, elaboration_seconds: 0,
+    destinations: [],
+    client_reference: null, customer_id: null, extra_costs_description: null,
     created_at: agora,
     // created_by fica NULO: card sem dono, para alguém pegar.
   };
@@ -279,13 +289,19 @@ Deno.serve(async (req) => {
     // Terceira trava: o que já está no log não é reprocessado (nem relido no
     // Gemini, que custa). A PK da tabela é a rede final contra duplicata.
     const { data: jaVistos } = await db.from('gmail_intake_log').select('message_id').in('message_id', ids);
-    const vistos = new Set((jaVistos || []).map((r: any) => r.message_id));
+    // `forcar` reprocessa o que já está no log. Existe para depurar: quando um
+    // e-mail falha, ele fica registrado e a rodada seguinte o pula — sem isto,
+    // consertar a causa não teria como ser testado no mesmo e-mail.
+    const vistos = body?.forcar === true ? new Set<string>() : new Set((jaVistos || []).map((r: any) => r.message_id));
     // .slice(teto): o resto fica para a próxima rodada. É o que mantém cada
     // execução dentro do tempo e, de quebra, é a trava de volume.
     const pendentes = ids.filter(id => !vistos.has(id)).slice(0, teto);
 
     const cutoffISO = cfg.cutoff ? new Date(cfg.cutoff).toISOString() : null;
     let gravados = 0, comErro = 0, criadas = 0;
+    // O que aconteceu com cada e-mail, para a resposta. Sem isto, "comErro: 1"
+    // obriga a ir ao banco para descobrir O QUE deu errado.
+    const detalhes: Array<Record<string, unknown>> = [];
     for (const id of pendentes) {
       let linha: Record<string, unknown> = { message_id: id };
       try {
@@ -328,6 +344,16 @@ Deno.serve(async (req) => {
       const { error } = await db.from('gmail_intake_log').upsert([linha], { onConflict: 'message_id' });
       if (error) console.warn('falha ao gravar no log:', error.message);
       else gravados++;
+      detalhes.push({
+        messageId: id,
+        assunto: linha.assunto ?? null,
+        ehCotacao: (linha.json_extraido as any)?.ehCotacao ?? null,
+        confianca: linha.confianca ?? null,
+        cotacaoCriada: linha.cotacao_criada ?? false,
+        cotacaoNumero: linha.cotacao_numero ?? null,
+        erro: linha.erro ?? null,
+        erroAoGravarLog: error?.message ?? null,
+      });
     }
 
     return json({
@@ -339,7 +365,7 @@ Deno.serve(async (req) => {
       jaNoLog: ids.length - (ids.length - vistos.size) === 0 ? vistos.size : vistos.size,
       processadosAgora: pendentes.length,
       faltamNaJanela: Math.max(0, ids.length - vistos.size - pendentes.length),
-      gravados, comErro,
+      gravados, comErro, detalhes,
       ativo: cfg.ativo === true,
     });
   } catch (e) {
