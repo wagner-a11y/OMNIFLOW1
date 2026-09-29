@@ -184,7 +184,15 @@ Deno.serve(async (req) => {
     const q = backfill ? '' : (cutoffSeg ? `&q=${encodeURIComponent(`after:${cutoffSeg}`)}` : '');
     if (!backfill && !cutoffSeg) return json({ error: 'cutoff ausente: recusando varrer a caixa inteira.' }, 412);
 
-    const lista = await gapi(tk, `/messages?maxResults=${teto}${q}`);
+    // JANELA e TETO são coisas diferentes, e confundi-los estourou a primeira
+    // execução: 30 e-mails com anexo, cada um com sua chamada ao Gemini, passam
+    // do tempo máximo da Edge Function (503 aos 151s).
+    //   janela = quantas mensagens a LISTA traz (barato: só ids);
+    //   teto   = quantas são PROCESSADAS nesta rodada (caro: anexo + Gemini).
+    // Com a janela maior que o teto, rodadas sucessivas avançam pelos pendentes
+    // em vez de reencontrar sempre os mesmos mais recentes.
+    const janela = backfill ? Math.max(teto, Math.min(100, Number(body?.janela) || 30)) : teto;
+    const lista = await gapi(tk, `/messages?maxResults=${janela}${q}`);
     const ids: string[] = (lista?.messages || []).map((m: any) => m.id).filter(Boolean);
     if (!ids.length) return json({ ok: true, modo: backfill ? 'backfill' : 'incremental', lidos: 0, novos: 0 });
 
@@ -192,7 +200,9 @@ Deno.serve(async (req) => {
     // Gemini, que custa). A PK da tabela é a rede final contra duplicata.
     const { data: jaVistos } = await db.from('gmail_intake_log').select('message_id').in('message_id', ids);
     const vistos = new Set((jaVistos || []).map((r: any) => r.message_id));
-    const pendentes = ids.filter(id => !vistos.has(id));
+    // .slice(teto): o resto fica para a próxima rodada. É o que mantém cada
+    // execução dentro do tempo e, de quebra, é a trava de volume.
+    const pendentes = ids.filter(id => !vistos.has(id)).slice(0, teto);
 
     let gravados = 0, comErro = 0;
     for (const id of pendentes) {
@@ -227,7 +237,11 @@ Deno.serve(async (req) => {
       modo: backfill ? 'backfill' : 'incremental',
       modoSeco: true,              // nesta etapa é sempre true; a 1b muda isto
       cotacoesCriadas: 0,          // explícito: nenhuma, por desenho
-      lidos: ids.length, novos: pendentes.length, gravados, comErro,
+      naJanela: ids.length,
+      jaNoLog: ids.length - (ids.length - vistos.size) === 0 ? vistos.size : vistos.size,
+      processadosAgora: pendentes.length,
+      faltamNaJanela: Math.max(0, ids.length - vistos.size - pendentes.length),
+      gravados, comErro,
       ativo: cfg.ativo === true,
     });
   } catch (e) {
