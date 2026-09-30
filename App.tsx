@@ -306,6 +306,22 @@ const App: React.FC = () => {
     const [showMap, setShowMap] = useState(false);
     const [routeLoading, setRouteLoading] = useState(false);
     const [routeGeometry, setRouteGeometry] = useState<{ polyline: string; stops: { lat: number; lng: number }[] } | null>(null);
+    /**
+     * Popup do mapa da ROTA SIMPLES (origem -> destino).
+     *
+     * Estado SEPARADO do routeGeometry da multi-parada de propósito: são duas
+     * telas diferentes olhando rotas diferentes, e compartilhar o estado faria
+     * uma sobrescrever o mapa da outra.
+     *
+     * É consulta PARALELA ao cálculo: falhar aqui não toca em km, pedágio nem
+     * piso — o Qualp segue sendo a fonte do preço, e este mapa é só desenho.
+     */
+    const [mapaAberto, setMapaAberto] = useState(false);
+    const [mapaGeo, setMapaGeo] = useState<{ polyline: string; stops: { lat: number; lng: number }[] } | null>(null);
+    const [mapaCarregando, setMapaCarregando] = useState(false);
+    const [mapaErro, setMapaErro] = useState('');
+    /** A rota que o mapa aberto está mostrando — para não reconsultar a mesma. */
+    const [mapaRota, setMapaRota] = useState('');
     const [clientReference, setClientReference] = useState('');
     const [distanceKm, setDistanceKm] = useState<string>('0');
     const [vehicleType, setVehicleType] = useState<string>(Object.keys(vehicleConfigs)[0] || "Truck");
@@ -1826,6 +1842,45 @@ const App: React.FC = () => {
     // Cotação já salva: o número antigo fica como está até o operador pedir. Só
     // aqui o Qualp é consultado de novo, e o antes/depois aparece na tela.
     const recalcularPeloQualp = () => consultarQualp(undefined, true);
+
+    /**
+     * Abre o popup com a rota da cotação atual.
+     *
+     * Usa o MESMO calculate-route da multi-parada, com um destino só: a função
+     * trata `destinations` de tamanho 1 como rota direta (zero intermediates) e
+     * devolve a polyline e as paradas que o RouteMap já sabe desenhar. Nenhuma
+     * chave nova, nenhum componente novo, e o Qualp não é chamado.
+     *
+     * Uma chamada por abertura, sob clique. Reabrir a MESMA rota não consulta de
+     * novo — trocar origem ou destino, sim.
+     */
+    const abrirMapaDaRota = async () => {
+        const o = origin.trim(), d = destination.trim();
+        if (!o || !d) { showFeedback('Informe origem e destino para ver a rota.', 'info'); return; }
+        setMapaAberto(true);
+
+        const rota = `${o}|${d}`;
+        if (mapaGeo && mapaRota === rota) return;   // mesma rota já desenhada
+
+        setMapaCarregando(true);
+        setMapaErro('');
+        setMapaGeo(null);
+        try {
+            const res = await estimateMultiRoute(o, [d], vehicleType, vehicleConfigs[vehicleType]?.axles);
+            if (res?.error || !res?.polyline) {
+                // Erro fica DENTRO do popup. A cotação não é afetada: quem calcula
+                // preço é o Qualp, e ele não passou por aqui.
+                setMapaErro(res?.error || 'A rota voltou sem o traçado para desenhar.');
+                return;
+            }
+            setMapaGeo({ polyline: res.polyline, stops: Array.isArray(res.stops) ? res.stops : [] });
+            setMapaRota(rota);
+        } catch (e: any) {
+            setMapaErro(e?.message || 'Falha ao consultar a rota.');
+        } finally {
+            setMapaCarregando(false);
+        }
+    };
 
     // Recalcula a rota multi-parada (coleta + destino + destinos extras). A distância TOTAL
     // alimenta o cálculo (distanceKm); o pedágio e a otimização vêm do backend. Não mexe na fórmula.
@@ -3496,6 +3551,18 @@ Disponibilidade: ${disponibilidade}`;
                                                         <span className="text-[10px] font-medium text-blue-600 uppercase">{(parseFloat(distanceKm) || 0).toLocaleString()} KM Sugeridos</span>
                                                     </div>
                                                 )}
+                                                {/* Mapa da rota simples. Só aparece com origem e destino preenchidos,
+                                                    e não na multi-parada, que tem o mapa inline dela logo abaixo. */}
+                                                {!isMultiRota && !!origin.trim() && !!destination.trim() && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={abrirMapaDaRota}
+                                                        title="Abrir o traçado da rota no mapa"
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5e7eb] rounded-full text-[10px] font-medium text-[#111827] uppercase hover:bg-[#f9fafb] transition-colors"
+                                                    >
+                                                        <MapIcon className="w-3 h-3 text-[#1d6fb8]" strokeWidth={1.75} /> Ver rota no mapa
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
@@ -4618,6 +4685,49 @@ Disponibilidade: ${disponibilidade}`;
                                 </div>
                             ))}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: rota no mapa (consulta paralela — não afeta preço/pedágio/piso) */}
+            {mapaAberto && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[140] flex items-center justify-center p-6 animate-fade-in" onClick={() => setMapaAberto(false)}>
+                    <div className="bg-white w-full max-w-3xl rounded-xl border border-[#e5e7eb] shadow-sm p-6" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-start justify-between mb-1 gap-4">
+                            <div className="min-w-0">
+                                <h3 className="text-base font-medium text-[#111827]">Rota no mapa</h3>
+                                <p className="text-xs font-normal text-[#6b7280] mt-0.5 truncate">{origin} &rarr; {destination}</p>
+                            </div>
+                            <button onClick={() => setMapaAberto(false)} className="p-1.5 text-[#6b7280] hover:bg-[#f9fafb] rounded-md transition-colors shrink-0">
+                                <X className="w-4 h-4" strokeWidth={1.75} />
+                            </button>
+                        </div>
+
+                        {mapaCarregando && (
+                            <div className="mt-3 w-full h-72 rounded-lg border border-[#e5e7eb] bg-[#f9fafb] flex items-center justify-center">
+                                <span className="text-sm font-normal text-[#6b7280]">Consultando a rota...</span>
+                            </div>
+                        )}
+
+                        {!mapaCarregando && mapaErro && (
+                            <div className="mt-3 w-full h-72 rounded-lg border border-[#e5e7eb] bg-[#f9fafb] flex flex-col items-center justify-center gap-3 px-6 text-center">
+                                <p className="text-sm font-normal text-[#6b7280]">{mapaErro}</p>
+                                <p className="text-[11px] font-normal text-[#9ca3af]">O cálculo da cotação não foi afetado.</p>
+                                <button type="button" onClick={abrirMapaDaRota} className="px-4 py-2 bg-white border border-[#e5e7eb] rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors">
+                                    Tentar de novo
+                                </button>
+                            </div>
+                        )}
+
+                        {!mapaCarregando && !mapaErro && mapaGeo && (
+                            <MapErrorBoundary>
+                                <RouteMap polyline={mapaGeo.polyline} stops={mapaGeo.stops} />
+                            </MapErrorBoundary>
+                        )}
+
+                        <p className="text-[11px] font-normal text-[#9ca3af] mt-3">
+                            Traçado do Google Routes, apenas para visualização. Quilometragem, pedágio e piso continuam vindo do Qualp.
+                        </p>
                     </div>
                 </div>
             )}
