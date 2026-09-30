@@ -955,6 +955,74 @@ export const getGmailIntakeLog = async (limite = 100): Promise<GmailIntakeItem[]
     }));
 };
 
+/** O que uma rodada da leitura de e-mail devolveu, já em português de tela. */
+export interface RodadaEmail {
+    ok: boolean;
+    erro?: string;
+    /** Quantas cotações entraram no funil NESTA rodada. */
+    cotacoesCriadas: number;
+    /** Quantos e-mails foram efetivamente processados (teto da rodada). */
+    processados: number;
+    /** Quantos ficaram para a próxima rodada por causa do teto. */
+    faltam: number;
+    /** E-mails que quebraram no meio do caminho. */
+    comErro: number;
+    /** false = interruptor desligado: a função lê e registra, mas não cria card. */
+    ativo: boolean;
+}
+
+/**
+ * Dispara UMA rodada incremental da leitura de e-mail — a mesma que o cron roda.
+ *
+ * Não existe parâmetro nenhum aqui de propósito: backfill, janela, teto e
+ * `forcar` são ferramentas de depuração e não podem ficar a um clique de
+ * distância na tela do comercial. O corpo vazio é exatamente o que o cron manda,
+ * então o botão não é um caminho novo — é o mesmo caminho, sob demanda.
+ *
+ * A função exige JWT (`verify_jwt = true`), e o invoke já manda o do usuário
+ * logado. Nenhuma chave nova, nenhum segredo no bundle.
+ */
+export const rodarLeituraEmails = async (): Promise<RodadaEmail> => {
+    const vazio = { ok: false, cotacoesCriadas: 0, processados: 0, faltam: 0, comErro: 0, ativo: false };
+    try {
+        const { data, error } = await supabase.functions.invoke('gmail-intake', { body: {} });
+        // invoke só expõe "non-2xx status code" e engole o corpo — mas é no corpo
+        // que está o motivo (cutoff ausente, config faltando, token vencido).
+        if (error) return { ...vazio, erro: error.message };
+        if (data?.error) return { ...vazio, erro: String(data.error) };
+        return {
+            ok: true,
+            cotacoesCriadas: Number(data?.cotacoesCriadas || 0),
+            processados: Number(data?.processadosAgora || 0),
+            faltam: Number(data?.faltamNaJanela || 0),
+            comErro: Number(data?.comErro || 0),
+            ativo: data?.ativo === true,
+        };
+    } catch (e: any) {
+        return { ...vazio, erro: e?.message || 'falha ao chamar a leitura de e-mail' };
+    }
+};
+
+/**
+ * Quando a caixa foi lida pela última vez (qualquer e-mail, virando card ou não).
+ *
+ * É o que diz se o cron está de pé sem precisar abrir o banco: se a última
+ * leitura foi há horas, não é o e-mail que não chegou — é o robô que parou.
+ */
+export const getUltimaLeituraEmail = async (): Promise<string | null> => {
+    const { data, error } = await supabase
+        .from('gmail_intake_log')
+        .select('processado_em')
+        .order('processado_em', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (error) {
+        console.error('getUltimaLeituraEmail:', error.message);
+        return null;
+    }
+    return data?.processado_em ?? null;
+};
+
 // Token do Painel TV — lido só por usuário logado (RLS authenticated). Usado
 // pra montar o link do menu sem expor o token no bundle público.
 export const getPainelTvToken = async (): Promise<string | null> => {

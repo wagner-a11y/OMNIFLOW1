@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import {
-    Activity, AlertTriangle, ArrowDown, ArrowRight, Award, BarChart3, Calendar, Check, CheckCircle, ChevronDown, Clock, Copy as ClipboardCopy, CopyPlus, DollarSign, Download, Edit3, FileDown, FileText, Factory, Hash, History, IdCard, ImageIcon, Info, Key, Layers, Link2, Lock, LogOut, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, Save, Scale, Search, Send, Settings, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, UserCheck, Users, Wrench, X, Zap
+    Activity, AlertTriangle, ArrowDown, ArrowRight, Award, BarChart3, Calendar, Check, CheckCircle, ChevronDown, Clock, Copy as ClipboardCopy, CopyPlus, DollarSign, Download, Edit3, FileDown, FileText, Factory, Hash, History, IdCard, ImageIcon, Info, Key, Layers, Link2, Lock, LogOut, Mail, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, RefreshCw, Save, Scale, Search, Send, Settings, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, UserCheck, Users, Wrench, X, Zap
 } from 'lucide-react';
 import { CRMBoard } from './components/CRMBoard';
 import { GmailIntakeBoard } from './components/GmailIntakeBoard';
@@ -116,6 +116,8 @@ import {
     deleteCustomer,
     updateCustomer,
     getFreightCalculations,
+    rodarLeituraEmails,
+    getUltimaLeituraEmail,
     createFreightCalculation,
     updateFreightCalculation,
     deleteFreightCalculation,
@@ -134,6 +136,7 @@ import {
     deleteVehicleConfig
 } from './services/database';
 import { supabase } from './services/supabase';
+import { haQuantoTempo } from './utils/tempoRelativo';
 
 const DefaultLogo: React.FC<{ className?: string }> = ({ className }) => (
     <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -807,6 +810,62 @@ const App: React.FC = () => {
     };
 
     const showFeedback = (message: string, type: 'success' | 'info' | 'error' = 'success') => setToast({ message, type });
+
+    /* ----------------------------------------------------------------------
+       LER E-MAILS AGORA (botão do Funil)
+       O cron já faz isso sozinho de minuto em minuto. Este botão existe para
+       quando ele falha — e para quem acabou de mandar o e-mail e não quer
+       esperar. É a MESMA rodada incremental do cron, com corpo vazio: mesmo
+       cutoff, mesmo teto, mesmas travas anti-duplicata. Não é um atalho que
+       pula proteção nenhuma.
+       ---------------------------------------------------------------------- */
+    const [lendoEmails, setLendoEmails] = useState(false);
+    const [ultimaLeituraEmail, setUltimaLeituraEmail] = useState<string | null>(null);
+
+    /** Leitura secundária: se falhar, o botão continua funcionando. */
+    const atualizarUltimaLeitura = () => {
+        getUltimaLeituraEmail().then(setUltimaLeituraEmail).catch(() => {});
+    };
+
+    // Só busca quando o Funil está aberto: é a única tela que mostra a marca.
+    useEffect(() => { if (activeTab === 'crm') atualizarUltimaLeitura(); }, [activeTab]);
+
+    const lerEmailsAgora = async () => {
+        if (lendoEmails) return;
+        setLendoEmails(true);
+        showFeedback('Lendo a caixa de cotações...', 'info');
+        try {
+            const r = await rodarLeituraEmails();
+            if (!r.ok) {
+                showFeedback(`Não foi possível ler os e-mails: ${r.erro}`, 'error');
+                return;
+            }
+            if (r.cotacoesCriadas > 0) {
+                // Só recarrega o histórico quando algo entrou: o funil inteiro
+                // vem dessa lista, e recarregar à toa pisca a tela sem motivo.
+                setHistory(await getFreightCalculations());
+                showFeedback(
+                    r.cotacoesCriadas === 1 ? '1 cotação nova entrou em Cotações.' : `${r.cotacoesCriadas} cotações novas entraram em Cotações.`,
+                    'success',
+                );
+            } else if (!r.ativo) {
+                // Estado real e possível: a função lê e registra, mas o interruptor
+                // do banco está desligado e nada vira card. Sem isto, o operador
+                // veria "nenhum e-mail novo" e procuraria o problema no Gmail.
+                showFeedback('A leitura rodou, mas a criação de cards está DESLIGADA no banco (gmail_intake_config.ativo).', 'info');
+            } else if (r.comErro > 0) {
+                showFeedback(`Nenhuma cotação nova. ${r.comErro} e-mail(s) falharam na leitura — veja em Leitura de E-mail.`, 'info');
+            } else if (r.processados === 0) {
+                showFeedback('Nenhum e-mail novo na caixa.', 'info');
+            } else {
+                showFeedback(`${r.processados} e-mail(s) lidos, nenhum era pedido de cotação.`, 'info');
+            }
+            if (r.faltam > 0) showFeedback(`Ainda faltam ${r.faltam} e-mail(s) nesta janela — clique de novo.`, 'info');
+        } finally {
+            setLendoEmails(false);
+            atualizarUltimaLeitura();
+        }
+    };
 
     const handleUpdateFedTaxes = async (key: keyof FederalTaxes, value: number) => {
         const newTaxes = { ...fedTaxes, [key]: value };
@@ -2897,6 +2956,27 @@ Disponibilidade: ${disponibilidade}`;
                                         activeTab === 'demais-plantas' ? 'Demais Plantas · Prévia' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
+                    {activeTab === 'crm' && (
+                        <div className="flex items-center gap-3">
+                            {/* A marca diz se o robô está de pé. Leitura velha = o cron
+                                parou; não adianta procurar o problema no Gmail. */}
+                            <span className="text-[11px] font-normal text-[#9ca3af]" title={ultimaLeituraEmail ? new Date(ultimaLeituraEmail).toLocaleString('pt-BR') : 'nenhuma leitura registrada'}>
+                                Última leitura: {haQuantoTempo(ultimaLeituraEmail)}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={lerEmailsAgora}
+                                disabled={lendoEmails}
+                                title="Lê a caixa de cotações agora e cria os cards — a mesma rodada que roda sozinha de minuto em minuto"
+                                className="flex items-center gap-2 px-3 py-2 bg-white border border-[#e5e7eb] rounded-lg text-xs font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {lendoEmails
+                                    ? <RefreshCw className="w-3.5 h-3.5 text-[#1d6fb8] animate-spin" strokeWidth={1.75} />
+                                    : <Mail className="w-3.5 h-3.5 text-[#1d6fb8]" strokeWidth={1.75} />}
+                                {lendoEmails ? 'Lendo...' : 'Ler e-mails agora'}
+                            </button>
+                        </div>
+                    )}
                     {activeTab === 'history' && (
                         <div className="relative w-72">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6b7280]" strokeWidth={1.75} />
