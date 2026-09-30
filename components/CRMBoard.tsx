@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { FreightCalculation, QuoteStatus, LOST_REASONS, LostReason, FederalTaxes } from '../types';
 import { Paperclip, X, FileText, Calendar, DollarSign, MapPin, AlertCircle, TrendingUp, Target, Activity, BarChart3, Clock, PieChart, ShieldCheck, Zap, Info, Scale, Send, Mail, Eye } from 'lucide-react';
+import { apareceNaColuna, somarRealizado } from './funilVivo';
 
 interface CRMBoardProps {
     quotes: FreightCalculation[];
@@ -24,8 +25,10 @@ const CONFIANCA_MINIMA = 0.7;
 /**
  * As colunas do FUNIL DE FATURAMENTO, na ordem em que a operação fala.
  *
- * Cards NÃO andam sozinhos: quem move é o comercial, arrastando. Nenhuma coluna
- * é derivada de data — inclusive "Carregando Hoje", que é estágio manual.
+ * Cards NÃO andam sozinhos: quem move é o comercial, arrastando. Nenhum card
+ * muda de coluna por causa de data — inclusive "Carregando Hoje", que é estágio
+ * manual. A data decide apenas se o card APARECE, e só nas duas colunas de
+ * desfecho (ver COLUNAS_ABERTAS logo abaixo).
  *
  * O que NÃO aparece aqui, de propósito: `spot_simulated` (simulação, não é
  * cotação real) e `em_operacao` (legado — nenhum fluxo grava mais). Status fora
@@ -74,12 +77,6 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
     const { columns, insights } = useMemo(() => {
         const [year, month] = selectedMonth.split('-').map(Number);
 
-        // Filter quotes by month (created_at)
-        const filteredQuotes = quotes.filter(q => {
-            const date = new Date(q.createdAt);
-            return date.getFullYear() === year && date.getMonth() === (month - 1);
-        });
-
         // Columns Logic
         const cols: Record<QuoteStatus, FreightCalculation[]> = {
             pending: [], respondida: [], aprovada: [], carregando: [],
@@ -87,20 +84,27 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
             // cai neles fica fora do board, como já era antes desta mudança.
             em_operacao: [], won: [], lost: [], spot_simulated: []
         };
-        filteredQuotes.forEach(q => {
+        quotes.forEach(q => {
             const status = q.status as QuoteStatus;
-            if (cols[status]) cols[status].push(q);
-            else cols['pending'].push(q);
+            // Status desconhecido continua caindo em Cotações, como sempre caiu.
+            const alvo: QuoteStatus = cols[status] ? status : 'pending';
+            // Coluna aberta mostra o pipeline inteiro; coluna de desfecho, só o mês.
+            if (apareceNaColuna(q, alvo, year, month)) cols[alvo].push(q);
         });
 
         // Insights Logic
         const goalValue = systemConfig.goals?.[selectedMonth] || 0;
 
-        // Realizado = o que já está fechado: Aprovadas + Carregando Hoje + Faturado.
-        // `em_operacao` segue na soma por causa de cotação antiga que possa tê-lo
-        // gravado — tirá-lo faria o realizado do mês passado encolher sozinho.
-        const realizedValue = [...cols.aprovada, ...cols.carregando, ...cols.won, ...cols.em_operacao]
-            .reduce((acc, curr) => acc + (curr.totalFreight || 0), 0);
+        /*
+         * Meta × Realizado continua MENSAL, e por isso NÃO pode sair de `cols`:
+         * as colunas abertas agora carregam todos os meses, e somá-las aqui
+         * inflaria o realizado com negócio que não é deste mês.
+         *
+         * Então o realizado é recontado sobre a base do mês — a mesma de antes
+         * desta mudança, com os mesmos quatro status. A conta não mudou; mudou
+         * só de onde ela lê.
+         */
+        const realizedValue = somarRealizado(quotes, year, month);
 
         const percentReached = goalValue > 0 ? (realizedValue / goalValue) * 100 : 0;
 
@@ -283,6 +287,15 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                             <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-2 bg-[#f9fafb]/60">
                                 {items.map(quote => {
                                     const customer = customers.find(c => c.id === quote.customerId);
+                                    /*
+                                     * Cliente sem cadastro ligado não vira "Cliente" genérico à toa:
+                                     * cotação de e-mail nasce com customer_id nulo e o nome que o
+                                     * modelo leu vai para `clienteNomeOperacao`, e o fechamento
+                                     * também grava esse campo. O nome existia; faltava ler.
+                                     */
+                                    const nomeCliente = customer?.name || quote.clienteNomeOperacao || 'Cliente';
+                                    // Veículo vazio não vira " · " solto (cotação de e-mail pode vir sem).
+                                    const veiculo = (quote.vehicleType || '').trim();
                                     const loadingDate = quote.createdAt ? new Date(quote.createdAt) : null;
                                     const daysUntilLoad = loadingDate ? Math.ceil((loadingDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
                                     const isUrgentDate = daysUntilLoad !== null && daysUntilLoad <= 3 && daysUntilLoad >= 0;
@@ -306,8 +319,8 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                         >
                                             {/* linha 1 — cliente + urgência */}
                                             <div className="flex items-center gap-1.5">
-                                                <h4 className="font-semibold text-[#111827] text-[11px] leading-tight truncate flex-1" title={customer?.name || 'Cliente'}>
-                                                    {customer?.name || 'Cliente'}
+                                                <h4 className="font-semibold text-[#111827] text-[11px] leading-tight truncate flex-1" title={nomeCliente}>
+                                                    {nomeCliente}
                                                 </h4>
                                                 {quote.disponibilidade === 'Imediato' && (
                                                     // title no <span>, nao no icone: o lucide nao aceita title como prop
@@ -346,6 +359,12 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ quotes, onUpdateStatus, cust
                                             <div className="flex items-center gap-1 text-[10px] font-medium text-[#6b7280] mt-1 min-w-0">
                                                 <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
                                                 <span className="truncate" title={rota}>{rota}</span>
+                                                {/* Equipamento: quem cede espaço é a rota, não o veículo. */}
+                                                {veiculo && (
+                                                    <span className="flex-shrink-0 text-[9px] font-medium text-[#9ca3af]" title={veiculo}>
+                                                        · {veiculo}
+                                                    </span>
+                                                )}
                                             </div>
 
                                             {/* linha 3 — valor + data + responsável */}
