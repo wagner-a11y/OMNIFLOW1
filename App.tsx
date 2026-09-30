@@ -2246,6 +2246,13 @@ const App: React.FC = () => {
         ];
         otherCosts.forEach(c => items.push({ label: c.label, value: c.value }));
         items.push({ label: 'Impostos federais (PIS/COFINS/CSLL/IRPJ)', value: calcData.fedTaxesAmount });
+        // ICMS ao lado dos federais. Estava faltando: a lista destacava o imposto
+        // FEDERAL e omitia o ESTADUAL, embora os dois já estejam embutidos no
+        // total impresso logo abaixo — e o ICMS já aparecia no Extrato da tela.
+        // É só exibição: `icmsAmount` vem pronto do calcData, e nem o preço nem a
+        // fórmula são tocados aqui. A margem segue de fora, de propósito: lucro
+        // não se abre ao cliente.
+        items.push({ label: `ICMS (${icmsPercent}%)`, value: calcData.icmsAmount });
         return items;
     };
 
