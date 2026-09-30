@@ -11,6 +11,9 @@ import {
     // A lista e os botões do histórico foram para HistoricoSuzano; aqui ficam
     // só o tipo e os envios, que a prévia usa para mandar a carga recém-criada.
     CotacaoHistorico, enviarCargaAoPipefy, enviarCargaAoRamper,
+    // "A pagar" à mão quando o destino não está na tabela de preço — o mesmo
+    // par (definir + converter texto) que as Demais Plantas já usavam.
+    definirValorManualFast, numero,
 } from '../services/fastDelivery';
 import HistoricoSuzano from './HistoricoSuzano';
 
@@ -68,6 +71,14 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
     const [lendo, setLendo] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [arquivo, setArquivo] = useState('');
+    /**
+     * Rascunho do campo "A pagar", por linha do Excel.
+     *
+     * Existe separado do valor da linha porque o que se digita é TEXTO em
+     * andamento ("1.2", "1.200,") e só vira número no blur. Sai do rascunho
+     * quando a linha é atualizada, para o valor aplicado mandar no campo.
+     */
+    const [digitando, setDigitando] = useState<Record<number, string>>({});
 
     // ---- gravação ----
     const [confirmando, setConfirmando] = useState(false);
@@ -141,6 +152,22 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
         return () => { vivo = false; };
     }, []);
 
+    /** Troca a linha pela versão recalculada e SOLTA o rascunho dela. */
+    const atualizar = (linha: LinhaPrevia) => {
+        setLinhas(ls => (ls ?? []).map(l => (l.linhaExcel === linha.linhaExcel ? linha : l)));
+        setDigitando(p => {
+            if (!(linha.linhaExcel in p)) return p;
+            const q = { ...p }; delete q[linha.linhaExcel]; return q;
+        });
+    };
+
+    const aplicarDigitado = (l: LinhaPrevia) => {
+        const texto = digitando[l.linhaExcel];
+        if (texto === undefined) return;
+        // Campo esvaziado devolve a linha à pendência — é diferente de zero.
+        atualizar(definirValorManualFast(l, texto.trim() === '' ? null : numero(texto)));
+    };
+
     const { pendentes, prontas, lancadas } = useMemo(() => {
         const todas = linhas ?? [];
         const semPendencia = todas.filter(l => !l.pendencias.length);
@@ -171,7 +198,8 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
     const aoSubir = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        setLendo(true); setErro(null); setLinhas(null); setArquivo(file.name);
+        // Rascunhos vão junto: planilha nova, nenhum resto da anterior.
+        setLendo(true); setErro(null); setLinhas(null); setDigitando({}); setArquivo(file.name);
         try {
             const a = apoio ?? await carregarApoio();
             if (!apoio) setApoio(a);
@@ -371,10 +399,22 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
         );
     };
 
-    const Linha: React.FC<{ l: LinhaPrevia; pendente?: boolean }> = ({ l, pendente }) => {
+    /**
+     * Desenha uma linha. É uma FUNÇÃO que devolve JSX, não um componente
+     * declarado aqui dentro — e a diferença não é estilo.
+     *
+     * Como componente, `Linha` seria uma função NOVA a cada render do pai. O
+     * React compara tipos por identidade: tipo novo = componente diferente =
+     * desmonta e remonta a <tr> inteira. A cada tecla no campo "A pagar" o
+     * input seria destruído e recriado, e o foco iria junto — dava para digitar
+     * um caractere por vez. É exatamente o bug que as Demais Plantas já tinham
+     * levado (ver o comentário gêmeo em DemaisPlantas.tsx).
+     */
+    const renderLinha = (l: LinhaPrevia, pendente = false) => {
         const cor = CORES[corDaMargem(l.margemPercent, marginThreshold)];
+        const daTabela = l.fonteValor === 'tabela';
         return (
-            <>
+            <React.Fragment key={`${pendente ? 'p' : 'k'}-${l.linhaExcel}`}>
             <tr className={pendente ? 'bg-amber-50/60' : 'hover:bg-[#f9fafb]'}>
                 <td className="px-3 py-2 font-mono text-xs">{l.referencia || '—'}</td>
                 <td className="px-3 py-2 text-xs">
@@ -413,7 +453,34 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 </td>
                 <td className="px-3 py-2 text-xs text-right">{l.peso !== null ? `${l.peso} kg` : '—'}</td>
                 <td className="px-3 py-2 text-xs text-right font-medium">{brl(l.valorRecebido)}</td>
-                <td className="px-3 py-2 text-xs text-right font-medium">{brl(l.valorAPagar)}</td>
+                {/* A pagar: da tabela vira NÚMERO; sem tabela vira CAMPO.
+                    Mesmo padrão das Demais Plantas — a pendência dizia "informe
+                    o valor a pagar à mão" e não havia onde digitar. */}
+                <td className="px-3 py-2 text-xs text-right">
+                    {daTabela ? (
+                        <>
+                            <span className="font-medium">{brl(l.valorAPagar)}</span>
+                            <span className="block text-[10px] text-[#9ca3af]">tabela</span>
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-end gap-1">
+                            <input
+                                type="text" inputMode="decimal"
+                                /* O rascunho manda enquanto existe; quando some
+                                   (blur, nova planilha), o campo volta a refletir
+                                   o valor da linha. */
+                                value={digitando[l.linhaExcel] ?? (l.valorAPagar !== null ? String(l.valorAPagar) : '')}
+                                onChange={e => setDigitando(p => ({ ...p, [l.linhaExcel]: e.target.value }))}
+                                onBlur={() => aplicarDigitado(l)}
+                                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                placeholder="0,00"
+                                className="w-24 px-2 py-1 text-right bg-white border border-[#e5e7eb] rounded text-xs font-medium text-[#111827] outline-none focus:border-[#1d6fb8]" />
+                            {l.fonteValor === 'manual' && (
+                                <span className="text-[10px] text-[#9ca3af]">à mão</span>
+                            )}
+                        </div>
+                    )}
+                </td>
                 <td className={`px-3 py-2 text-xs text-right font-semibold ${cor}`}>
                     {brl(l.margem)}
                     <span className="block text-[10px] font-medium">
@@ -455,7 +522,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                     </td>
                 </tr>
             )}
-            </>
+            </React.Fragment>
         );
     };
 
@@ -567,7 +634,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                             <tbody className="divide-y divide-[#f3f4f6]">
                                 {pendentes.map(l => (
                                     <React.Fragment key={`p-${l.linhaExcel}`}>
-                                        <Linha l={l} pendente />
+                                        {renderLinha(l, true)}
                                         <tr className="bg-amber-50/60">
                                             <td colSpan={9} className="px-3 pb-2 pt-0">
                                                 {l.pendencias.map((p, i) => (
@@ -752,7 +819,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                             <Cabecalho />
                             <tbody className="divide-y divide-[#f3f4f6]">
                                 {visiveis.length
-                                    ? visiveis.map(l => <Linha key={l.linhaExcel} l={l} />)
+                                    ? visiveis.map(l => renderLinha(l))
                                     : (
                                         <tr>
                                             <td colSpan={10} className="px-6 py-6 text-center text-xs text-[#6b7280]">

@@ -455,8 +455,16 @@ export interface LinhaPrevia {
     instrucao: string;
     /** "Fim Viagem" em hora local. null = célula vazia. */
     entregaEm: string | null;
-    /** Da NOSSA tabela. null = sem preço, e aí não há margem. */
+    /** Da NOSSA tabela, ou digitado à mão. null = sem valor, e aí não há margem. */
     valorAPagar: number | null;
+    /**
+     * De onde veio o `valorAPagar`. 'tabela' = da nossa tabela de preço;
+     * 'manual' = o operador digitou; null = ainda não há valor.
+     *
+     * Mesmo campo (e mesmos nomes) das Demais Plantas, que já faziam isso. É
+     * ele que decide se a célula "A pagar" é NÚMERO ou CAMPO.
+     */
+    fonteValor?: 'tabela' | 'manual' | null;
     km: number | null;
     pedagio: number | null;
     margem: number | null;
@@ -670,6 +678,7 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
             carroceriaEfetiva,
             avisoCarroceria,
             valorAPagar,
+            fonteValor: valorAPagar !== null ? 'tabela' : null,
             km: preco?.km ?? null,
             pedagio: preco?.pedagio ?? null,
             margem,
@@ -681,6 +690,55 @@ export function lerExcelOtm(buffer: ArrayBuffer, apoio: ApoioFastDelivery): Resu
     });
 
     return { linhas, colunasFaltando: faltando, totalLinhas: bruto.length };
+}
+
+/**
+ * Define à mão o valor a pagar ao terceiro. `null` limpa e devolve a pendência.
+ *
+ * É o MESMO padrão que as Demais Plantas já usavam (`definirValorManual` +
+ * `comValor` em services/demaisPlantas.ts), trazido para cá sem regra nova: a
+ * margem é a subtração de sempre e a pendência sai quando o motivo dela é
+ * resolvido.
+ *
+ * QUAIS pendências saem, e por quê: 'destino' e 'veiculo' são empilhadas num
+ * único ponto da leitura — o ramo `tipoVeiculo && !preco` —, e as duas dizem
+ * literalmente "informe o valor a pagar à mão". Digitar o valor é exatamente o
+ * remédio que elas pedem, então é o que as encerra.
+ *
+ * 'equipamento' e 'valor' NÃO saem, e isso é deliberado. 'equipamento' é
+ * classificação humana, que valor nenhum resolve. E 'valor' aqui significa
+ * "sem Custo Frete na planilha" — o RECEBIDO, não o a pagar (nas Demais
+ * Plantas esse caso se chama 'recebido'). Sem o recebido não há margem, e
+ * encerrar essa pendência liberaria linha sem margem para virar cotação.
+ */
+export function definirValorManualFast(linha: LinhaPrevia, valor: number | null): LinhaPrevia {
+    const recebido = linha.valorRecebido;
+    const margem = recebido !== null && valor !== null ? recebido - valor : null;
+    const margemPercent = margem !== null && recebido ? (margem / recebido) * 100 : null;
+
+    // Recalculada por DERIVAÇÃO, não por remoção acumulada: a pendência do
+    // valor existe se, e somente se, não há valor. Filtrar e recolocar (em vez
+    // de só filtrar) é o que faz apagar o campo devolver a linha à pendência —
+    // sem isto, a segunda edição deixaria a linha sem valor E sem pendência,
+    // liberada por engano. É a mesma forma do `comValor` das Demais Plantas.
+    //
+    // O texto recolocado é genérico porque o original ('destino' x 'veiculo')
+    // depende da tabela de apoio, que não existe aqui — mesmo limite que o
+    // modelo já aceitava. O motivo é só rótulo: a tela só o consulta para o
+    // atalho de classificar equipamento.
+    const semDoValor = linha.pendencias.filter(p => p.motivo !== 'destino' && p.motivo !== 'veiculo');
+    const pendencias = valor === null
+        ? [...semDoValor, { motivo: 'destino' as MotivoPendencia, texto: 'Sem valor a pagar — informe o valor à mão.' }]
+        : semDoValor;
+
+    return {
+        ...linha,
+        valorAPagar: valor,
+        fonteValor: valor === null ? null : 'manual',
+        margem,
+        margemPercent,
+        pendencias,
+    };
 }
 
 /**
