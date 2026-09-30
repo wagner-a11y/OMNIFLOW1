@@ -96,8 +96,25 @@ export const RouteMap: React.FC<{ polyline?: string; stops?: { lat: number; lng:
     return (
         <div className="mt-3">
             {error && <p className="text-[11px] font-normal text-red-600 mb-2">{error}</p>}
-            <div ref={ref} className="w-full h-72 rounded-lg border border-[#e5e7eb] bg-[#f9fafb] flex items-center justify-center">
-                {loading && !error && <span className="text-sm font-normal text-[#6b7280]">Carregando mapa...</span>}
+            {/*
+             * O div do `ref` é do GOOGLE, não do React: `new maps.Map(div)` joga fora
+             * os filhos que estiverem ali dentro. Se o React tiver renderizado algum
+             * (era o caso do "Carregando mapa..."), na hora de tirá-lo ele chama
+             * removeChild num nó que o Google já desanexou e estoura
+             *   NotFoundError: The node to be removed is not a child of this node
+             * no commit — que o MapErrorBoundary captura e vira "Não foi possível
+             * exibir o mapa". Era isso que derrubava TODO mapa em produção.
+             *
+             * Então o div do mapa fica VAZIO para o React, e o aviso de carregando
+             * é irmão sobreposto. Nunca coloque filho dentro do div do `ref`.
+             */}
+            <div className="relative w-full h-72">
+                <div ref={ref} className="absolute inset-0 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]" />
+                {loading && !error && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <span className="text-sm font-normal text-[#6b7280]">Carregando mapa...</span>
+                    </div>
+                )}
             </div>
         </div>
     );
