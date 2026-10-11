@@ -20,8 +20,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileDown, Info, Lock, Upload } from 'lucide-react';
 import {
-    processarLoteBid, resumirBid, rotuloStatus,
-    type LinhaBid, type ParametrosBid,
+    planejarLote, processarLoteBid, resumirBid, rotuloStatus, TETO_ROTAS_DISTINTAS,
+    type LinhaBid, type LinhaBidBruta, type ParametrosBid, type PlanoLote,
 } from '../utils/bidLote';
 import { lerPlanilhaBid, consultarRotaDoLote, exportarBidExcel } from '../services/bidLote';
 import type { ANTTCoefficients, FederalTaxes } from '../types';
@@ -69,6 +69,11 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     const [estatQualp, setEstatQualp] = useState<{ consultas: number; distintas: number; economizadas: number } | null>(null);
     const [nomeArquivo, setNomeArquivo] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    /**
+     * Lote lido e planejado, esperando o OK do operador. O custo em consultas
+     * já está calculado aqui — nada foi consultado ainda.
+     */
+    const [pendenteDeOk, setPendenteDeOk] = useState<{ plano: PlanoLote; brutas: LinhaBidBruta[] } | null>(null);
 
     const prazosDisponiveis = useMemo(
         () => Object.keys(fedTaxes.anticipationRates || {})
@@ -93,11 +98,15 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
         comissaoPadrao: fedTaxes.commissionPercent,
     });
 
+    /**
+     * Passo 1: ler e PLANEJAR. Não consulta nada — só descobre quantas rotas
+     * distintas o lote vai custar, e pede o OK. A cota do Qualp é paga.
+     */
     const aoEscolherArquivo = async (file: File | undefined) => {
         if (!file || rodando) return;
-        setRodando(true);
         setLinhas(null);
         setEstatQualp(null);
+        setPendenteDeOk(null);
         setNomeArquivo(file.name);
         try {
             const { linhas: brutas, faltando, totalLinhas } = lerPlanilhaBid(await file.arrayBuffer());
@@ -106,30 +115,63 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                 onFeedback?.('A planilha está vazia.', 'error');
                 return;
             }
-            setProgresso({ feitas: 0, total: brutas.length });
+            const plano = planejarLote(brutas, parametros());
+            if (plano.rotasDistintas === 0) {
+                // Nada a consultar: mostra o resultado (só pendências/urbanas)
+                // sem incomodar o operador com uma confirmação de custo zero.
+                setLinhas(ordenar(plano.linhas));
+                onFeedback?.('Nenhuma rota para consultar — confira as pendências.', 'info');
+                return;
+            }
+            setPendenteDeOk({ plano, brutas });
+        } catch (e: any) {
+            console.error('bid em lote (leitura):', e);
+            onFeedback?.(`Falha ao ler a planilha: ${e?.message || e}`, 'error');
+        } finally {
+            if (inputRef.current) inputRef.current.value = '';
+        }
+    };
 
+    /** Problema no topo: é a primeira coisa que precisa ser vista. */
+    const ordenar = (ls: LinhaBid[]) => {
+        const ordem: Record<string, number> = { falha: 0, pendencia: 1, urbano: 2, ok: 3 };
+        return [...ls].sort((a, b) => {
+            const d = (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9);
+            if (d !== 0) return d;
+            if (a.alertas.length !== b.alertas.length) return b.alertas.length - a.alertas.length;
+            return a.linhaExcel - b.linhaExcel;
+        });
+    };
+
+    /** Passo 2: só aqui o Qualp é chamado, depois do OK explícito. */
+    const confirmarEDisparar = async () => {
+        if (!pendenteDeOk || rodando) return;
+        const { brutas } = pendenteDeOk;
+        setPendenteDeOk(null);
+        setRodando(true);
+        try {
+            setProgresso({ feitas: 0, total: brutas.length });
             const r = await processarLoteBid(brutas, parametros(), {
                 consultarRota: consultarRotaDoLote,
                 concorrencia: CONCORRENCIA,
                 onProgresso: (feitas, total) => setProgresso({ feitas, total }),
             });
 
-            // Problema no topo: é a primeira coisa que precisa ser vista.
-            const ordem: Record<string, number> = { falha: 0, pendencia: 1, urbano: 2, ok: 3 };
-            setLinhas([...r.linhas].sort((a, b) => {
-                const d = (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9);
-                if (d !== 0) return d;
-                if (a.alertas.length !== b.alertas.length) return b.alertas.length - a.alertas.length;
-                return a.linhaExcel - b.linhaExcel;
-            }));
+            // Teto duro: o módulo recusa e não consulta nada.
+            if (r.bloqueado) {
+                setLinhas(null);
+                onFeedback?.(r.bloqueado.motivo, 'error');
+                return;
+            }
+
+            setLinhas(ordenar(r.linhas));
             setEstatQualp({ consultas: r.consultasQualp, distintas: r.rotasDistintas, economizadas: r.economizadas });
             onFeedback?.(`Lote processado: ${r.linhas.length} linha(s), ${r.consultasQualp} consulta(s) ao Qualp.`);
         } catch (e: any) {
             console.error('bid em lote:', e);
-            onFeedback?.(`Falha ao processar a planilha: ${e?.message || e}`, 'error');
+            onFeedback?.(`Falha ao processar o lote: ${e?.message || e}`, 'error');
         } finally {
             setRodando(false);
-            if (inputRef.current) inputRef.current.value = '';
         }
     };
 
@@ -221,6 +263,8 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                     <h4 className="font-medium text-sm text-[#111827] mb-1">Planilha de rotas</h4>
                     <p className="text-[11px] font-normal text-[#6b7280]">
                         Colunas: <span className="font-medium">Origem</span>, <span className="font-medium">Destino</span>, <span className="font-medium">Veículo</span>.
+                        {' '}Importar só LÊ o arquivo — a consulta ao Qualp é confirmada depois, com o custo na tela.
+                        Teto de {TETO_ROTAS_DISTINTAS} rotas distintas por lote.
                         {nomeArquivo && <span className="ml-2 text-[#111827]">· {nomeArquivo}</span>}
                     </p>
                 </div>
@@ -231,7 +275,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                         className="px-4 py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-xs hover:bg-[#185a96] disabled:opacity-50 transition-colors flex items-center gap-2"
                     >
                         <Upload className="w-3.5 h-3.5" strokeWidth={1.75} />
-                        {rodando ? `Processando ${progresso.feitas}/${progresso.total}…` : 'Importar planilha'}
+                        {rodando ? `Consultando ${progresso.feitas}/${progresso.total}…` : 'Importar planilha'}
                     </button>
                     <input
                         ref={inputRef}
@@ -250,6 +294,57 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                     )}
                 </div>
             </div>
+
+            {/* CONFIRMAÇÃO DE CUSTO — a cota do Qualp é paga, então o disparo é
+                explícito. O número abaixo é o de rotas DISTINTAS (pós-dedup),
+                calculado pelo mesmo caminho que a execução usa. */}
+            {pendenteDeOk && (
+                <div className={`border rounded-xl p-6 ${pendenteDeOk.plano.acimaDoTeto ? 'bg-red-50 border-red-200' : 'bg-[#eff6ff] border-[#bfdbfe]'}`}>
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className={`w-5 h-5 mt-0.5 shrink-0 ${pendenteDeOk.plano.acimaDoTeto ? 'text-red-600' : 'text-[#1d6fb8]'}`} strokeWidth={1.75} />
+                        <div className="flex-1">
+                            {pendenteDeOk.plano.acimaDoTeto ? (
+                                <>
+                                    <h4 className="font-medium text-sm text-red-900 mb-1">Lote bloqueado — divida a planilha</h4>
+                                    <p className="text-[11px] font-normal text-red-800 leading-relaxed">
+                                        São <strong className="font-medium">{pendenteDeOk.plano.rotasDistintas} rotas distintas</strong>, acima do teto
+                                        de <strong className="font-medium">{pendenteDeOk.plano.teto}</strong> por lote.
+                                        Nenhuma consulta foi feita. Separe a planilha em partes menores e importe uma por vez.
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <h4 className="font-medium text-sm text-[#111827] mb-1">Confirmar consulta ao Qualp</h4>
+                                    <p className="text-[11px] font-normal text-[#6b7280] leading-relaxed">
+                                        Este lote vai custar <strong className="font-medium text-[#111827]">{pendenteDeOk.plano.rotasDistintas} consulta(s)</strong> ao Qualp
+                                        — a cota é paga. São {pendenteDeOk.plano.linhasComRota} linha(s) com rota, e o dedup já poupou{' '}
+                                        <strong className="font-medium text-[#111827]">{pendenteDeOk.plano.economiaPrevista}</strong> consulta(s) de rota repetida.
+                                        {(pendenteDeOk.plano.pendentes > 0 || pendenteDeOk.plano.urbanas > 0) && (
+                                            <> Fora do cálculo: {pendenteDeOk.plano.pendentes} com pendência e {pendenteDeOk.plano.urbanas} urbana(s), que não consultam nada.</>
+                                        )}
+                                    </p>
+                                </>
+                            )}
+                            <div className="flex items-center gap-2 mt-4">
+                                {!pendenteDeOk.plano.acimaDoTeto && (
+                                    <button
+                                        onClick={confirmarEDisparar}
+                                        className="px-4 py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-xs hover:bg-[#185a96] transition-colors"
+                                    >
+                                        Consultar {pendenteDeOk.plano.rotasDistintas} rota(s)
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => { setPendenteDeOk(null); setNomeArquivo(''); }}
+                                    className="px-4 py-2.5 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg font-medium text-xs hover:bg-[#f9fafb] transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {colunasFaltando.length > 0 && (
                 <div className="flex items-start gap-2 p-4 bg-amber-50 border border-amber-200 rounded-xl">

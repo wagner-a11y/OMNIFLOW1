@@ -13,8 +13,8 @@
 // veículo fora da tabela ANTT.
 // =====================================================================
 import {
-    processarLoteBid, prepararLinha, resumirBid, chaveRota,
-    calcularLinhaBid, linhasParaExcel, rotuloStatus,
+    processarLoteBid, planejarLote, prepararLinha, resumirBid, chaveRota,
+    calcularLinhaBid, linhasParaExcel, rotuloStatus, TETO_ROTAS_DISTINTAS,
 } from './bidLote.ts';
 import { calcularPreco } from './motorPreco.ts';
 
@@ -260,6 +260,101 @@ console.log('\n--- EXPORT ---');
     eq('linha urbana sai com status legivel', urbana['Status'], 'Frete urbano');
     eq('e sem numero inventado', [urbana['Preço sugerido'], urbana['Piso ANTT']], ['', '']);
     ok('observacao carrega o motivo', String(rows.find(x => x['Linha'] === 6)['Observações']).includes('QUALP_TIMEOUT'));
+}
+
+console.log('\n--- PLANEJAMENTO: o custo ANTES de consultar ---');
+{
+    // O plano roda sem consultor nenhum: nao existe caminho pra consultar aqui.
+    const plano = planejarLote(AMOSTRA, PARAMS);
+    eq('8 linhas na planilha', plano.linhas.length, 8);
+    eq('o numero da confirmacao e de ROTAS DISTINTAS, nao de linhas', plano.rotasDistintas, 4);
+    ok('e e MENOR que o total de linhas (senao o dedup nao estaria contando)',
+        plano.rotasDistintas < plano.linhas.length);
+    eq('linhas que precisam de rota', plano.linhasComRota, 6);
+    eq('economia prevista = comRota - distintas', plano.economiaPrevista, 2);
+    eq('urbanas fora da conta', plano.urbanas, 1);
+    eq('pendentes fora da conta', plano.pendentes, 1);
+    ok('dentro do teto', !plano.acimaDoTeto);
+
+    // O previsto tem que bater com o gasto: se divergir, a confirmacao mente.
+    eq('previsto == gasto (rotas distintas)', plano.rotasDistintas, r.consultasQualp);
+    eq('economia prevista == poupada de fato', plano.economiaPrevista, r.economizadas);
+}
+{
+    // Caso que mais importa: muitas linhas, poucas rotas. A confirmacao nao
+    // pode assustar o operador com o numero de linhas.
+    const repetida = Array.from({ length: 60 }, (_, i) =>
+        linha(i + 2, 'São Paulo, SP', 'Rio de Janeiro, RJ', 'Carreta'));
+    const plano = planejarLote(repetida, PARAMS);
+    eq('60 linhas da MESMA rota custam 1 consulta', plano.rotasDistintas, 1);
+    eq('e o dedup poupa 59', plano.economiaPrevista, 59);
+    const s3 = fazStub();
+    const r3 = await processarLoteBid(repetida, PARAMS, { consultarRota: s3.consultarRota, concorrencia: 3 });
+    eq('executado: 1 consulta de verdade', s3.chamadas.length, 1);
+    eq('e as 60 linhas voltaram com preco', r3.linhas.filter(l => l.status === 'ok').length, 60);
+}
+{
+    // Plano de planilha so com pendencia: custo zero, nada a confirmar.
+    const soLixo = [linha(2, '', '', ''), linha(3, '', 'RJ', 'Carreta')];
+    const plano = planejarLote(soLixo, { ...PARAMS, veiculoPadrao: '' });
+    eq('custo zero', plano.rotasDistintas, 0);
+    eq('nenhuma linha com rota', plano.linhasComRota, 0);
+}
+
+console.log('\n--- TETO DURO: acima do limite NAO consulta nada ---');
+eq('o teto esta numa constante exportada', TETO_ROTAS_DISTINTAS, 100);
+{
+    // Exatamente no teto: passa.
+    const noTeto = Array.from({ length: TETO_ROTAS_DISTINTAS }, (_, i) =>
+        linha(i + 2, `Cidade ${i}, SP`, 'Rio de Janeiro, RJ', 'Carreta'));
+    const plano = planejarLote(noTeto, PARAMS);
+    eq(`${TETO_ROTAS_DISTINTAS} rotas distintas`, plano.rotasDistintas, TETO_ROTAS_DISTINTAS);
+    ok('exatamente no teto NAO bloqueia', !plano.acimaDoTeto);
+    const s4 = fazStub();
+    const r4 = await processarLoteBid(noTeto, PARAMS, { consultarRota: s4.consultarRota, concorrencia: 4 });
+    eq('rodou e consultou as 100', s4.chamadas.length, TETO_ROTAS_DISTINTAS);
+    ok('nao veio bloqueado', !r4.bloqueado);
+}
+{
+    // Uma rota acima do teto: bloqueia e NAO consulta nada.
+    const acima = Array.from({ length: TETO_ROTAS_DISTINTAS + 1 }, (_, i) =>
+        linha(i + 2, `Cidade ${i}, SP`, 'Rio de Janeiro, RJ', 'Carreta'));
+    const plano = planejarLote(acima, PARAMS);
+    eq(`${TETO_ROTAS_DISTINTAS + 1} rotas distintas`, plano.rotasDistintas, TETO_ROTAS_DISTINTAS + 1);
+    ok('o plano marca acima do teto', plano.acimaDoTeto);
+
+    const s5 = fazStub();
+    const r5 = await processarLoteBid(acima, PARAMS, { consultarRota: s5.consultarRota, concorrencia: 4 });
+    eq('ZERO consultas ao Qualp', s5.chamadas.length, 0);
+    eq('consultasQualp reportado = 0', r5.consultasQualp, 0);
+    ok('veio bloqueado', !!r5.bloqueado);
+    eq('o bloqueio diz o numero e o teto', [r5.bloqueado.rotasDistintas, r5.bloqueado.teto], [TETO_ROTAS_DISTINTAS + 1, TETO_ROTAS_DISTINTAS]);
+    ok('a mensagem manda dividir a planilha', r5.bloqueado.motivo.includes('Divida a planilha'));
+    ok('e diz que nada foi consultado', r5.bloqueado.motivo.includes('nenhuma consulta foi feita'));
+    eq('as linhas voltam preparadas (p/ o operador ver o que mandou)', r5.linhas.length, TETO_ROTAS_DISTINTAS + 1);
+    eq('nenhuma linha tem preco', r5.linhas.filter(l => l.precoSugerido != null).length, 0);
+}
+{
+    // MUITAS linhas mas poucas rotas distintas NAO pode ser bloqueado: o teto
+    // e de rotas, nao de linhas.
+    const muitasLinhasPoucasRotas = Array.from({ length: 500 }, (_, i) =>
+        linha(i + 2, `Cidade ${i % 20}, SP`, 'Rio de Janeiro, RJ', 'Carreta'));
+    const plano = planejarLote(muitasLinhasPoucasRotas, PARAMS);
+    eq('500 linhas, 20 rotas distintas', plano.rotasDistintas, 20);
+    ok('500 linhas NAO bloqueiam, porque o teto e de rotas', !plano.acimaDoTeto);
+}
+{
+    // O teto conta rotas CONSULTAVEIS: urbanas e pendencias nao empurram o lote
+    // pro bloqueio.
+    const comRuido = [
+        ...Array.from({ length: TETO_ROTAS_DISTINTAS }, (_, i) => linha(i + 2, `Cidade ${i}, SP`, 'Rio de Janeiro, RJ', 'Carreta')),
+        linha(900, 'São Paulo, SP', 'SAO PAULO - SP', 'Carreta'),   // urbana
+        linha(901, '', 'Rio de Janeiro, RJ', 'Carreta'),            // pendencia
+        linha(902, 'A, SP', 'B, RJ', 'Fiorino'),                    // fora do ANTT
+    ];
+    const plano = planejarLote(comRuido, PARAMS);
+    eq('103 linhas, 100 rotas consultaveis', plano.rotasDistintas, TETO_ROTAS_DISTINTAS);
+    ok('ruido nao empurra pro bloqueio', !plano.acimaDoTeto);
 }
 
 console.log('\n--- LOTE VAZIO ---');

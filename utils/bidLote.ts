@@ -33,6 +33,15 @@ export const COLUNAS_BID: Record<string, string[]> = {
     veiculo: ['Veiculo', 'Veículo', 'Tipo Veiculo', 'Tipo de Veículo', 'Tipo de Veiculo', 'Equipamento'],
 };
 
+/**
+ * TETO DURO DE ROTAS DISTINTAS POR LOTE.
+ *
+ * A cota do Qualp é paga e limitada. Acima disto o lote é BLOQUEADO antes de
+ * qualquer consulta e o operador divide a planilha. É teto de rotas DISTINTAS
+ * (pós-dedup), não de linhas: uma planilha de 500 linhas com 80 rotas passa.
+ */
+export const TETO_ROTAS_DISTINTAS = 100;
+
 /** Status de processamento da linha. Nenhum deles derruba o lote. */
 export type StatusLinhaBid =
     | 'ok'        // rota consultada e preço calculado
@@ -175,17 +184,70 @@ export const prepararLinha = (bruta: LinhaBidBruta, p: ParametrosBid): LinhaBid 
         pendencias.push(`Veículo "${veiculo}" não usa tabela ANTT (modo ${modo}) — fora do escopo da Fase 1`);
     }
 
+    // Frete urbano é decidido AQUI, não no orquestrador: ele é conhecível sem o
+    // Qualp, e a confirmação de custo precisa saber, antes de consultar, que
+    // esta linha não vai gastar consulta. Mesma guarda da Edge Function.
+    const urbano = !pendencias.length && mesmoMunicipio(bruta.origem, bruta.destino);
+    if (urbano) pendencias.push('Frete urbano (origem = destino): não cotado automaticamente');
+
+    const semRota = pendencias.length > 0 || eixos == null;
     return {
         ...bruta,
         veiculo, veiculoDaLinha, eixos,
-        status: pendencias.length ? 'pendencia' : 'ok',
+        status: urbano ? 'urbano' : (pendencias.length ? 'pendencia' : 'ok'),
         pendencias, alertas: [],
-        chaveQualp: pendencias.length || eixos == null ? null : chaveRota(bruta.origem, bruta.destino, eixos, p.cargoType),
+        chaveQualp: semRota ? null : chaveRota(bruta.origem, bruta.destino, eixos!, p.cargoType),
         fonteRota: 'nao-consultada',
         km: null, pedagio: null, pisoAntt: null, custoBase: null, icmsPercent: null,
         precoSugerido: null, margemBrutaRS: null, margemBrutaPercent: null,
         custoAntecipacao: null, custoComissao: null,
         margemLiquidaRS: null, margemLiquidaPercent: null,
+    };
+};
+
+/**
+ * Plano do lote: quanto ele VAI custar em consultas, calculado sem consultar
+ * nada. É o número que a confirmação mostra ao operador.
+ */
+export interface PlanoLote {
+    /** Linhas já preparadas (veículo, eixos, pendências, urbano resolvidos). */
+    linhas: LinhaBid[];
+    /** Linhas que precisam de rota (nem pendência, nem urbana). */
+    linhasComRota: number;
+    /**
+     * Consultas que o lote vai gastar: rotas DISTINTAS pós-dedup. É este o
+     * número da confirmação — não o total de linhas.
+     */
+    rotasDistintas: number;
+    /** Consultas que o dedup vai poupar (linhasComRota − rotasDistintas). */
+    economiaPrevista: number;
+    pendentes: number;
+    urbanas: number;
+    teto: number;
+    /** true = o lote é bloqueado e NADA é consultado. */
+    acimaDoTeto: boolean;
+}
+
+/**
+ * Conta o custo do lote ANTES de falar com o Qualp.
+ *
+ * Roda o mesmo `prepararLinha` e a mesma `chaveRota` que a execução usa, então
+ * o número mostrado na confirmação é o número que vai ser gasto — não uma
+ * estimativa paralela que pode divergir.
+ */
+export const planejarLote = (brutas: LinhaBidBruta[], p: ParametrosBid): PlanoLote => {
+    const linhas = brutas.map(b => prepararLinha(b, p));
+    const comRota = linhas.filter(l => l.chaveQualp);
+    const distintas = new Set(comRota.map(l => l.chaveQualp!));
+    return {
+        linhas,
+        linhasComRota: comRota.length,
+        rotasDistintas: distintas.size,
+        economiaPrevista: comRota.length - distintas.size,
+        pendentes: linhas.filter(l => l.status === 'pendencia').length,
+        urbanas: linhas.filter(l => l.status === 'urbano').length,
+        teto: TETO_ROTAS_DISTINTAS,
+        acimaDoTeto: distintas.size > TETO_ROTAS_DISTINTAS,
     };
 };
 
@@ -290,6 +352,10 @@ export interface DepsLote {
 
 export interface ResultadoLote {
     linhas: LinhaBid[];
+    /** O plano que foi usado — o custo previsto, para conferir contra o gasto. */
+    plano: PlanoLote;
+    /** Preenchido quando o teto bloqueou: nenhuma consulta foi feita. */
+    bloqueado?: { motivo: string; rotasDistintas: number; teto: number };
     /** Quantas chamadas o Qualp realmente recebeu. */
     consultasQualp: number;
     /** Quantas rotas distintas existiam. Igual a consultasQualp quando o dedup funciona. */
@@ -311,7 +377,26 @@ export const processarLoteBid = async (
     p: ParametrosBid,
     deps: DepsLote,
 ): Promise<ResultadoLote> => {
-    const preparadas = brutas.map(b => prepararLinha(b, p));
+    const plano = planejarLote(brutas, p);
+
+    // TETO DURO. Checado aqui, e não só na tela: a trava não pode depender de
+    // quem chama. Acima do teto NADA é consultado.
+    if (plano.acimaDoTeto) {
+        return {
+            linhas: plano.linhas,
+            plano,
+            consultasQualp: 0,
+            rotasDistintas: plano.rotasDistintas,
+            economizadas: 0,
+            bloqueado: {
+                motivo: `O lote tem ${plano.rotasDistintas} rotas distintas, acima do teto de ${plano.teto}. Divida a planilha — nenhuma consulta foi feita.`,
+                rotasDistintas: plano.rotasDistintas,
+                teto: plano.teto,
+            },
+        };
+    }
+
+    const preparadas = plano.linhas;
     const concorrencia = Math.max(1, deps.concorrencia ?? 3);
 
     const cache = new Map<string, Promise<RespostaRota>>();
@@ -319,14 +404,9 @@ export const processarLoteBid = async (
     let concluidas = 0;
 
     const resolver = async (linha: LinhaBid): Promise<LinhaBid> => {
-        // Pendência de planilha: não consulta nada.
-        if (linha.status === 'pendencia' || !linha.chaveQualp || linha.eixos == null) return linha;
-
-        // Frete urbano: detectado ANTES de chamar, igual à Edge Function faz.
-        // Não gasta consulta para uma resposta que já conhecemos.
-        if (mesmoMunicipio(linha.origem, linha.destino)) {
-            return { ...linha, status: 'urbano', pendencias: [...linha.pendencias, 'Frete urbano (origem = destino): não cotado automaticamente'] };
-        }
+        // Sem chave = pendência de planilha ou frete urbano, os dois resolvidos
+        // no preparo. Nenhum dos dois consulta nada.
+        if (!linha.chaveQualp || linha.eixos == null) return linha;
 
         const chave = linha.chaveQualp;
         let promessa = cache.get(chave);
@@ -367,6 +447,7 @@ export const processarLoteBid = async (
 
     return {
         linhas: saida,
+        plano,
         consultasQualp,
         rotasDistintas: cache.size,
         // Só quem reusou a consulta de outra linha. Frete urbano e pendência
