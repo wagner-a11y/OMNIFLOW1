@@ -6,6 +6,7 @@ import {
     Activity, AlertTriangle, ArrowDown, ArrowRight, Award, BarChart3, Calendar, Check, CheckCircle, ChevronDown, Clock, Copy as ClipboardCopy, CopyPlus, DollarSign, Download, Edit3, FileDown, FileText, Factory, Hash, History, IdCard, ImageIcon, Info, Key, Layers, Link2, Lock, LogOut, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, Save, Scale, Search, Send, Settings, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, UserCheck, Users, Wrench, X, Zap
 } from 'lucide-react';
 import { calcularCustosOcultos } from './utils/custosOcultos';
+import { calcularPreco } from './utils/motorPreco';
 import { CRMBoard } from './components/CRMBoard';
 import { GmailIntakeBoard } from './components/GmailIntakeBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
@@ -1714,58 +1715,25 @@ const App: React.FC = () => {
         setBaseFreight(maskCurrency(utilitarioFreight));
     }, [isUtilitario, utilitarioFreight, vehicleType, distanceKm, modoCalculo]);
 
-    const calcData = useMemo(() => {
-        // Monetários: num() lida com "R$ 1.234,56", "42" cru e "42,00" de forma uniforme.
-        // Percentuais (ip/pm/icmsP) usam parseFloat pois são strings sem máscara (ex.: "0.2").
-        const gv = num(goodsValue);
-        const ip = parseFloat(insurancePercent.replace(',', '.')) || 0;
-        const pm = parseFloat(profitMargin.replace(',', '.')) || 0;
-        const icmsP = parseFloat(icmsPercent.replace(',', '.')) || 0;
-        const t = num(tolls);
-        const bf = num(baseFreight);
-        const ec = num(extraCosts);
-
-        const adValoremSelling = gv * (ip / 100);
-        const adValoremCost = gv * (fedTaxes.insurancePolicyRate / 100);
-        const totalFedTaxPercent = (fedTaxes.pis + fedTaxes.cofins + fedTaxes.csll + fedTaxes.irpj);
-        const icmsDivisor = (1 - (icmsP / 100));
-        const marginDivisor = (1 - (pm / 100));
-
-        const totalOtherCosts = otherCosts.reduce((acc, curr) => acc + curr.value, 0);
-        const totalEc = ec + totalOtherCosts;
-
-        // ---- MODO TABELADO: a MESMA equação, resolvida para a outra ponta ----
-        // Ida (Calcular):  final = (motorista + t + ec + adV) / [(1-margem)(1-ICMS)]
-        // Volta (Tabelado): motorista = final × (1-ICMS) × (1-margem) − t − ec − adV
-        // Os divisores da ida viram multiplicadores. Não é conta paralela: é a
-        // mesma equação isolando o outro termo, então o mesmo frete dá o mesmo
-        // número nos dois modos (ida e volta fecham em R$ 0,00).
-        // Os federais NÃO entram aqui porque não entram no gross-up da ida —
-        // eles aparecem na margem REAL, calculada logo abaixo, igual no Calcular.
-        const valorFinalDigitado = num(valorFinalTabelado);
-        const priceWithMarginTab = valorFinalDigitado * icmsDivisor;
-        const motoristaTabelado = (priceWithMarginTab * marginDivisor) - t - totalEc - adValoremSelling;
-
-        // No tabelado o preço é dado e o motorista é derivado; no Calcular é o
-        // contrário. Daqui para baixo a conta de impostos/lucro é a MESMA nos dois.
-        const bfEfetivo = modoTabelado ? motoristaTabelado : bf;
-        const directCostsSelling = bfEfetivo + t + totalEc + adValoremSelling;
-        const priceWithMargin = modoTabelado
-            ? priceWithMarginTab
-            : (marginDivisor > 0 ? directCostsSelling / marginDivisor : directCostsSelling);
-        const finalFreight = modoTabelado
-            ? valorFinalDigitado
-            : (icmsDivisor > 0 ? priceWithMargin / icmsDivisor : priceWithMargin);
-        const icmsAmount = finalFreight * (icmsP / 100);
-        const fedTaxesAmount = finalFreight * (totalFedTaxPercent / 100);
-        const realDirectCosts = bfEfetivo + t + totalEc + adValoremCost;
-        const realProfitAmount = finalFreight - icmsAmount - fedTaxesAmount - realDirectCosts;
-        const realMarginPercent = finalFreight > 0 ? (realProfitAmount / finalFreight) * 100 : 0;
-        // bfEfetivo sai no retorno para os Custos Ocultos: é o valor pago ao
-        // terceiro já unificado (modo Calcular e Tabelado), que é a base da
-        // antecipação. Só EXPÕE o que já era calculado acima — nenhuma conta muda.
-        return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, motoristaTabelado, bfEfetivo };
-    }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes, modoTabelado, valorFinalTabelado]);
+    // Casca fina do MOTOR DE PREÇO. A equação mora em utils/motorPreco.ts; aqui
+    // só acontece a tradução das máscaras de input para número, que é um
+    // problema de formulário, não de precificação. Mesmas 11 entradas e mesmas
+    // dependências de antes da extração.
+    //   Monetários: num() lida com "R$ 1.234,56", "42" cru e "42,00" uniformemente.
+    //   Percentuais: parseFloat, pois são strings sem máscara (ex.: "0.2").
+    const calcData = useMemo(() => calcularPreco({
+        baseFreight: num(baseFreight),
+        tolls: num(tolls),
+        extraCosts: num(extraCosts),
+        otherCosts,
+        goodsValue: num(goodsValue),
+        insurancePercent: parseFloat(insurancePercent.replace(',', '.')) || 0,
+        profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0,
+        icmsPercent: parseFloat(icmsPercent.replace(',', '.')) || 0,
+        fedTaxes,
+        modoTabelado,
+        valorFinalTabelado: num(valorFinalTabelado),
+    }), [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes, modoTabelado, valorFinalTabelado]);
 
     // ===== CUSTOS OCULTOS E MARGEM REAL =====
     // Memo SEPARADO e 100% derivado: lê calcData, nunca o contrário. É o que
