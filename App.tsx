@@ -1761,7 +1761,10 @@ const App: React.FC = () => {
         const realDirectCosts = bfEfetivo + t + totalEc + adValoremCost;
         const realProfitAmount = finalFreight - icmsAmount - fedTaxesAmount - realDirectCosts;
         const realMarginPercent = finalFreight > 0 ? (realProfitAmount / finalFreight) * 100 : 0;
-        return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, motoristaTabelado };
+        // bfEfetivo sai no retorno para os Custos Ocultos: é o valor pago ao
+        // terceiro já unificado (modo Calcular e Tabelado), que é a base da
+        // antecipação. Só EXPÕE o que já era calculado acima — nenhuma conta muda.
+        return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, motoristaTabelado, bfEfetivo };
     }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes, modoTabelado, valorFinalTabelado]);
 
     // ===== CUSTOS OCULTOS E MARGEM REAL =====
@@ -1777,13 +1780,14 @@ const App: React.FC = () => {
     // Sem prazo e sem comissão os dois custos são 0 e a líquida é, numericamente,
     // a própria margem bruta.
     const custosOcultos = useMemo(() => calcularCustosOcultos({
-        receita: calcData.finalFreight,            // "valor total a receber do cliente"
+        receita: calcData.finalFreight,            // venda: base da COMISSÃO
+        custoTerceiro: calcData.bfEfetivo,         // o que se paga ao terceiro: base da ANTECIPAÇÃO
         margemBrutaRS: calcData.realProfitAmount,  // a margem bruta de hoje, intocada
         prazoDias: paymentTermDays,
         comissaoPercent: commissionPercent,
         taxasAntecipacao: fedTaxes.anticipationRates,
         comissaoPadrao: fedTaxes.commissionPercent,
-    }), [calcData.finalFreight, calcData.realProfitAmount, paymentTermDays, commissionPercent, fedTaxes.anticipationRates, fedTaxes.commissionPercent]);
+    }), [calcData.finalFreight, calcData.bfEfetivo, calcData.realProfitAmount, paymentTermDays, commissionPercent, fedTaxes.anticipationRates, fedTaxes.commissionPercent]);
 
     // Prazos oferecidos no select: as linhas da tabela configurável, em ordem.
     const prazosDisponiveis = useMemo(
@@ -4324,7 +4328,7 @@ Disponibilidade: ${disponibilidade}`;
                                                     <span className="text-xs font-normal text-[#6b7280]">
                                                         (−) Antecipação
                                                         {custosOcultos.prazoDias !== null && (
-                                                            <span className="text-[#9ca3af]"> · {custosOcultos.prazoDias === 0 ? 'à vista' : `${custosOcultos.prazoDias} dias`} a {custosOcultos.taxaAntecipacao.toFixed(2).replace('.', ',')}%</span>
+                                                            <span className="text-[#9ca3af]"> · {custosOcultos.prazoDias === 0 ? 'à vista' : `${custosOcultos.prazoDias} dias`} a {custosOcultos.taxaAntecipacao.toFixed(2).replace('.', ',')}% sobre o pago ao terceiro</span>
                                                         )}
                                                     </span>
                                                     <span className={`font-medium text-sm ${custosOcultos.custoAntecipacao > 0 ? 'text-red-500' : 'text-[#9ca3af]'}`}>
@@ -4334,7 +4338,7 @@ Disponibilidade: ${disponibilidade}`;
                                                 <div className="flex justify-between items-center py-2.5 border-t border-[#e5e7eb]">
                                                     <span className="text-xs font-normal text-[#6b7280]">
                                                         (−) Comissão
-                                                        <span className="text-[#9ca3af]"> · {custosOcultos.comissaoPercent.toFixed(2).replace('.', ',')}%</span>
+                                                        <span className="text-[#9ca3af]"> · {custosOcultos.comissaoPercent.toFixed(2).replace('.', ',')}% sobre a receita</span>
                                                     </span>
                                                     <span className={`font-medium text-sm ${custosOcultos.custoComissao > 0 ? 'text-red-500' : 'text-[#9ca3af]'}`}>
                                                         − R$ {formatCur(custosOcultos.custoComissao)}

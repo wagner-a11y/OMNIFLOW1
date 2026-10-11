@@ -6,17 +6,27 @@
  * preço (o `calcData` do App) e só sabe LER o resultado dela — não existe
  * caminho de volta, então nenhum número daqui pode escorrer pro valor cotado.
  *
- *   Antecipação = receita total a receber do cliente × taxa% do prazo
+ *   Antecipação = valor pago ao terceiro × taxa% do prazo
  *   Comissão    = receita total a receber do cliente × comissão%
  *   Líquida     = margem bruta − antecipação − comissão
+ *
+ * As DUAS bases são diferentes de propósito: a antecipação é o custo de
+ * adiantar o dinheiro que sai pro terceiro, então incide sobre o que se PAGA;
+ * a comissão é sobre a VENDA. A % da margem líquida segue sendo medida sobre a
+ * receita, como a margem bruta.
  *
  * Campo vazio = custo zero. Sem prazo e sem comissão, a margem líquida é
  * numericamente a própria margem bruta.
  */
 
 export interface CustosOcultosEntrada {
-    /** Valor total a receber do cliente (calcData.finalFreight). */
+    /** Valor total a receber do cliente (calcData.finalFreight). Base da COMISSÃO. */
     receita: number;
+    /**
+     * Valor pago ao terceiro, já unificado entre o modo Calcular e o Tabelado
+     * (calcData.bfEfetivo). Base da ANTECIPAÇÃO.
+     */
+    custoTerceiro: number;
     /** Margem bruta em R$ (calcData.realProfitAmount). */
     margemBrutaRS: number;
     /** Prazo de pagamento em dias, como vem do select. '' = não informado; '0' = à vista. */
@@ -44,6 +54,7 @@ export interface CustosOcultosResultado {
 
 export const calcularCustosOcultos = (e: CustosOcultosEntrada): CustosOcultosResultado => {
     const receita = Number(e.receita) || 0;
+    const custoTerceiro = Number(e.custoTerceiro) || 0;
     const margemBrutaRS = Number(e.margemBrutaRS) || 0;
 
     // Prazo: '' = não informado. A taxa vem da tabela configurável; prazo fora
@@ -54,12 +65,14 @@ export const calcularCustosOcultos = (e: CustosOcultosEntrada): CustosOcultosRes
     const taxaAntecipacao = prazoDias !== null
         ? (e.taxasAntecipacao?.[String(prazoDias)] ?? 0)
         : 0;
-    const custoAntecipacao = receita * (taxaAntecipacao / 100);
+    // Incide sobre o CUSTO (o que sai pro terceiro), não sobre a venda.
+    const custoAntecipacao = custoTerceiro * (taxaAntecipacao / 100);
 
     // Comissão: campo vazio cai no padrão das Configurações (que nasce em 0).
     const comissaoPercent = e.comissaoPercent !== '' && e.comissaoPercent != null
         ? (parseFloat(String(e.comissaoPercent).replace(',', '.')) || 0)
         : (e.comissaoPadrao ?? 0);
+    // Incide sobre a VENDA (receita total da cotação).
     const custoComissao = receita * (comissaoPercent / 100);
 
     const lucroLiquido = margemBrutaRS - custoAntecipacao - custoComissao;
