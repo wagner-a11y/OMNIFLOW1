@@ -108,6 +108,11 @@ export interface FederalTaxes {
     goals?: Record<string, number>; // Format: "YYYY-MM": value
     spotStats?: { simulated: number; converted: number };
     icmsRates?: Record<string, number>; // Format: "ORIGIN-DESTINATION": rate (e.g., "ES-RJ": 12)
+    // ===== Custos Ocultos (custo interno; NUNCA entram no preco ao cliente) =====
+    /** Comissao padrao (%) sobre a receita total da cotacao. Editavel por cotacao. */
+    commissionPercent?: number;
+    /** Tabela de antecipacao: chave = prazo em dias ("0" = a vista), valor = taxa %. */
+    anticipationRates?: Record<string, number>;
 }
 
 export interface ExtraCostItem {
@@ -151,6 +156,13 @@ export interface FreightCalculation {
     status: QuoteStatus;
     realProfit?: number;
     realMarginPercent?: number;
+    // ===== Custos Ocultos: escolha desta cotacao =====
+    // Visualizacao interna da margem real. NAO alteram totalFreight nem
+    // realProfit/realMarginPercent (que seguem gravando a margem BRUTA).
+    /** Prazo de pagamento em dias (0 = a vista). Resolve a taxa em FederalTaxes.anticipationRates. */
+    paymentTermDays?: number;
+    /** Comissao (%) desta cotacao. Ausente = sem comissao (custo zero). */
+    commissionPercent?: number;
     elaborationSeconds?: number; // Tempo de elaboração da cotação em segundos (cronômetro)
     // Procedência dos números: 'contingencia' = fechada com o Qualp fora (pedágio
     // digitado à mão + piso da Tabela A local). Vazio = fluxo normal pelo Qualp.
