@@ -89,6 +89,10 @@ export function montarMenu(ctx: ContextoMenu): { secoes: SecaoMenu[]; soltos: It
                 // Etapa 1a da entrada por e-mail: so revisao da extracao, modo seco.
                 { id: 'gmail-intake', label: 'Leitura de E-mail (teste)', master: true },
                 { id: 'new', label: 'Nova Cotação' },
+                // Estudo de precificação em lote. Nasce só p/ master: e
+                // experimental, roda contra a cota paga do Qualp e nao persiste
+                // nada. Destravar = tirar o master.
+                { id: 'bid-lote', label: 'Bid em Lote', master: true },
                 { id: 'dashboard', label: 'Dashboard' },
                 ...acoesComercial,
                 ...painelTv,
