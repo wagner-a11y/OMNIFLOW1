@@ -267,7 +267,10 @@ export const getSystemConfig = async (): Promise<FederalTaxes | null> => {
         marginThreshold: data.margin_threshold != null ? Number(data.margin_threshold) : 15,
         goals: data.goals || {},
         spotStats: data.spot_stats || { simulated: 0, converted: 0 },
-        icmsRates: data.icms_rates || {}
+        icmsRates: data.icms_rates || {},
+        // Custos Ocultos: parametros internos de margem. Ausentes = custo zero.
+        commissionPercent: data.commission_percent != null ? Number(data.commission_percent) : 0,
+        anticipationRates: data.anticipation_rates || {}
     };
 };
 
@@ -284,6 +287,8 @@ export const updateSystemConfig = async (config: FederalTaxes): Promise<boolean>
             goals: config.goals || {},
             spot_stats: config.spotStats || { simulated: 0, converted: 0 },
             icms_rates: config.icmsRates || {},
+            commission_percent: config.commissionPercent ?? 0,
+            anticipation_rates: config.anticipationRates || {},
             updated_at: new Date().toISOString()
         })
         .eq('id', 'default');
@@ -333,6 +338,10 @@ const mapFreightRow = (item: any): FreightCalculation => ({
         realProfit: item.real_profit ? Number(item.real_profit) : undefined,
         realMarginPercent: item.real_margin_percent ? Number(item.real_margin_percent) : undefined,
         elaborationSeconds: item.elaboration_seconds ? Number(item.elaboration_seconds) : undefined,
+        // Custos Ocultos. `!= null` de proposito: prazo 0 = A VISTA, que e uma
+        // escolha legitima, nao "em branco" (um `? :` truncaria pra undefined).
+        paymentTermDays: item.payment_term_days != null ? Number(item.payment_term_days) : undefined,
+        commissionPercent: item.commission_percent != null ? Number(item.commission_percent) : undefined,
         origemDados: item.origem_dados || undefined,
         tipoPrecificacao: item.tipo_precificacao || undefined,
         operacao: item.operacao || undefined,
@@ -503,9 +512,14 @@ export const createFreightCalculation = async (calc: FreightCalculation): Promis
         lost_reason: calc.lostReason || null,
         lost_obs: calc.lostObs || null,
         lost_file_url: calc.lostFileUrl || null,
+        // real_profit / real_margin_percent gravam a margem BRUTA (dashboard + gate
+        // de margem). Os custos ocultos NAO passam por aqui.
         real_profit: calc.realProfit || 0,
         real_margin_percent: calc.realMarginPercent || 0,
         elaboration_seconds: calc.elaborationSeconds || 0,
+        // Custos Ocultos: escolha da cotacao. null = nao informado (custo zero).
+        payment_term_days: calc.paymentTermDays ?? null,
+        commission_percent: calc.commissionPercent ?? null,
         origem_dados: calc.origemDados || null,
         // Preservados explicitamente: abrir um card de e-mail leva à calculadora,
         // e salvar de lá é um upsert. Sem mandar estes de volta, a origem e o
@@ -632,9 +646,14 @@ export const updateFreightCalculation = async (calc: FreightCalculation): Promis
         lost_reason: calc.lostReason || null,
         lost_obs: calc.lostObs || null,
         lost_file_url: calc.lostFileUrl || null,
+        // real_profit / real_margin_percent gravam a margem BRUTA (dashboard + gate
+        // de margem). Os custos ocultos NAO passam por aqui.
         real_profit: sanitize(calc.realProfit) || 0,
         real_margin_percent: sanitize(calc.realMarginPercent) || 0,
         elaboration_seconds: sanitize(calc.elaborationSeconds) || 0,
+        // Custos Ocultos: escolha da cotacao. sanitize preserva o 0 (a vista).
+        payment_term_days: sanitize(calc.paymentTermDays),
+        commission_percent: sanitize(calc.commissionPercent),
         origem_dados: calc.origemDados || null,
         // Preservados explicitamente: abrir um card de e-mail leva à calculadora,
         // e salvar de lá é um upsert. Sem mandar estes de volta, a origem e o

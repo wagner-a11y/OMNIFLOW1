@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import {
     Activity, AlertTriangle, ArrowDown, ArrowRight, Award, BarChart3, Calendar, Check, CheckCircle, ChevronDown, Clock, Copy as ClipboardCopy, CopyPlus, DollarSign, Download, Edit3, FileDown, FileText, Factory, Hash, History, IdCard, ImageIcon, Info, Key, Layers, Link2, Lock, LogOut, Map as MapIcon, Package, Percent, PieChart, Plus, PlusCircle, RotateCcw, Save, Scale, Search, Send, Settings, Sparkles, Target, ThumbsDown, ThumbsUp, Trash2, TrendingUp, Truck, Tv, Upload, UserCheck, Users, Wrench, X, Zap
 } from 'lucide-react';
+import { calcularCustosOcultos } from './utils/custosOcultos';
 import { CRMBoard } from './components/CRMBoard';
 import { GmailIntakeBoard } from './components/GmailIntakeBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
@@ -163,6 +164,12 @@ const matchMercadoriaOption = (v: string): string => {
 // Implemento: a lista foi para constants.ts (IMPLEMENTO_OPTIONS). O de-para do
 // Fast Delivery usa a MESMA — e duas cópias divergiriam.
 
+// Campos de FederalTaxes que pertencem a "Custos Ocultos" e NÃO devem aparecer na
+// aba Tributação. Ela não lista campos à mão: varre fedTaxes e renderiza todo
+// campo numérico. Sem esta exclusão, a comissão apareceria sozinha lá, com label
+// cru, no meio dos tributos.
+const CAMPOS_CUSTOS_OCULTOS: string[] = ['commissionPercent'];
+
 // Insights determinísticos (sempre do banco; a IA nunca calcula número). Mesma fonte pro dashboard e
 // pro relatório do WhatsApp. REGRA: "carga fechada" = cotação enviada pro Pipefy (tem card / pipefy_sent_at).
 const VOLUME_RELEVANTE = 5; // mínimo de cotações p/ um solicitante entrar nos rankings de conversão
@@ -251,7 +258,7 @@ const App: React.FC = () => {
     // Seções da barra lateral. Mapa vazio = TODAS recolhidas, que é como a tela nasce.
     // A mesma chave serve pro subgrupo "Ações do Comercial" dentro de Comercial.
     const [secoesAbertas, setSecoesAbertas] = useState<Record<string, boolean>>({});
-    const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms'>('financial');
+    const [configTab, setConfigTab] = useState<'financial' | 'customers' | 'fleet' | 'users' | 'identity' | 'goals' | 'icms' | 'custos'>('financial');
     const [searchQuery, setSearchQuery] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
     const [showConfigModal, setShowConfigModal] = useState(false);
@@ -414,6 +421,13 @@ const App: React.FC = () => {
 
     // Abrir composição de custo ao cliente (cópia/PDF)
     const [openCostToClient, setOpenCostToClient] = useState(false);
+
+    // ===== Custos Ocultos (visualização INTERNA da margem real) =====
+    // Antecipação e comissão são CUSTO: saem da margem e NÃO entram no preço do
+    // cliente. Vivem fora do calcData de propósito — o preço é calculado antes,
+    // sem conhecer nenhum dos dois. Vazio = custo zero.
+    const [paymentTermDays, setPaymentTermDays] = useState<string>('');   // '' = sem prazo informado; '0' = à vista
+    const [commissionPercent, setCommissionPercent] = useState<string>(''); // '' = cai no padrão das Configurações
 
     // Solicitante: agora via autocomplete do Pipefy (nome + id do registro). Texto livre = sem id.
     const [solicitante, setSolicitante] = useState('');
@@ -824,6 +838,25 @@ const App: React.FC = () => {
         setFedTaxes(updated);
         await updateSystemConfig(updated);
         showFeedback('Alíquotas ICMS atualizadas.', 'success');
+    };
+
+    // ===== Custos Ocultos: parâmetros globais =====
+    const handleUpdateAnticipationRates = async (rates: Record<string, number>) => {
+        const updated = { ...fedTaxes, anticipationRates: rates };
+        setFedTaxes(updated);
+        await updateSystemConfig(updated);
+        showFeedback('Tabela de antecipação atualizada.', 'success');
+    };
+
+    const handleUpdateCommissionDefault = async (value: number) => {
+        const updated = { ...fedTaxes, commissionPercent: value };
+        setFedTaxes(updated);
+        try {
+            await updateSystemConfig(updated);
+            showFeedback('Comissão padrão atualizada.');
+        } catch (e) {
+            showFeedback('Erro ao salvar a comissão padrão.', 'error');
+        }
     };
 
     const handleUpdateGoals = async (month: string, value: number) => {
@@ -1731,6 +1764,36 @@ const App: React.FC = () => {
         return { directCosts: directCostsSelling, realDirectCosts, priceAfterMargin: priceWithMargin, finalFreight, icmsAmount, fedTaxesAmount, adValoremSelling, adValoremCost, realProfitAmount, realMarginPercent, motoristaTabelado };
     }, [baseFreight, tolls, extraCosts, otherCosts, goodsValue, insurancePercent, profitMargin, icmsPercent, fedTaxes, modoTabelado, valorFinalTabelado]);
 
+    // ===== CUSTOS OCULTOS E MARGEM REAL =====
+    // Memo SEPARADO e 100% derivado: lê calcData, nunca o contrário. É o que
+    // garante a regra de ouro — o preço ao cliente (calcData.finalFreight) é
+    // fechado acima sem enxergar prazo nem comissão, então nenhum número daqui
+    // pode escorrer pro valor cotado.
+    //
+    //   Antecipação = receita total × taxa% do prazo
+    //   Comissão    = receita total × comissão%
+    //   Líquida     = margem bruta − antecipação − comissão
+    //
+    // Sem prazo e sem comissão os dois custos são 0 e a líquida é, numericamente,
+    // a própria margem bruta.
+    const custosOcultos = useMemo(() => calcularCustosOcultos({
+        receita: calcData.finalFreight,            // "valor total a receber do cliente"
+        margemBrutaRS: calcData.realProfitAmount,  // a margem bruta de hoje, intocada
+        prazoDias: paymentTermDays,
+        comissaoPercent: commissionPercent,
+        taxasAntecipacao: fedTaxes.anticipationRates,
+        comissaoPadrao: fedTaxes.commissionPercent,
+    }), [calcData.finalFreight, calcData.realProfitAmount, paymentTermDays, commissionPercent, fedTaxes.anticipationRates, fedTaxes.commissionPercent]);
+
+    // Prazos oferecidos no select: as linhas da tabela configurável, em ordem.
+    const prazosDisponiveis = useMemo(
+        () => Object.keys(fedTaxes.anticipationRates || {})
+            .map(k => parseInt(k, 10))
+            .filter(n => !isNaN(n))
+            .sort((a, b) => a - b),
+        [fedTaxes.anticipationRates]
+    );
+
     // Consulta a rota simples no Qualp (fonte única). `capturarDiff` liga o
     // antes/depois usado ao recalcular uma cotação já salva.
     // Só é chamada pelo botão "Buscar rota" (e pelo "Recalcular" de cotação salva).
@@ -2022,6 +2085,11 @@ const App: React.FC = () => {
             createdBy: editingId ? existingQuote?.createdBy : currentUser?.id,
             createdByName: editingId ? existingQuote?.createdByName : currentUser?.name,
             realProfit: calcData.realProfitAmount, realMarginPercent: calcData.realMarginPercent,
+            // Custos Ocultos: grava a ESCOLHA (prazo e comissão), não o resultado.
+            // realProfit/realMarginPercent acima seguem sendo a margem BRUTA —
+            // é o que o dashboard e o gate de margem leem.
+            paymentTermDays: paymentTermDays !== '' ? (parseInt(paymentTermDays, 10) || 0) : undefined,
+            commissionPercent: commissionPercent !== '' ? (parseFloat(commissionPercent.replace(',', '.')) || 0) : undefined,
             elaborationSeconds: elapsedSeconds,
             // Marca de auditoria: esta cotação fechou sem o Qualp (pedágio manual,
             // piso da tabela local). Preserva a marca de uma cotação que já era de
@@ -2162,6 +2230,11 @@ const App: React.FC = () => {
         setImplemento(quote.carroceriaTipoOperacao || '');
         setOtherCosts(quote.otherCosts || []);
         setElapsedSeconds(quote.elaborationSeconds || 0); setIsTimerRunning(false);
+        // Custos ocultos da cotação salva. `!= null` preserva o prazo 0 (à vista).
+        // Cotação de antes desta migration vem sem nada -> campos vazios -> custo
+        // zero -> margem líquida idêntica à bruta, sem inventar desconto no passado.
+        setPaymentTermDays(quote.paymentTermDays != null ? String(quote.paymentTermDays) : '');
+        setCommissionPercent(quote.commissionPercent != null ? String(quote.commissionPercent) : '');
         // Cotação salva mantém km/pedágio/piso como foram gravados (podem ser do
         // Google, de antes da fonte única). Nada é reconsultado na abertura: só o
         // botão "Recalcular pelo Qualp" troca esses números, e aí mostra o antes/depois.
@@ -2205,6 +2278,10 @@ const App: React.FC = () => {
         setEditingId(null);                       // cotação NOVA, não edição
         setElapsedSeconds(0); setIsTimerRunning(false);  // cronômetro do zero
         setOpenCostToClient(false);
+        // Duplicada herda prazo e comissão da origem: é a mesma negociação sendo
+        // reaproveitada, e perder isso faria a margem líquida subir sozinha.
+        setPaymentTermDays(quote.paymentTermDays != null ? String(quote.paymentTermDays) : '');
+        setCommissionPercent(quote.commissionPercent != null ? String(quote.commissionPercent) : '');
         // Duplicada herda os números da origem (podem ser do Google) como snapshot
         // 'salvo', preso à mesma combinação — mudar rota/veículo/carga invalida.
         setQualpBloqueio(null); setRecalcDiff(null); setPedagioLiberado(false); setRotaDesatualizada(false);
@@ -2234,6 +2311,7 @@ const App: React.FC = () => {
         setModoTabelado(false); setValorFinalTabelado('0'); setTemIcmsTabelado(false);
         setEnviadoRamper(false);
         setIsTimerRunning(false); setElapsedSeconds(0); setOpenCostToClient(false);
+        setPaymentTermDays(''); setCommissionPercent('');   // custos ocultos: volta pro padrão (custo zero)
     };
 
     // Itens da composição de custo cobrada do cliente (reusados na tela, na cópia e no PDF).
@@ -4181,6 +4259,101 @@ Disponibilidade: ${disponibilidade}`;
                                                 </div>
                                             </div>
                                         </div>
+                                        {/* ===== CUSTOS OCULTOS E MARGEM REAL (INTERNO) =====
+                                            Antecipação e comissão são CUSTO: saem da margem e NÃO entram
+                                            no preço do cliente. Este bloco é a única superfície onde eles
+                                            aparecem — fora dele (texto, PDF, composição, Pipefy, Ramper)
+                                            nenhum número daqui é lido. Encostado no "Lucro Projetado"
+                                            acima, que é de onde a subtração parte. */}
+                                        <div className="mt-6 pt-5 border-t border-dashed border-[#e5e7eb]">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div className="flex items-center gap-2">
+                                                    <Lock className="w-3.5 h-3.5 text-[#6b7280]" strokeWidth={1.75} />
+                                                    <h4 className="font-medium text-xs text-[#111827]">Custos Ocultos e Margem Real</h4>
+                                                </div>
+                                                <span className="text-[9px] font-medium uppercase tracking-widest text-[#6b7280] bg-[#f3f4f6] px-2 py-1 rounded-md">
+                                                    Uso interno — não vai ao cliente
+                                                </span>
+                                            </div>
+
+                                            {/* Entradas: prazo (resolve a taxa na tabela) e comissão desta cotação */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                                                <div>
+                                                    <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Prazo de pagamento</label>
+                                                    <div className="relative">
+                                                        <select
+                                                            value={paymentTermDays}
+                                                            onChange={e => setPaymentTermDays(e.target.value)}
+                                                            className="w-full pl-3 pr-8 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors appearance-none"
+                                                        >
+                                                            <option value="">Não informado</option>
+                                                            {prazosDisponiveis.map(d => (
+                                                                <option key={d} value={String(d)}>
+                                                                    {d === 0 ? 'À vista' : `${d} dias`} — {(fedTaxes.anticipationRates?.[String(d)] ?? 0).toFixed(2).replace('.', ',')}%
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <ChevronDown className="w-3.5 h-3.5 text-[#6b7280] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                                    </div>
+                                                    {prazosDisponiveis.length === 0 && (
+                                                        <p className="text-[9px] font-medium text-amber-600 mt-1.5 uppercase tracking-tight">Tabela de antecipação vazia — configure em Custos Ocultos.</p>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Comissão (%)</label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="w-full p-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors"
+                                                        value={commissionPercent}
+                                                        onChange={e => setCommissionPercent(e.target.value)}
+                                                        placeholder={`Padrão: ${(fedTaxes.commissionPercent ?? 0).toFixed(2).replace('.', ',')}%`}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Sequência: bruta − antecipação − comissão = líquida */}
+                                            <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4">
+                                                <div className="flex justify-between items-center pb-2.5">
+                                                    <span className="text-xs font-normal text-[#6b7280]">Margem bruta</span>
+                                                    <span className="font-medium text-sm text-[#111827]">
+                                                        R$ {formatCur(calcData.realProfitAmount)} <span className="text-[#6b7280] font-normal">({calcData.realMarginPercent.toFixed(1)}%)</span>
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-2.5 border-t border-[#e5e7eb]">
+                                                    <span className="text-xs font-normal text-[#6b7280]">
+                                                        (−) Antecipação
+                                                        {custosOcultos.prazoDias !== null && (
+                                                            <span className="text-[#9ca3af]"> · {custosOcultos.prazoDias === 0 ? 'à vista' : `${custosOcultos.prazoDias} dias`} a {custosOcultos.taxaAntecipacao.toFixed(2).replace('.', ',')}%</span>
+                                                        )}
+                                                    </span>
+                                                    <span className={`font-medium text-sm ${custosOcultos.custoAntecipacao > 0 ? 'text-red-500' : 'text-[#9ca3af]'}`}>
+                                                        − R$ {formatCur(custosOcultos.custoAntecipacao)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-2.5 border-t border-[#e5e7eb]">
+                                                    <span className="text-xs font-normal text-[#6b7280]">
+                                                        (−) Comissão
+                                                        <span className="text-[#9ca3af]"> · {custosOcultos.comissaoPercent.toFixed(2).replace('.', ',')}%</span>
+                                                    </span>
+                                                    <span className={`font-medium text-sm ${custosOcultos.custoComissao > 0 ? 'text-red-500' : 'text-[#9ca3af]'}`}>
+                                                        − R$ {formatCur(custosOcultos.custoComissao)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center pt-3 border-t border-[#d1d5db]">
+                                                    <span className="text-xs font-medium text-[#111827]">Margem Líquida</span>
+                                                    <span className={`font-medium text-base ${custosOcultos.lucroLiquido > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                        R$ {formatCur(custosOcultos.lucroLiquido)} <span className="font-normal">({custosOcultos.margemLiquidaPercent.toFixed(1)}%)</span>
+                                                    </span>
+                                                </div>
+                                                {!custosOcultos.temCusto && (
+                                                    <p className="text-[9px] font-medium text-[#9ca3af] uppercase tracking-tight mt-3">
+                                                        Sem prazo e sem comissão: a líquida é a própria margem bruta.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+
                                         <div className="mt-6 pt-5 border-t border-[#e5e7eb] flex flex-wrap items-center justify-between gap-4">
                                             <div className="px-4 py-2 bg-[#f9fafb] rounded-lg border border-[#e5e7eb]">
                                                 <p className="text-[10px] font-normal text-[#6b7280] leading-none mb-1">Custo Direto Total</p>
@@ -4298,6 +4471,13 @@ Disponibilidade: ${disponibilidade}`;
                                             <div className="mt-2 h-1.5 w-full bg-[#e5e7eb] rounded-full overflow-hidden">
                                                 <div className={`h-full rounded-full transition-all ${calcData.realMarginPercent >= marginThreshold ? 'bg-emerald-500' : calcData.realMarginPercent > 0 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.max(0, Math.min(100, calcData.realMarginPercent))}%` }}></div>
                                             </div>
+                                            {/* Margem líquida (bruta − antecipação − comissão). Informativo
+                                                interno: a barra e o gate de margem continuam na BRUTA. */}
+                                            {custosOcultos.temCusto && (
+                                                <p className="text-[10px] font-normal text-[#6b7280] mt-2">
+                                                    Líquida: <span className={`font-medium ${custosOcultos.lucroLiquido > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{custosOcultos.margemLiquidaPercent.toFixed(1)}%</span>
+                                                </p>
+                                            )}
                                         </div>
                                         <div className="text-center w-full">
                                             <p className="text-xs font-normal text-[#6b7280] mb-1">Frete Final</p>
@@ -5040,6 +5220,7 @@ Disponibilidade: ${disponibilidade}`;
                                         { id: 'goals', label: 'Metas', icon: Target },
                                         { id: 'fleet', label: 'Frota/ANTT', icon: Truck },
                                         { id: 'icms', label: 'Regras ICMS', icon: FileText },
+                                        { id: 'custos', label: 'Custos Ocultos', icon: Lock },
                                         { id: 'identity', label: 'Marca', icon: ImageIcon },
                                         { id: 'users', label: 'Usuários', icon: Users }
                                     ].map(tab => (
@@ -5181,7 +5362,7 @@ Disponibilidade: ${disponibilidade}`;
                                         </div>
                                     )}
                                     {configTab === 'financial' && (
-                                        <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).filter(([, v]) => typeof v === 'number').map(([key, val]) => {
+                                        <div className="grid grid-cols-2 gap-8">{Object.entries(fedTaxes).filter(([k, v]) => typeof v === 'number' && !CAMPOS_CUSTOS_OCULTOS.includes(k)).map(([key, val]) => {
                                             const labels: Record<string, string> = {
                                                 pis: 'PIS (%)', cofins: 'COFINS (%)', csll: 'CSLL (%)', irpj: 'IRPJ (%)',
                                                 insurancePolicyRate: 'Taxa Apólice / Ad Valorem Custo (%)',
@@ -5418,6 +5599,100 @@ Disponibilidade: ${disponibilidade}`;
                                         </div>
                                     )}
 
+                                    {configTab === 'custos' && (
+                                        <div className="space-y-8">
+                                            <div className="flex items-start gap-3 p-4 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
+                                                <Lock className="w-4 h-4 text-[#6b7280] mt-0.5 shrink-0" strokeWidth={1.75} />
+                                                <div>
+                                                    <h3 className="font-medium text-sm text-[#111827] mb-1">Custos Ocultos</h3>
+                                                    <p className="text-[11px] font-normal text-[#6b7280] leading-relaxed">
+                                                        Antecipação e comissão são <strong className="font-medium">custo</strong>: saem da margem e nunca entram no preço cotado.
+                                                        Aparecem só no bloco interno da cotação — não vão para o texto de envio, o PDF, a composição ao cliente nem o Pipefy.
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Comissão padrão */}
+                                            <div>
+                                                <h4 className="text-[10px] font-medium text-[#6b7280] uppercase tracking-widest mb-3">Comissão</h4>
+                                                <div className="p-6 rounded-xl border bg-[#f9fafb] max-w-sm">
+                                                    <label className="text-[10px] font-medium text-[#6b7280] uppercase block mb-2">Comissão Padrão (%)</label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="w-full p-4 bg-white rounded-lg font-medium text-2xl text-[#111827]"
+                                                        value={fedTaxes.commissionPercent ?? 0}
+                                                        onChange={e => handleUpdateCommissionDefault(Number(e.target.value))}
+                                                    />
+                                                    <p className="text-[9px] font-medium text-[#6b7280] mt-2 uppercase tracking-tight">Incide sobre a receita total da cotação. Editável por cotação.</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Tabela de antecipação: prazo (dias) -> taxa (%) */}
+                                            <div>
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <h4 className="text-[10px] font-medium text-[#6b7280] uppercase tracking-widest">Tabela de Antecipação</h4>
+                                                    <button
+                                                        onClick={() => {
+                                                            const dias = prompt('Prazo em dias (0 = à vista):');
+                                                            if (dias === null) return;
+                                                            const d = parseInt(dias, 10);
+                                                            if (isNaN(d) || d < 0) { showFeedback('Prazo inválido.', 'error'); return; }
+                                                            const atual = fedTaxes.anticipationRates || {};
+                                                            if (atual[String(d)] !== undefined) { showFeedback('Esse prazo já existe na tabela.', 'info'); return; }
+                                                            handleUpdateAnticipationRates({ ...atual, [String(d)]: 0 });
+                                                        }}
+                                                        className="px-4 py-2 bg-blue-100 text-blue-600 rounded-xl font-medium text-[10px] uppercase hover:bg-blue-200 transition-colors"
+                                                    >
+                                                        + Novo Prazo
+                                                    </button>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                    {Object.entries(fedTaxes.anticipationRates || {})
+                                                        .sort(([a], [b]) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0))
+                                                        .map(([dias, taxa]) => (
+                                                            <div key={dias} className="bg-white p-4 rounded-lg border border-[#e5e7eb] flex items-center justify-between hover:border-blue-200 transition-all shadow-sm group">
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-medium text-[10px] text-[#6b7280] mb-1 uppercase tracking-tight">
+                                                                        {(parseInt(dias, 10) || 0) === 0 ? 'À vista' : `${dias} dias`}
+                                                                    </span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            className="w-20 bg-[#f9fafb] border-none p-1 rounded font-medium text-sm text-[#111827] focus:bg-white focus:ring-1 focus:ring-blue-400 outline-none"
+                                                                            value={taxa}
+                                                                            onChange={e => handleUpdateAnticipationRates({ ...(fedTaxes.anticipationRates || {}), [dias]: Number(e.target.value) })}
+                                                                        />
+                                                                        <span className="text-[10px] font-medium text-slate-300">%</span>
+                                                                    </div>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const restante = { ...(fedTaxes.anticipationRates || {}) };
+                                                                        delete restante[dias];
+                                                                        handleUpdateAnticipationRates(restante);
+                                                                    }}
+                                                                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                </div>
+                                                {Object.keys(fedTaxes.anticipationRates || {}).length === 0 && (
+                                                    <div className="p-10 border-2 border-dashed border-slate-100 rounded-xl text-center">
+                                                        <button
+                                                            onClick={() => handleUpdateAnticipationRates({ '0': 0, '15': 0, '30': 0, '45': 0, '60': 0 })}
+                                                            className="text-blue-500 font-medium uppercase text-xs hover:underline"
+                                                        >
+                                                            Clique para criar as linhas padrão (à vista, 15, 30, 45 e 60 dias)
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                     {configTab === 'identity' && (
                                         <div className="bg-[#f9fafb] p-12 rounded-[3.5rem] flex flex-col items-center gap-8 border">
                                             <div className="w-48 h-48 bg-white p-6 rounded-xl shadow-sm flex items-center justify-center overflow-hidden border-4 border-white">{appLogo ? <img src={appLogo} className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full text-[#111827]" />}</div>
