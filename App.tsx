@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { calcularCustosOcultos } from './utils/custosOcultos';
 import { calcularPreco } from './utils/motorPreco';
+import { BidLote } from './components/BidLote';
 import { CRMBoard } from './components/CRMBoard';
 import { GmailIntakeBoard } from './components/GmailIntakeBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
@@ -25,7 +26,7 @@ const ICONES_MENU: Record<string, any> = {
     prospeccao: Target, new: PlusCircle, dashboard: BarChart3, history: History,
     'acoes-comercial': Layers, 'contato-diario': UserCheck, 'cd-cobranca': PieChart,
     'cd-registro': FileText, negocios: Activity, 'painel-tv': Tv,
-    tracking: Activity, 'fast-delivery': Zap,
+    tracking: Activity, 'fast-delivery': Zap, 'bid-lote': Scale,
     'importar-suzano': Layers, 'suzano-plantas': Factory, 'demais-plantas': Package,
     'cadastro-motorista': IdCard, 'cadastro-proprietario': UserCheck,
     'cadastro-veiculo': Truck, 'cadastro-conjunto': Link2,
@@ -255,7 +256,7 @@ const App: React.FC = () => {
     // Só o setter é usado: o valor alimenta o banco, não a tela.
     const [, setSpotStats] = useState({ simulated: 0, converted: 0 });
 
-    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-proprietario' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery' | 'suzano-plantas' | 'demais-plantas' | 'gmail-intake'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'new' | 'history' | 'dashboard' | 'crm' | 'tracking' | 'trash' | 'prospeccao' | 'contato-diario' | 'cd-registro' | 'cd-cobranca' | 'negocios' | 'cadastro-motorista' | 'cadastro-proprietario' | 'cadastro-veiculo' | 'cadastro-conjunto' | 'fast-delivery' | 'suzano-plantas' | 'demais-plantas' | 'gmail-intake' | 'bid-lote'>('dashboard');
     // Seções da barra lateral. Mapa vazio = TODAS recolhidas, que é como a tela nasce.
     // A mesma chave serve pro subgrupo "Ações do Comercial" dentro de Comercial.
     const [secoesAbertas, setSecoesAbertas] = useState<Record<string, boolean>>({});
@@ -2945,6 +2946,7 @@ Disponibilidade: ${disponibilidade}`;
                                         activeTab === 'fast-delivery' ? 'Fast Delivery · Prévia' :
                                         activeTab === 'suzano-plantas' ? 'Plantas da Suzano · Origem' :
                                         activeTab === 'demais-plantas' ? 'Demais Plantas · Prévia' :
+                                        activeTab === 'bid-lote' ? 'Bid em Lote · estudo de precificação' :
                                             activeTab === 'new' ? 'Nova Cotação' : 'Histórico'}
                     </h2>
                     {activeTab === 'history' && (
@@ -2982,6 +2984,15 @@ Disponibilidade: ${disponibilidade}`;
                     {/* Revisão da leitura de e-mail (etapa 1a, modo seco): leitura pura do
                         log, não cria nem altera cotação nenhuma. */}
                     {activeTab === 'gmail-intake' && <GmailIntakeBoard />}
+
+                    {activeTab === 'bid-lote' && (
+                        <BidLote
+                            fedTaxes={fedTaxes}
+                            vehicleConfigs={vehicleConfigs}
+                            tiposDeCarga={[...ANTT_CARGO_TYPES]}
+                            onFeedback={showFeedback}
+                        />
+                    )}
 
                     {activeTab === 'tracking' && <PipefyBoard />}
 
