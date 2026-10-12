@@ -35,6 +35,13 @@ export interface CustosOcultosEntrada {
     comissaoPercent: string;
     /** Tabela configurável: chave = prazo em dias, valor = taxa %. */
     taxasAntecipacao?: Record<string, number>;
+    /**
+     * Taxa de antecipação (%) já resolvida por quem chama, ignorando a tabela.
+     * Usada pelo Bid em Lote, que deriva a taxa de juros ao mês × prazo/30 em
+     * vez de consultar linhas fixas de prazo. `undefined` = usa a tabela (é o
+     * caminho da cotação individual, que não muda).
+     */
+    taxaAntecipacaoDireta?: number;
     /** Comissão padrão das Configurações (%). */
     comissaoPadrao?: number;
 }
@@ -62,9 +69,12 @@ export const calcularCustosOcultos = (e: CustosOcultosEntrada): CustosOcultosRes
     const prazoDias = e.prazoDias !== '' && e.prazoDias != null
         ? (parseInt(e.prazoDias, 10) || 0)
         : null;
-    const taxaAntecipacao = prazoDias !== null
-        ? (e.taxasAntecipacao?.[String(prazoDias)] ?? 0)
-        : 0;
+    // Taxa direta vence a tabela quando informada. Não é "mais um jeito de
+    // calcular": é a MESMA taxa, resolvida fora por quem tem a regra (o bid usa
+    // juros ao mês × prazo/30; a cotação usa a linha da tabela de prazo).
+    const taxaAntecipacao = e.taxaAntecipacaoDireta != null
+        ? e.taxaAntecipacaoDireta
+        : (prazoDias !== null ? (e.taxasAntecipacao?.[String(prazoDias)] ?? 0) : 0);
     // Incide sobre o CUSTO (o que sai pro terceiro), não sobre a venda.
     const custoAntecipacao = custoTerceiro * (taxaAntecipacao / 100);
 

@@ -7,7 +7,7 @@
  */
 
 import * as XLSX from 'xlsx';
-import { abrirPlanilhaOtm } from './fastDelivery';
+import { mapearColunas } from './fastDelivery';
 import { estimateDistance, falhouRota } from './geminiService';
 import {
     COLUNAS_BID, montarLinhasBid, linhasParaExcel,
@@ -15,19 +15,63 @@ import {
 } from '../utils/bidLote';
 
 /**
- * Abre a planilha do bid reusando o leitor do Fast (`abrirPlanilhaOtm`), com o
- * dicionário próprio do bid.
+ * Abre a planilha do bid.
  *
- * `faltando` lista as colunas que não foram encontradas — a tela avisa, mas o
- * lote ainda roda: linha sem dado vira pendência, não erro do arquivo.
+ * Reusa o `mapearColunas` do Fast (o casamento de cabeçalho, que já tolera
+ * acento, caixa e espaço) mas faz a própria LEITURA, por um motivo concreto: o
+ * `abrirPlanilhaOtm` lê só `SheetNames[0]`, e uma planilha cujos dados estão na
+ * segunda aba — porque a primeira é capa, índice ou sobrou vazia — importava
+ * ZERO linhas sem dizer nada. Conferido na prática.
+ *
+ * Mexer no `abrirPlanilhaOtm` consertaria aqui e mudaria o Fast de tabela, que
+ * não pediu nada. Então a escolha de aba é do bid, e o Fast fica intacto.
+ *
+ * A aba escolhida é a PRIMEIRA que tem linha de dados E pelo menos uma coluna
+ * reconhecida. Se nenhuma reconhece coluna, fica a primeira com dados — assim
+ * `faltando` chega na tela com a lista real do que não casou, em vez de uma
+ * planilha vazia sem explicação.
  */
 export const lerPlanilhaBid = (buffer: ArrayBuffer): {
     linhas: LinhaBidBruta[];
     faltando: string[];
     totalLinhas: number;
+    /** Nome da aba usada — a tela mostra, para o operador conferir. */
+    abaUsada: string;
+    /** Todas as abas do arquivo, em ordem. */
+    abas: string[];
 } => {
-    const { bruto, mapa, faltando } = abrirPlanilhaOtm(buffer, COLUNAS_BID);
-    return { linhas: montarLinhasBid(bruto, mapa), faltando, totalLinhas: bruto.length };
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const abas = wb.SheetNames;
+
+    let escolhida = '';
+    let bruto: Record<string, unknown>[] = [];
+    let mapa: Record<string, string> = {};
+    let faltando: string[] = Object.values(COLUNAS_BID).map(c => c[0]);
+    let primeiraComDados: { nome: string; bruto: Record<string, unknown>[]; mapa: Record<string, string>; faltando: string[] } | null = null;
+
+    for (const nome of abas) {
+        const linhas = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[nome], { defval: '' });
+        if (!linhas.length) continue;
+        const m = mapearColunas(Object.keys(linhas[0]), COLUNAS_BID);
+        if (!primeiraComDados) primeiraComDados = { nome, bruto: linhas, mapa: m.mapa, faltando: m.faltando };
+        // Reconheceu alguma coluna do bid: é esta.
+        if (Object.keys(m.mapa).length > 0) {
+            escolhida = nome; bruto = linhas; mapa = m.mapa; faltando = m.faltando;
+            break;
+        }
+    }
+    if (!escolhida && primeiraComDados) {
+        escolhida = primeiraComDados.nome;
+        bruto = primeiraComDados.bruto; mapa = primeiraComDados.mapa; faltando = primeiraComDados.faltando;
+    }
+
+    return {
+        linhas: montarLinhasBid(bruto, mapa),
+        faltando,
+        totalLinhas: bruto.length,
+        abaUsada: escolhida || (abas[0] ?? ''),
+        abas,
+    };
 };
 
 /**

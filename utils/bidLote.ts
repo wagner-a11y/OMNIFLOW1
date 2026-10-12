@@ -42,6 +42,90 @@ export const COLUNAS_BID: Record<string, string[]> = {
  */
 export const TETO_ROTAS_DISTINTAS = 100;
 
+/**
+ * Normaliza nome de veículo para comparação: sem acento, sem caixa, sem
+ * pontuação, espaços colapsados. "Carreta  LS" e "carreta-ls" viram o mesmo.
+ */
+export const normalizarVeiculo = (s: string): string =>
+    (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Como o rótulo da planilha foi ligado a um veículo do cadastro. */
+export type ComoResolveu =
+    | 'exato'       // o nome bate com o cadastro
+    | 'normalizado' // bateu ignorando acento/caixa/espaço
+    | 'prefixo'     // único veículo do cadastro que começa com o rótulo ("Carreta" -> "Carreta Simples")
+    | 'depara'      // o operador ligou à mão
+    | 'padrao'      // a linha não trazia veículo
+    | 'ambiguo'     // vários candidatos: NÃO chuta, pede de-para
+    | 'desconhecido';
+
+export interface ResolucaoVeiculo {
+    veiculo: string;        // '' quando não resolveu
+    como: ComoResolveu;
+    /** Candidatos do cadastro, quando ambíguo ou desconhecido. */
+    candidatos: string[];
+}
+
+/**
+ * Liga o rótulo da planilha a um veículo do cadastro, tolerando as diferenças
+ * que não mudam o significado.
+ *
+ * O match por PREFIXO só vale quando há um candidato único: "Carreta" com
+ * "Carreta Simples" no cadastro resolve, mas "Carreta" com "Carreta Simples" E
+ * "Carreta LS" fica AMBÍGUO e vira de-para. Escolher um dos dois no escuro
+ * precificaria o veículo errado, que é pior que pedir a ligação.
+ */
+export const resolverVeiculo = (
+    rotuloPlanilha: string,
+    veiculosCadastro: string[],
+    dePara: Record<string, string> = {},
+    veiculoPadrao = '',
+): ResolucaoVeiculo => {
+    const rotulo = (rotuloPlanilha || '').trim();
+    if (!rotulo) {
+        return veiculoPadrao
+            ? { veiculo: veiculoPadrao, como: 'padrao', candidatos: [] }
+            : { veiculo: '', como: 'desconhecido', candidatos: [] };
+    }
+
+    // De-para do operador vence tudo: é decisão humana explícita.
+    const manual = dePara[rotulo] ?? dePara[normalizarVeiculo(rotulo)];
+    if (manual && veiculosCadastro.includes(manual)) {
+        return { veiculo: manual, como: 'depara', candidatos: [] };
+    }
+
+    if (veiculosCadastro.includes(rotulo)) {
+        return { veiculo: rotulo, como: 'exato', candidatos: [] };
+    }
+
+    const alvo = normalizarVeiculo(rotulo);
+    const iguais = veiculosCadastro.filter(v => normalizarVeiculo(v) === alvo);
+    if (iguais.length === 1) return { veiculo: iguais[0], como: 'normalizado', candidatos: [] };
+    if (iguais.length > 1) return { veiculo: '', como: 'ambiguo', candidatos: iguais };
+
+    // Prefixo: o rótulo é o começo do nome cadastrado.
+    const porPrefixo = veiculosCadastro.filter(v => {
+        const n = normalizarVeiculo(v);
+        return n.startsWith(alvo + ' ') || n === alvo;
+    });
+    if (porPrefixo.length === 1) return { veiculo: porPrefixo[0], como: 'prefixo', candidatos: [] };
+    if (porPrefixo.length > 1) return { veiculo: '', como: 'ambiguo', candidatos: porPrefixo };
+
+    return { veiculo: '', como: 'desconhecido', candidatos: [] };
+};
+
+/**
+ * Taxa de antecipação proporcional ao prazo.
+ *
+ *   taxa% = juros ao mês × (prazo em dias / 30)
+ *
+ * Ex.: 1,5% a.m. em 45 dias = 2,25%. Mês comercial de 30 dias, que é a
+ * convenção do mercado de antecipação.
+ */
+export const taxaAntecipacaoProporcional = (jurosMensal: number, prazoDias: number): number =>
+    (Number(jurosMensal) || 0) * ((Number(prazoDias) || 0) / 30);
+
 /** Status de processamento da linha. Nenhum deles derruba o lote. */
 export type StatusLinhaBid =
     | 'ok'        // rota consultada e preço calculado
@@ -65,6 +149,16 @@ export interface LinhaBid extends LinhaBidBruta {
     veiculoDaLinha: boolean;
     eixos: number | null;
     status: StatusLinhaBid;
+    /** Como o veículo foi ligado ao cadastro (ver resolverVeiculo). */
+    comoResolveuVeiculo: ComoResolveu;
+    /** Candidatos do cadastro quando o veículo ficou ambíguo. */
+    candidatosVeiculo: string[];
+    /**
+     * Pendências que vêm da PLANILHA (imutáveis depois do preparo). O recálculo
+     * vivo reconstrói `pendencias` a partir desta base — sem isso, recalcular
+     * dez vezes empilharia dez cópias da mesma mensagem.
+     */
+    pendenciasBase: string[];
     /** Por que a linha não produziu preço. Vazio quando status = 'ok'. */
     pendencias: string[];
     /** Avisos que NÃO impedem o preço (ex.: compliance de piso). */
@@ -83,6 +177,16 @@ export interface LinhaBid extends LinhaBidBruta {
      */
     fonteRota: 'qualp' | 'cache' | 'nao-consultada';
 
+    /**
+     * DADOS FIXOS DA ROTA, em cache. É o que permite o motor vivo: trocar
+     * margem, juros, prazo, carga ou ICMS recalcula a tabela inteira sobre
+     * ISTO, sem reconsultar o Qualp. null = a linha nunca teve rota.
+     */
+    rota: RotaDoLote | null;
+    /** UFs extraídas de origem/destino — fixas, vêm do texto da planilha. */
+    ufOrigem: string;
+    ufDestino: string;
+
     // ---- Resultado (null quando a linha não fechou) ----
     km: number | null;
     pedagio: number | null;
@@ -90,6 +194,10 @@ export interface LinhaBid extends LinhaBidBruta {
     /** Base de custo da Fase 1: piso ANTT + pedágio cheio. */
     custoBase: number | null;
     icmsPercent: number | null;
+    icmsRS: number | null;
+    federaisRS: number | null;
+    /** Taxa de antecipação aplicada (%), = juros × prazo/30. */
+    taxaAntecipacao: number | null;
     precoSugerido: number | null;
     margemBrutaRS: number | null;
     margemBrutaPercent: number | null;
@@ -109,16 +217,21 @@ export interface ParametrosBid {
     cargoType: string;
     /** Veículo usado quando a linha não traz um. '' = sem padrão escolhido. */
     veiculoPadrao: string;
+    /** Nomes exatos dos veículos do cadastro, para o match tolerante. */
+    veiculosCadastro: string[];
+    /** De-para do operador: rótulo da planilha -> veículo do cadastro. */
+    deParaVeiculo?: Record<string, string>;
     /** Eixos por tipo de veículo (do vehicleConfigs). */
     eixosPorVeiculo: Record<string, number | undefined>;
     /** Modo de cálculo por veículo. Fase 1 atende só 'ANTT'. */
     modoPorVeiculo: Record<string, string | undefined>;
     // ---- Custos ocultos, escolhidos para o bid inteiro ----
-    /** Prazo de pagamento em dias. '' = não informado (antecipação zero). */
-    prazoDias: string;
+    /** Juros de antecipação (% ao mês). */
+    jurosMensal: number;
+    /** Prazo de pagamento em dias. A taxa sai de juros × prazo/30. */
+    prazoDias: number;
     /** Comissão (%) como string; '' = cai no padrão das Configurações. */
     comissaoPercent: string;
-    taxasAntecipacao?: Record<string, number>;
     comissaoPadrao?: number;
 }
 
@@ -152,8 +265,14 @@ export const montarLinhasBid = (
             const col = mapa[campo];
             return col ? String(l[col] ?? '').trim() : '';
         };
+        // O número da linha vem do __rowNum__ do SheetJS, não da posição no
+        // array. O sheet_to_json DESCARTA linhas totalmente vazias, então
+        // `i + 2` desloca tudo que vem depois de um buraco na planilha: com uma
+        // linha vazia na 3, a linha 4 era reportada como 3 e o operador ia
+        // conferir a linha errada no Excel. Conferido na prática.
+        const rowNum = (l as { __rowNum__?: number }).__rowNum__;
         return {
-            linhaExcel: i + 2,   // +1 do cabeçalho, +1 porque planilha começa em 1
+            linhaExcel: typeof rowNum === 'number' ? rowNum + 1 : i + 2,
             origem: ler('origem'),
             destino: ler('destino'),
             veiculoPlanilha: ler('veiculo'),
@@ -166,15 +285,28 @@ export const montarLinhasBid = (
  */
 export const prepararLinha = (bruta: LinhaBidBruta, p: ParametrosBid): LinhaBid => {
     const pendencias: string[] = [];
-    const veiculoDaLinha = bruta.veiculoPlanilha !== '';
-    const veiculo = veiculoDaLinha ? bruta.veiculoPlanilha : p.veiculoPadrao;
+
+    // Veículo: match tolerante contra o cadastro. Antes era comparação exata de
+    // texto, e "Carreta" na planilha com "Carreta Simples" no cadastro virava
+    // pendência mesmo sendo o mesmo veículo.
+    const res = resolverVeiculo(bruta.veiculoPlanilha, p.veiculosCadastro, p.deParaVeiculo, p.veiculoPadrao);
+    const veiculo = res.veiculo;
+    const veiculoDaLinha = bruta.veiculoPlanilha !== '' && res.como !== 'padrao';
 
     if (!bruta.origem) pendencias.push('Origem em branco');
     if (!bruta.destino) pendencias.push('Destino em branco');
-    if (!veiculo) pendencias.push('Sem veículo na linha e sem veículo padrão escolhido');
+    if (!veiculo) {
+        if (res.como === 'ambiguo') {
+            pendencias.push(`Veículo "${bruta.veiculoPlanilha}" é ambíguo (${res.candidatos.join(' ou ')}) — ligue no de-para`);
+        } else if (bruta.veiculoPlanilha) {
+            pendencias.push(`Veículo "${bruta.veiculoPlanilha}" não está no cadastro — ligue no de-para`);
+        } else {
+            pendencias.push('Sem veículo na linha e sem veículo padrão escolhido');
+        }
+    }
 
     const eixos = veiculo ? (p.eixosPorVeiculo[veiculo] ?? null) : null;
-    if (veiculo && eixos == null) pendencias.push(`Veículo "${veiculo}" não está cadastrado (sem eixos)`);
+    if (veiculo && eixos == null) pendencias.push(`Veículo "${veiculo}" está sem eixos no cadastro`);
 
     // Fase 1 precifica sobre o piso ANTT. Veículo de tarifa por KM ou preço
     // livre não tem piso, e usar o piso de outro veículo daria número errado —
@@ -194,11 +326,16 @@ export const prepararLinha = (bruta: LinhaBidBruta, p: ParametrosBid): LinhaBid 
     return {
         ...bruta,
         veiculo, veiculoDaLinha, eixos,
+        comoResolveuVeiculo: res.como, candidatosVeiculo: res.candidatos,
         status: urbano ? 'urbano' : (pendencias.length ? 'pendencia' : 'ok'),
-        pendencias, alertas: [],
+        pendenciasBase: [...pendencias], pendencias, alertas: [],
         chaveQualp: semRota ? null : chaveRota(bruta.origem, bruta.destino, eixos!, p.cargoType),
         fonteRota: 'nao-consultada',
-        km: null, pedagio: null, pisoAntt: null, custoBase: null, icmsPercent: null,
+        rota: null,
+        ufOrigem: getUF(bruta.origem) || '',
+        ufDestino: getUF(bruta.destino) || '',
+        km: null, pedagio: null, pisoAntt: null, custoBase: null,
+        icmsPercent: null, icmsRS: null, federaisRS: null, taxaAntecipacao: null,
         precoSugerido: null, margemBrutaRS: null, margemBrutaPercent: null,
         custoAntecipacao: null, custoComissao: null,
         margemLiquidaRS: null, margemLiquidaPercent: null,
@@ -262,12 +399,31 @@ export interface RotaDoLote {
  * Calcula UMA linha já com a rota em mão. Função pura — é aqui que o motor
  * de preço e os custos ocultos entram, sem nenhuma conta nova.
  */
+/**
+ * Calcula UMA linha a partir da rota em cache. Função pura — é aqui que o motor
+ * de preço e os custos ocultos entram, sem nenhuma conta nova.
+ *
+ * IDEMPOTENTE de propósito: reconstrói `pendencias` a partir de `pendenciasBase`
+ * e monta `alertas` do zero. É isso que permite chamá-la de novo a cada mudança
+ * de parâmetro sem empilhar mensagens repetidas.
+ */
 export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: ParametrosBid): LinhaBid => {
+    const base = {
+        ...linha,
+        rota,
+        km: rota.km,
+        pedagio: rota.pedagioCheio,
+        pendencias: [...linha.pendenciasBase],
+        alertas: [] as string[],
+    };
+
     if (rota.pisoAntt == null) {
         return {
-            ...linha, status: 'pendencia',
-            km: rota.km, pedagio: rota.pedagioCheio,
-            pendencias: [...linha.pendencias, 'Qualp respondeu sem piso ANTT para esta combinação'],
+            ...base, status: 'pendencia',
+            pendencias: [...base.pendencias, 'Qualp respondeu sem piso ANTT para esta combinação'],
+            pisoAntt: null, custoBase: null, icmsPercent: null, icmsRS: null, federaisRS: null,
+            taxaAntecipacao: null, precoSugerido: null, margemBrutaRS: null, margemBrutaPercent: null,
+            custoAntecipacao: null, custoComissao: null, margemLiquidaRS: null, margemLiquidaPercent: null,
         };
     }
 
@@ -276,9 +432,7 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
 
     // ICMS pela UF da rota, com os overrides do master. Sem UF reconhecida o
     // getIcmsRate cai no seu próprio padrão (12%) — mesma regra da calculadora.
-    const ufOrigem = getUF(linha.origem) || '';
-    const ufDestino = getUF(linha.destino) || '';
-    const icmsPercent = getIcmsRate(ufOrigem, ufDestino, p.icmsRates || {}, false);
+    const icmsPercent = getIcmsRate(linha.ufOrigem, linha.ufDestino, p.icmsRates || {}, false);
 
     const preco = calcularPreco({
         baseFreight: rota.pisoAntt,     // o que se paga ao terceiro
@@ -294,18 +448,21 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
         valorFinalTabelado: 0,
     });
 
+    // Antecipação do bid: juros ao mês × prazo/30, sobre o valor PAGO ao
+    // terceiro. A comissão segue sobre a receita.
+    const taxaAntecipacao = taxaAntecipacaoProporcional(p.jurosMensal, p.prazoDias);
     const ocultos = calcularCustosOcultos({
         receita: preco.finalFreight,
         custoTerceiro: preco.bfEfetivo,
         margemBrutaRS: preco.realProfitAmount,
-        prazoDias: p.prazoDias,
+        prazoDias: String(p.prazoDias),
         comissaoPercent: p.comissaoPercent,
-        taxasAntecipacao: p.taxasAntecipacao,
+        taxaAntecipacaoDireta: taxaAntecipacao,
         comissaoPadrao: p.comissaoPadrao,
     });
 
     // Compliance: preço abaixo do piso ANTT nunca pode sair.
-    const alertas = [...linha.alertas];
+    const alertas: string[] = [];
     if (preco.finalFreight < rota.pisoAntt) {
         alertas.push(`Preço sugerido (R$ ${preco.finalFreight.toFixed(2)}) ABAIXO do piso ANTT (R$ ${rota.pisoAntt.toFixed(2)})`);
     }
@@ -314,14 +471,15 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
     }
 
     return {
-        ...linha,
+        ...base,
         status: 'ok',
         alertas,
-        km: rota.km,
-        pedagio: rota.pedagioCheio,
         pisoAntt: rota.pisoAntt,
         custoBase,
         icmsPercent,
+        icmsRS: preco.icmsAmount,
+        federaisRS: preco.fedTaxesAmount,
+        taxaAntecipacao,
         precoSugerido: preco.finalFreight,
         margemBrutaRS: preco.realProfitAmount,
         margemBrutaPercent: preco.realMarginPercent,
@@ -331,6 +489,20 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
         margemLiquidaPercent: ocultos.margemLiquidaPercent,
     };
 };
+
+/**
+ * MOTOR VIVO: recalcula o lote inteiro sobre a rota já em cache.
+ *
+ * NÃO CONSULTA NADA. Mexeu em margem, juros, prazo, comissão, tipo de carga ou
+ * override de ICMS em cima, muda embaixo na hora — e sem gastar um centavo de
+ * cota. Os dados fixos da rota (km, pedágio, piso, UFs) vêm da consulta
+ * original, guardados em `linha.rota`.
+ *
+ * Linha sem rota em cache (pendência, urbana, falha) passa intacta: não há o
+ * que recalcular, e inventar número aqui seria pior que deixar a pendência.
+ */
+export const recalcularLote = (linhas: LinhaBid[], p: ParametrosBid): LinhaBid[] =>
+    linhas.map(l => (l.rota ? calcularLinhaBid(l, l.rota, p) : l));
 
 // ---------------------------------------------------------------------------
 // Orquestração: dedup + concorrência limitada
@@ -424,7 +596,7 @@ export const processarLoteBid = async (
             return {
                 ...comFonte,
                 status: r.urbano ? 'urbano' : 'falha',
-                pendencias: [...linha.pendencias, r.mensagem],
+                pendencias: [...linha.pendenciasBase, r.mensagem],
             };
         }
         return calcularLinhaBid(comFonte, r.rota, p);
@@ -511,9 +683,14 @@ export const linhasParaExcel = (linhas: LinhaBid[]): Record<string, unknown>[] =
         'Piso ANTT': l.pisoAntt ?? '',
         'Custo base (piso + pedágio)': l.custoBase ?? '',
         'ICMS %': l.icmsPercent ?? '',
+        'ICMS R$': l.icmsRS ?? '',
+        'Federais R$': l.federaisRS ?? '',
+        'UF origem': l.ufOrigem,
+        'UF destino': l.ufDestino,
         'Preço sugerido': l.precoSugerido ?? '',
         'Margem bruta R$': l.margemBrutaRS ?? '',
         'Margem bruta %': l.margemBrutaPercent ?? '',
+        'Taxa antecipação %': l.taxaAntecipacao ?? '',
         'Antecipação R$': l.custoAntecipacao ?? '',
         'Comissão R$': l.custoComissao ?? '',
         'Margem líquida R$': l.margemLiquidaRS ?? '',
