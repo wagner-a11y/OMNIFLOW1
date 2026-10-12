@@ -14,7 +14,8 @@
 // =====================================================================
 import {
     processarLoteBid, planejarLote, prepararLinha, resumirBid, chaveRota,
-    calcularLinhaBid, recalcularLote, linhasParaExcel, rotuloStatus,
+    calcularLinhaBid, recalcularLote, reaplicarLote, extrairCacheDeRotas,
+    linhasParaExcel, rotuloStatus,
     normalizarVeiculo, resolverVeiculo, taxaAntecipacaoProporcional,
     TETO_ROTAS_DISTINTAS,
 } from './bidLote.ts';
@@ -517,6 +518,136 @@ console.log('\n--- EXPORT: ICMS e federais vao pro Excel ---');
     ok('tem as UFs', cols.includes('UF origem') && cols.includes('UF destino'));
     const boa = rows.find(x => x['Linha'] === 2);
     ok('e os valores estao preenchidos na linha boa', boa['ICMS R$'] > 0 && boa['Federais R$'] > 0);
+}
+
+console.log('\n--- DE-PARA RESOLVE DE VERDADE (regressao do bug) ---');
+{
+    // 4 candidatos "Carreta" no cadastro: o rotulo "Carreta" da planilha e
+    // ambiguo e NAO pode ser chutado.
+    const CAD = ['Carreta Simples', 'Carreta LS', 'Carreta Vanderleia', 'Carreta Baixa', 'Truck'];
+    const P = {
+        ...PARAMS,
+        veiculoPadrao: '',
+        veiculosCadastro: CAD,
+        deParaVeiculo: {},
+        eixosPorVeiculo: { 'Carreta Simples': 6, 'Carreta LS': 7, 'Carreta Vanderleia': 7, 'Carreta Baixa': 6, Truck: 3 },
+        modoPorVeiculo: Object.fromEntries(CAD.map(v => [v, 'ANTT'])),
+    };
+    const brutas = [
+        linha(2, 'São Paulo, SP', 'Rio de Janeiro, RJ', 'Carreta'),
+        linha(3, 'Campinas, SP', 'Belo Horizonte, MG', 'Carreta'),
+        linha(4, 'São Paulo, SP', 'Salvador, BA', 'Carreta'),
+        linha(5, 'São Paulo, SP', 'Rio de Janeiro, RJ', 'Carreta'),   // rota repetida da L2
+        linha(6, 'Campinas, SP', 'Belo Horizonte, MG', 'Truck'),      // controle: resolve sozinho
+    ];
+
+    const st = fazStub();
+    const inicial = await processarLoteBid(brutas, P, { consultarRota: st.consultarRota, concorrencia: 3 });
+    const consultasIniciais = st.chamadas.length;
+
+    // ANTES de escolher: as 4 seguem ambiguas e sem preco.
+    const ambiguas = inicial.linhas.filter(l => [2, 3, 4, 5].includes(l.linhaExcel));
+    eq('as 4 linhas "Carreta" entram ambiguas', ambiguas.filter(l => l.status === 'pendencia').length, 4);
+    eq('e sem preco', ambiguas.filter(l => l.precoSugerido == null).length, 4);
+    ok('a mensagem manda ligar no de-para', ambiguas.every(l => l.pendencias.some(m => m.includes('de-para'))));
+    eq('so a linha de controle fechou', inicial.linhas.filter(l => l.status === 'ok').length, 1);
+    eq('e so ela gastou consulta', consultasIniciais, 1);
+
+    // O PLACEHOLDER nao resolve nada sozinho: de-para vazio = segue ambiguo.
+    const comPlaceholder = reaplicarLote(brutas, { ...P, deParaVeiculo: {} }, extrairCacheDeRotas(inicial.linhas));
+    eq('de-para vazio: as 4 seguem pendentes', comPlaceholder.linhas.filter(l => [2,3,4,5].includes(l.linhaExcel) && l.status === 'pendencia').length, 4);
+    eq('e nenhuma rota nova a consultar (nem tem veiculo)', comPlaceholder.rotasNovas.length, 0);
+
+    // ESCOLHEU: "Carreta" -> "Carreta Simples".
+    const escolhido = { ...P, deParaVeiculo: { Carreta: 'Carreta Simples' } };
+    const reaplicado = reaplicarLote(brutas, escolhido, extrairCacheDeRotas(inicial.linhas));
+    eq('ZERO consultas no re-preparo (e puro)', st.chamadas.length, consultasIniciais);
+    const quatro = reaplicado.linhas.filter(l => [2, 3, 4, 5].includes(l.linhaExcel));
+    eq('as 4 saem de "ambiguo"', quatro.filter(l => l.pendencias.some(m => m.includes('ambíguo'))).length, 0);
+    eq('as 4 pegam o veiculo escolhido', [...new Set(quatro.map(l => l.veiculo))], ['Carreta Simples']);
+    eq('com os eixos do escolhido', [...new Set(quatro.map(l => l.eixos))], [6]);
+    // 3 rotas distintas entre as 4 linhas (L2 e L5 sao a mesma).
+    eq('3 rotas novas a consultar (L2=L5 dedup)', reaplicado.rotasNovas.length, 3);
+    ok('e dizem que falta consultar', quatro.every(l => l.pendencias.some(m => m.includes('ainda não consultada'))));
+
+    // CONFIRMOU a consulta das rotas novas.
+    const final = await processarLoteBid(brutas, escolhido, {
+        consultarRota: st.chamadas2 || st.consultarRota, concorrencia: 3,
+        rotasEmCache: extrairCacheDeRotas(inicial.linhas),
+    });
+    const consultasNovas = st.chamadas.length - consultasIniciais;
+    eq('consultou SO as 3 rotas novas', consultasNovas, 3);
+    ok('nao reconsultou a rota de controle (cache)', st.chamadas.filter(c => c.eixos === 3).length === 1);
+
+    const resolvidas = final.linhas.filter(l => [2, 3, 4, 5].includes(l.linhaExcel));
+    eq('as 4 linhas agora fecharam', resolvidas.filter(l => l.status === 'ok').length, 4);
+    eq('as 4 com preco', resolvidas.filter(l => l.precoSugerido > 0).length, 4);
+    eq('as 4 com margem liquida', resolvidas.filter(l => l.margemLiquidaRS != null).length, 4);
+    eq('e nenhuma pendencia sobrou nelas', resolvidas.filter(l => l.pendencias.length > 0).length, 0);
+    eq('L2 e L5 (mesma rota) com o MESMO preco', cent(resolvidas.find(l => l.linhaExcel === 2).precoSugerido), cent(resolvidas.find(l => l.linhaExcel === 5).precoSugerido));
+    eq('o lote inteiro fechou', final.linhas.filter(l => l.status === 'ok').length, 5);
+
+    // Depois de resolvido, o motor vivo volta a funcionar sem consulta.
+    const semNovas = reaplicarLote(brutas, escolhido, extrairCacheDeRotas(final.linhas));
+    eq('nenhuma rota nova pendente', semNovas.rotasNovas.length, 0);
+    const antesMargem = semNovas.linhas.find(l => l.linhaExcel === 2).precoSugerido;
+    const comMargem = reaplicarLote(brutas, { ...escolhido, profitMargin: 30 }, extrairCacheDeRotas(final.linhas));
+    ok('e trocar margem muda o preco sem consultar',
+        comMargem.linhas.find(l => l.linhaExcel === 2).precoSugerido > antesMargem
+        && st.chamadas.length === consultasIniciais + 3);
+}
+{
+    // De-para para um rotulo DESCONHECIDO (nao ambiguo) tambem tem que resolver.
+    const CAD = ['Carreta Simples', 'Truck'];
+    const P = { ...PARAMS, veiculoPadrao: '', veiculosCadastro: CAD,
+        eixosPorVeiculo: { 'Carreta Simples': 6, Truck: 3 },
+        modoPorVeiculo: { 'Carreta Simples': 'ANTT', Truck: 'ANTT' } };
+    const brutas = [linha(2, 'São Paulo, SP', 'Rio de Janeiro, RJ', 'Bitrem Graneleiro')];
+    const sem = reaplicarLote(brutas, P, {});
+    eq('rotulo desconhecido = pendencia', sem.linhas[0].status, 'pendencia');
+    const com = reaplicarLote(brutas, { ...P, deParaVeiculo: { 'Bitrem Graneleiro': 'Carreta Simples' } }, {});
+    eq('de-para resolve o desconhecido tambem', com.linhas[0].veiculo, 'Carreta Simples');
+    eq('e marca como rota nova a consultar', com.rotasNovas.length, 1);
+}
+
+console.log('\n--- CACHE DE ROTAS ---');
+{
+    const st = fazStub();
+    const r = await processarLoteBid(AMOSTRA, PARAMS, { consultarRota: st.consultarRota, concorrencia: 3 });
+    const cache = extrairCacheDeRotas(r.linhas);
+    // 4 rotas foram consultadas, mas uma FALHOU (Curitiba -> Erro). Falha NAO
+    // entra em cache: ela e transitoria, e guardar "deu erro" como se fosse
+    // rota condenaria a linha a nunca mais ser tentada.
+    eq('o cache guarda so as 3 rotas que responderam', Object.keys(cache).length, 3);
+    ok('todas com km', Object.values(cache).every(v => v.km > 0));
+    ok('a rota que falhou NAO esta no cache', !Object.keys(cache).some(k => k.includes('erro')));
+
+    // Re-rodar com o cache: consulta SO a que falhou.
+    const antes = st.chamadas.length;
+    const denovo = await processarLoteBid(AMOSTRA, PARAMS, { consultarRota: st.consultarRota, concorrencia: 3, rotasEmCache: cache });
+    eq('re-rodar consulta so a que falhou (1)', st.chamadas.length - antes, 1);
+    eq('e o resultado fecha igual', denovo.linhas.filter(l => l.status === 'ok').length, r.linhas.filter(l => l.status === 'ok').length);
+
+    const plano = planejarLote(AMOSTRA, PARAMS, cache);
+    eq('plano com cache: so 1 a gastar (a que falhou)', plano.rotasDistintas, 1);
+    eq('e 3 ja conhecidas', plano.rotasJaConhecidas, 3);
+
+    // A rota que falha no stub falha SEMPRE, entao ela e retentada a cada
+    // rodada -- e isso esta certo. Para provar o "custo zero com tudo em
+    // cache", uma amostra sem falha permanente:
+    const soBoas = [
+        linha(2, 'São Paulo, SP', 'Rio de Janeiro, RJ', 'Carreta'),
+        linha(3, 'Campinas, SP', 'Belo Horizonte, MG', 'Truck'),
+    ];
+    const st2 = fazStub();
+    const rb = await processarLoteBid(soBoas, PARAMS, { consultarRota: st2.consultarRota, concorrencia: 3 });
+    eq('2 rotas consultadas', st2.chamadas.length, 2);
+    const cheio = extrairCacheDeRotas(rb.linhas);
+    eq('as 2 em cache', Object.keys(cheio).length, 2);
+    await processarLoteBid(soBoas, PARAMS, { consultarRota: st2.consultarRota, concorrencia: 3, rotasEmCache: cheio });
+    eq('re-rodar com tudo em cache: zero consultas novas', st2.chamadas.length, 2);
+    eq('e o plano diz custo zero', planejarLote(soBoas, PARAMS, cheio).rotasDistintas, 0);
+    eq('com as 2 ja conhecidas', planejarLote(soBoas, PARAMS, cheio).rotasJaConhecidas, 2);
 }
 
 console.log('\n--- LOTE VAZIO ---');
