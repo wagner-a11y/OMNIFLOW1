@@ -352,10 +352,13 @@ export interface PlanoLote {
     /** Linhas que precisam de rota (nem pendência, nem urbana). */
     linhasComRota: number;
     /**
-     * Consultas que o lote vai gastar: rotas DISTINTAS pós-dedup. É este o
-     * número da confirmação — não o total de linhas.
+     * Consultas que o lote vai GASTAR: rotas distintas pós-dedup que ainda não
+     * estão em cache. É este o número da confirmação — não o total de linhas,
+     * nem o total de rotas quando parte delas já foi consultada.
      */
     rotasDistintas: number;
+    /** Rotas distintas que já estão em cache e não serão consultadas de novo. */
+    rotasJaConhecidas: number;
     /** Consultas que o dedup vai poupar (linhasComRota − rotasDistintas). */
     economiaPrevista: number;
     pendentes: number;
@@ -372,19 +375,28 @@ export interface PlanoLote {
  * o número mostrado na confirmação é o número que vai ser gasto — não uma
  * estimativa paralela que pode divergir.
  */
-export const planejarLote = (brutas: LinhaBidBruta[], p: ParametrosBid): PlanoLote => {
+export const planejarLote = (
+    brutas: LinhaBidBruta[],
+    p: ParametrosBid,
+    rotasEmCache: Record<string, RotaDoLote> = {},
+): PlanoLote => {
     const linhas = brutas.map(b => prepararLinha(b, p));
     const comRota = linhas.filter(l => l.chaveQualp);
     const distintas = new Set(comRota.map(l => l.chaveQualp!));
+    // O que vai ser GASTO é só o que ainda não está em cache. Depois de um
+    // de-para, a maior parte do lote já foi consultada — cobrar de novo pelo
+    // total faria a confirmação pedir autorização para um gasto que não existe.
+    const novas = [...distintas].filter(k => !rotasEmCache[k]);
     return {
         linhas,
         linhasComRota: comRota.length,
-        rotasDistintas: distintas.size,
+        rotasDistintas: novas.length,
+        rotasJaConhecidas: distintas.size - novas.length,
         economiaPrevista: comRota.length - distintas.size,
         pendentes: linhas.filter(l => l.status === 'pendencia').length,
         urbanas: linhas.filter(l => l.status === 'urbano').length,
         teto: TETO_ROTAS_DISTINTAS,
-        acimaDoTeto: distintas.size > TETO_ROTAS_DISTINTAS,
+        acimaDoTeto: novas.length > TETO_ROTAS_DISTINTAS,
     };
 };
 
@@ -491,6 +503,60 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
 };
 
 /**
+ * Extrai o cache de rotas das linhas atuais: chave de dedup -> dados fixos.
+ * É o que permite re-preparar o lote (de-para de veículo, por exemplo) sem
+ * jogar fora o que o Qualp já respondeu.
+ */
+export const extrairCacheDeRotas = (linhas: LinhaBid[]): Record<string, RotaDoLote> => {
+    const cache: Record<string, RotaDoLote> = {};
+    for (const l of linhas) if (l.chaveQualp && l.rota) cache[l.chaveQualp] = l.rota;
+    return cache;
+};
+
+export interface ReaplicacaoLote {
+    linhas: LinhaBid[];
+    /** Chaves de rota que ainda NÃO estão em cache: o que custaria consultar. */
+    rotasNovas: string[];
+}
+
+/**
+ * RE-APLICA os parâmetros ao lote inteiro, do preparo em diante, reusando as
+ * rotas já consultadas. Puro: não consulta nada.
+ *
+ * Existe porque `recalcularLote` não bastava. Ele só refazia a CONTA sobre
+ * `linha.rota`, e linha sem rota passava intacta — então mexer no de-para de
+ * veículo não resolvia nada: a linha ambígua nunca tinha sido consultada (era
+ * pendência, sem chave de Qualp), e a resolução do veículo ficava congelada no
+ * preparo original. O de-para "parecia" preenchido e a linha seguia ambígua.
+ *
+ * Aqui o `prepararLinha` roda DE NOVO com os parâmetros novos, então o veículo
+ * é re-resolvido; a rota volta do cache quando a chave já é conhecida. Linha que
+ * passou a resolver mas ainda não tem rota entra em `rotasNovas` — é consulta
+ * nova, custa cota, e por isso passa pela confirmação em vez de disparar só
+ * porque alguém mexeu num dropdown.
+ */
+export const reaplicarLote = (
+    brutas: LinhaBidBruta[],
+    p: ParametrosBid,
+    rotasEmCache: Record<string, RotaDoLote> = {},
+): ReaplicacaoLote => {
+    const novas = new Set<string>();
+    const linhas = brutas.map(b => {
+        const linha = prepararLinha(b, p);
+        if (!linha.chaveQualp) return linha;                 // pendência ou urbana
+        const rota = rotasEmCache[linha.chaveQualp];
+        if (rota) return { ...calcularLinhaBid(linha, rota, p), fonteRota: 'cache' as const };
+        novas.add(linha.chaveQualp);
+        return {
+            ...linha,
+            status: 'pendencia' as const,
+            pendencias: [...linha.pendenciasBase, 'Rota ainda não consultada — confirme a consulta ao Qualp'],
+        };
+    });
+    return { linhas, rotasNovas: [...novas] };
+};
+
+/**
  * MOTOR VIVO: recalcula o lote inteiro sobre a rota já em cache.
  *
  * NÃO CONSULTA NADA. Mexeu em margem, juros, prazo, comissão, tipo de carga ou
@@ -520,6 +586,12 @@ export interface DepsLote {
     concorrencia?: number;
     /** Chamado a cada linha concluída, para a tela mostrar progresso. */
     onProgresso?: (concluidas: number, total: number) => void;
+    /**
+     * Rotas já conhecidas (chave -> dados fixos). Entram no cache do lote antes
+     * de começar, então re-rodar o lote depois de um de-para consulta SÓ o que
+     * é novo. Sem isto, resolver uma ambiguidade pagaria o lote inteiro de novo.
+     */
+    rotasEmCache?: Record<string, RotaDoLote>;
 }
 
 export interface ResultadoLote {
@@ -549,7 +621,8 @@ export const processarLoteBid = async (
     p: ParametrosBid,
     deps: DepsLote,
 ): Promise<ResultadoLote> => {
-    const plano = planejarLote(brutas, p);
+    const rotasEmCache = deps.rotasEmCache || {};
+    const plano = planejarLote(brutas, p, rotasEmCache);
 
     // TETO DURO. Checado aqui, e não só na tela: a trava não pode depender de
     // quem chama. Acima do teto NADA é consultado.
@@ -572,6 +645,10 @@ export const processarLoteBid = async (
     const concorrencia = Math.max(1, deps.concorrencia ?? 3);
 
     const cache = new Map<string, Promise<RespostaRota>>();
+    // Semeia o cache com o que já é conhecido: estas chaves não geram consulta.
+    for (const [chave, rota] of Object.entries(rotasEmCache)) {
+        cache.set(chave, Promise.resolve({ ok: true, rota }));
+    }
     let consultasQualp = 0;
     let concluidas = 0;
 

@@ -20,8 +20,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileDown, Info, Lock, Upload } from 'lucide-react';
 import {
-    planejarLote, processarLoteBid, recalcularLote, resumirBid, rotuloStatus,
-    taxaAntecipacaoProporcional, TETO_ROTAS_DISTINTAS,
+    planejarLote, processarLoteBid, reaplicarLote, extrairCacheDeRotas,
+    resumirBid, rotuloStatus, taxaAntecipacaoProporcional, TETO_ROTAS_DISTINTAS,
     type LinhaBid, type LinhaBidBruta, type ParametrosBid, type PlanoLote,
 } from '../utils/bidLote';
 import { lerPlanilhaBid, consultarRotaDoLote, exportarBidExcel } from '../services/bidLote';
@@ -83,6 +83,12 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
      * trocar parâmetro NUNCA volta ao Qualp.
      */
     const [linhasBrutas, setLinhasBrutas] = useState<LinhaBid[] | null>(null);
+    /**
+     * As linhas CRUAS do arquivo. Precisam ficar guardadas porque mexer no
+     * de-para de veículo exige RE-PREPARAR a linha (re-resolver o veículo), não
+     * só refazer a conta — e o preparo parte do dado cru.
+     */
+    const [brutasArquivo, setBrutasArquivo] = useState<LinhaBidBruta[] | null>(null);
     const [abaInfo, setAbaInfo] = useState<{ usada: string; abas: string[] } | null>(null);
     const [rodando, setRodando] = useState(false);
     const [progresso, setProgresso] = useState({ feitas: 0, total: 0 });
@@ -125,12 +131,19 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
      * Qualp. É por isso que a tabela não é estado — se fosse, ela congelaria
      * no valor do momento da consulta.
      */
-    const linhas = useMemo(() => {
-        if (!linhasBrutas) return null;
-        return ordenar(recalcularLote(linhasBrutas, parametros()));
+    const reaplicado = useMemo(() => {
+        if (!linhasBrutas || !brutasArquivo) return null;
+        // O cache guarda o que o Qualp já respondeu, por chave de rota. Re-preparar
+        // reaproveita tudo: só rota NOVA (ex.: a que apareceu depois de um de-para)
+        // fica faltando, e aí a confirmação pede o OK antes de gastar.
+        return reaplicarLote(brutasArquivo, parametros(), extrairCacheDeRotas(linhasBrutas));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [linhasBrutas, profitMargin, cargoType, jurosMensal, prazoDias, comissaoPercent,
-        veiculoPadrao, deParaVeiculo, fedTaxes]);
+    }, [linhasBrutas, brutasArquivo, profitMargin, cargoType, jurosMensal, prazoDias,
+        comissaoPercent, veiculoPadrao, deParaVeiculo, fedTaxes]);
+
+    const linhas = useMemo(() => (reaplicado ? ordenar(reaplicado.linhas) : null), [reaplicado]);
+    /** Rotas que apareceram depois do lote inicial (tipicamente via de-para). */
+    const rotasNovas = reaplicado?.rotasNovas ?? [];
 
     /**
      * Passo 1: ler e PLANEJAR. Não consulta nada — só descobre quantas rotas
@@ -139,6 +152,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     const aoEscolherArquivo = async (file: File | undefined) => {
         if (!file || rodando) return;
         setLinhasBrutas(null);
+        setBrutasArquivo(null);
         setEstatQualp(null);
         setPendenteDeOk(null);
         setNomeArquivo(file.name);
@@ -146,6 +160,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
             const { linhas: brutas, faltando, totalLinhas, abaUsada, abas } = lerPlanilhaBid(await file.arrayBuffer());
             setColunasFaltando(faltando);
             setAbaInfo({ usada: abaUsada, abas });
+            setBrutasArquivo(brutas);
             if (!totalLinhas) {
                 onFeedback?.('A planilha está vazia.', 'error');
                 return;
@@ -167,10 +182,15 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
         }
     };
 
-    /** Passo 2: só aqui o Qualp é chamado, depois do OK explícito. */
-    const confirmarEDisparar = async () => {
-        if (!pendenteDeOk || rodando) return;
-        const { brutas } = pendenteDeOk;
+    /**
+     * Passo 2: só aqui o Qualp é chamado, depois do OK explícito.
+     *
+     * Serve para o lote inicial E para as rotas que aparecem depois (de-para de
+     * veículo): o cache do que já foi respondido entra junto, então o que já se
+     * pagou não é consultado de novo.
+     */
+    const consultar = async (brutas: LinhaBidBruta[]) => {
+        if (rodando) return;
         setPendenteDeOk(null);
         setRodando(true);
         try {
@@ -179,6 +199,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                 consultarRota: consultarRotaDoLote,
                 concorrencia: CONCORRENCIA,
                 onProgresso: (feitas, total) => setProgresso({ feitas, total }),
+                rotasEmCache: linhasBrutas ? extrairCacheDeRotas(linhasBrutas) : {},
             });
 
             // Teto duro: o módulo recusa e não consulta nada.
@@ -189,8 +210,14 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
             }
 
             setLinhasBrutas(r.linhas);
-            setEstatQualp({ consultas: r.consultasQualp, distintas: r.rotasDistintas, economizadas: r.economizadas });
-            onFeedback?.(`Lote processado: ${r.linhas.length} linha(s), ${r.consultasQualp} consulta(s) ao Qualp.`);
+            setEstatQualp(prev => ({
+                // Acumula: o segundo disparo (rotas novas do de-para) soma ao que
+                // o lote inicial já gastou. Mostrar só o último esconderia o custo.
+                consultas: (prev?.consultas ?? 0) + r.consultasQualp,
+                distintas: r.rotasDistintas,
+                economizadas: r.economizadas,
+            }));
+            onFeedback?.(`Lote processado: ${r.linhas.length} linha(s), ${r.consultasQualp} consulta(s) nova(s) ao Qualp.`);
         } catch (e: any) {
             console.error('bid em lote:', e);
             onFeedback?.(`Falha ao processar o lote: ${e?.message || e}`, 'error');
@@ -383,7 +410,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                             <div className="flex items-center gap-2 mt-4">
                                 {!pendenteDeOk.plano.acimaDoTeto && (
                                     <button
-                                        onClick={confirmarEDisparar}
+                                        onClick={() => consultar(pendenteDeOk.brutas)}
                                         className="px-4 py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-xs hover:bg-[#185a96] transition-colors"
                                     >
                                         Consultar {pendenteDeOk.plano.rotasDistintas} rota(s)
@@ -456,13 +483,42 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                                     })}
                                     className="w-full px-2 py-2 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-xs font-normal text-[#111827] outline-none focus:border-[#1d6fb8]"
                                 >
-                                    <option value="">Escolher veículo do cadastro…</option>
+                                    {/* Opção neutra no topo: sem ela o select exibiria o
+                                        primeiro veículo do cadastro sem o onChange ter
+                                        disparado, e o de-para pareceria preenchido estando
+                                        vazio. */}
+                                    <option value="">Escolha o veículo…</option>
                                     {(r.candidatos.length > 0 ? r.candidatos : veiculos).map(v => (
                                         <option key={v} value={v}>{v}</option>
                                     ))}
                                 </select>
                             </div>
                         ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ROTAS NOVAS. Aparecem quando um de-para destrava linhas que nunca
+                foram consultadas. Não dispara sozinho: continua custando cota. */}
+            {rotasNovas.length > 0 && brutasArquivo && !rodando && (
+                <div className="bg-[#eff6ff] border border-[#bfdbfe] rounded-xl p-6">
+                    <div className="flex items-start gap-3">
+                        <Info className="w-5 h-5 text-[#1d6fb8] mt-0.5 shrink-0" strokeWidth={1.75} />
+                        <div className="flex-1">
+                            <h4 className="font-medium text-sm text-[#111827] mb-1">
+                                {rotasNovas.length} rota(s) nova(s) para consultar
+                            </h4>
+                            <p className="text-[11px] font-normal text-[#6b7280] leading-relaxed">
+                                Linhas que acabaram de resolver o veículo e ainda não têm rota. O que já foi consultado
+                                não é cobrado de novo — só estas {rotasNovas.length}.
+                            </p>
+                            <button
+                                onClick={() => consultar(brutasArquivo)}
+                                className="mt-4 px-4 py-2.5 bg-[#1d6fb8] text-white rounded-lg font-medium text-xs hover:bg-[#185a96] transition-colors"
+                            >
+                                Consultar {rotasNovas.length} rota(s)
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
