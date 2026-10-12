@@ -14,7 +14,9 @@
 // =====================================================================
 import {
     processarLoteBid, planejarLote, prepararLinha, resumirBid, chaveRota,
-    calcularLinhaBid, linhasParaExcel, rotuloStatus, TETO_ROTAS_DISTINTAS,
+    calcularLinhaBid, recalcularLote, linhasParaExcel, rotuloStatus,
+    normalizarVeiculo, resolverVeiculo, taxaAntecipacaoProporcional,
+    TETO_ROTAS_DISTINTAS,
 } from './bidLote.ts';
 import { calcularPreco } from './motorPreco.ts';
 
@@ -38,11 +40,15 @@ const PARAMS = {
     icmsRates: {},
     cargoType: 'Carga geral',
     veiculoPadrao: 'Carreta',
-    eixosPorVeiculo: { Carreta: 6, Truck: 3, Fiorino: 2, 'Veiculo Fantasma': undefined },
+    veiculosCadastro: ['Carreta', 'Truck', 'Fiorino'],
+    deParaVeiculo: {},
+    eixosPorVeiculo: { Carreta: 6, Truck: 3, Fiorino: 2 },
     modoPorVeiculo: { Carreta: 'ANTT', Truck: 'ANTT', Fiorino: 'KM_ROUND_TRIP' },
-    prazoDias: '30',
+    // Antecipacao por juros ao mes x prazo/30: 2,8% a.m. em 30 dias = 2,8%,
+    // que mantem os numeros dos casos abaixo identicos aos da tabela antiga.
+    jurosMensal: 2.8,
+    prazoDias: 30,
     comissaoPercent: '2',
-    taxasAntecipacao: { 0: 0, 15: 1.5, 30: 2.8, 45: 4.0, 60: 5.2 },
     comissaoPadrao: 0,
 };
 
@@ -155,8 +161,9 @@ eq('eixos resolvidos pelo cadastro (Truck = 3)', porLinha[4].eixos, 3);
 }
 {
     const fantasma = prepararLinha(linha(2, 'A, SP', 'B, RJ', 'Veiculo Fantasma'), PARAMS);
-    eq('veiculo nao cadastrado = pendencia', fantasma.status, 'pendencia');
+    eq('veiculo fora do cadastro = pendencia', fantasma.status, 'pendencia');
     eq('nao monta chave de Qualp p/ veiculo invalido', fantasma.chaveQualp, null);
+    ok('e manda ligar no de-para', fantasma.pendencias.some(m => m.includes('de-para')));
 }
 {
     const utilitario = prepararLinha(linha(2, 'A, SP', 'B, RJ', 'Fiorino'), PARAMS);
@@ -355,6 +362,161 @@ eq('o teto esta numa constante exportada', TETO_ROTAS_DISTINTAS, 100);
     const plano = planejarLote(comRuido, PARAMS);
     eq('103 linhas, 100 rotas consultaveis', plano.rotasDistintas, TETO_ROTAS_DISTINTAS);
     ok('ruido nao empurra pro bloqueio', !plano.acimaDoTeto);
+}
+
+console.log('\n--- TAXA DE ANTECIPACAO: juros x prazo/30 ---');
+eq('1,5% a.m. em 45 dias = 2,25%', taxaAntecipacaoProporcional(1.5, 45), 2.25);
+eq('1,5% a.m. em 30 dias = 1,5%', taxaAntecipacaoProporcional(1.5, 30), 1.5);
+eq('1,5% a.m. em 15 dias = 0,75%', taxaAntecipacaoProporcional(1.5, 15), 0.75);
+eq('1,5% a.m. em 60 dias = 3%', taxaAntecipacaoProporcional(1.5, 60), 3);
+eq('prazo 0 (a vista) = 0%', taxaAntecipacaoProporcional(1.5, 0), 0);
+eq('juros 0 = 0%', taxaAntecipacaoProporcional(0, 45), 0);
+eq('juros 2% em 90 dias = 6%', taxaAntecipacaoProporcional(2, 90), 6);
+{
+    // A taxa tem que chegar na LINHA, sobre o valor PAGO ao terceiro.
+    const p45 = { ...PARAMS, jurosMensal: 1.5, prazoDias: 45 };
+    const l = calcularLinhaBid(prepararLinha(linha(2, 'São Paulo, SP', 'Rio de Janeiro, RJ', 'Carreta'), p45),
+        { km: 430, pedagioCheio: 180, pisoAntt: 3000 }, p45);
+    eq('a linha registra a taxa aplicada', l.taxaAntecipacao, 2.25);
+    eq('antecipacao = 3000 (pago) x 2,25%', cent(l.custoAntecipacao), 67.5);
+    ok('e a comissao continua sobre a receita', cent(l.custoComissao) === cent(l.precoSugerido * 0.02));
+}
+
+console.log('\n--- MOTOR VIVO: trocar parametro recalcula SEM consultar ---');
+{
+    const s6 = fazStub();
+    const r6 = await processarLoteBid(AMOSTRA, PARAMS, { consultarRota: s6.consultarRota, concorrencia: 3 });
+    const consultasDepoisDoLote = s6.chamadas.length;
+    eq('o lote inicial consultou', consultasDepoisDoLote, 4);
+
+    // Guardou a rota fixa por linha?
+    const comRota = r6.linhas.filter(l => l.rota);
+    eq('as 5 linhas com rota guardaram km/pedagio/piso em cache', comRota.length, 5);
+    ok('e as UFs ficaram fixas na linha', r6.linhas.find(l => l.linhaExcel === 2).ufOrigem === 'SP'
+        && r6.linhas.find(l => l.linhaExcel === 2).ufDestino === 'RJ');
+
+    const antes = r6.linhas.find(l => l.linhaExcel === 2);
+
+    // 1) MARGEM
+    const comMargem30 = recalcularLote(r6.linhas, { ...PARAMS, profitMargin: 30 });
+    const depois = comMargem30.find(l => l.linhaExcel === 2);
+    eq('ZERO consultas novas ao trocar a margem', s6.chamadas.length, consultasDepoisDoLote);
+    ok(`margem 15% -> 30% mudou o preco (${cent(antes.precoSugerido)} -> ${cent(depois.precoSugerido)})`,
+        cent(depois.precoSugerido) !== cent(antes.precoSugerido));
+    ok('e o preco SUBIU', depois.precoSugerido > antes.precoSugerido);
+    eq('km nao mudou (vem do cache)', depois.km, antes.km);
+    eq('pedagio nao mudou', depois.pedagio, antes.pedagio);
+    eq('piso nao mudou', depois.pisoAntt, antes.pisoAntt);
+    eq('custo base nao mudou', cent(depois.custoBase), cent(antes.custoBase));
+
+    // 2) JUROS
+    const comJuros = recalcularLote(r6.linhas, { ...PARAMS, jurosMensal: 1.5, prazoDias: 45 });
+    const cj = comJuros.find(l => l.linhaExcel === 2);
+    eq('ZERO consultas ao trocar juros/prazo', s6.chamadas.length, consultasDepoisDoLote);
+    eq('a taxa virou 2,25%', cj.taxaAntecipacao, 2.25);
+    ok('e a antecipacao mudou', cent(cj.custoAntecipacao) !== cent(antes.custoAntecipacao));
+    eq('mas o PRECO ao cliente nao mudou (antecipacao e custo)', cent(cj.precoSugerido), cent(antes.precoSugerido));
+
+    // 3) COMISSAO
+    const comComissao = recalcularLote(r6.linhas, { ...PARAMS, comissaoPercent: '5' });
+    const cc = comComissao.find(l => l.linhaExcel === 2);
+    eq('ZERO consultas ao trocar comissao', s6.chamadas.length, consultasDepoisDoLote);
+    ok('a comissao mudou', cent(cc.custoComissao) > cent(antes.custoComissao));
+    ok('a margem liquida caiu', cc.margemLiquidaRS < antes.margemLiquidaRS);
+    eq('o preco ao cliente seguiu igual', cent(cc.precoSugerido), cent(antes.precoSugerido));
+
+    // 4) OVERRIDE DE ICMS
+    const comIcms = recalcularLote(r6.linhas, { ...PARAMS, icmsRates: { 'SP-RJ': 4 } });
+    const ci = comIcms.find(l => l.linhaExcel === 2);
+    eq('ZERO consultas ao trocar o ICMS', s6.chamadas.length, consultasDepoisDoLote);
+    eq('ICMS SP-RJ virou 4%', ci.icmsPercent, 4);
+    ok('e o preco caiu (menos gross-up)', ci.precoSugerido < antes.precoSugerido);
+
+    // 5) Idempotencia: recalcular N vezes nao empilha mensagem nem muda numero
+    let acum = r6.linhas;
+    for (let k = 0; k < 5; k++) acum = recalcularLote(acum, PARAMS);
+    const re = acum.find(l => l.linhaExcel === 2);
+    eq('5 recalculos seguidos dao o MESMO preco', cent(re.precoSugerido), cent(antes.precoSugerido));
+    eq('e nao empilham alertas', re.alertas.length, antes.alertas.length);
+    const falhaDepois = acum.find(l => l.linhaExcel === 6);
+    eq('a linha de falha nao duplicou a mensagem', falhaDepois.pendencias.length, 1);
+    eq('ZERO consultas em 5 recalculos', s6.chamadas.length, consultasDepoisDoLote);
+
+    // 6) Linhas sem rota passam intactas
+    const urbanaDepois = acum.find(l => l.linhaExcel === 5);
+    eq('urbana segue urbana', urbanaDepois.status, 'urbano');
+    eq('e sem preco inventado', urbanaDepois.precoSugerido, null);
+}
+
+console.log('\n--- VEICULO TOLERANTE ---');
+eq('normaliza acento/caixa/espaco', normalizarVeiculo('  Carreta  LS '), normalizarVeiculo('carreta-ls'));
+{
+    const cadastro = ['Carreta Simples', 'Truck', 'Bitruck', 'Fiorino'];
+    eq('match exato', resolverVeiculo('Truck', cadastro).como, 'exato');
+    eq('acento/caixa', resolverVeiculo('TRUCK', cadastro).como, 'normalizado');
+    eq('"Carreta" acha "Carreta Simples" por prefixo', resolverVeiculo('Carreta', cadastro).veiculo, 'Carreta Simples');
+    eq('e marca como prefixo', resolverVeiculo('Carreta', cadastro).como, 'prefixo');
+    // O caso que NAO pode chutar.
+    const ambiguo = ['Carreta Simples', 'Carreta LS'];
+    eq('dois candidatos = ambiguo', resolverVeiculo('Carreta', ambiguo).como, 'ambiguo');
+    eq('e NAO escolhe nenhum', resolverVeiculo('Carreta', ambiguo).veiculo, '');
+    eq('mas devolve os candidatos', resolverVeiculo('Carreta', ambiguo).candidatos.sort(), ['Carreta LS', 'Carreta Simples']);
+    // De-para do operador vence o ambiguo.
+    eq('de-para resolve o ambiguo', resolverVeiculo('Carreta', ambiguo, { Carreta: 'Carreta LS' }).veiculo, 'Carreta LS');
+    eq('e marca como depara', resolverVeiculo('Carreta', ambiguo, { Carreta: 'Carreta LS' }).como, 'depara');
+    eq('desconhecido de verdade', resolverVeiculo('Carroca', cadastro).como, 'desconhecido');
+    eq('vazio cai no padrao', resolverVeiculo('', cadastro, {}, 'Truck').como, 'padrao');
+}
+{
+    // O caso reportado: planilha diz "Carreta", cadastro tem "Carreta Simples".
+    const P = { ...PARAMS, veiculosCadastro: ['Carreta Simples', 'Truck'], eixosPorVeiculo: { 'Carreta Simples': 6, Truck: 3 }, modoPorVeiculo: { 'Carreta Simples': 'ANTT', Truck: 'ANTT' }, veiculoPadrao: '' };
+    const l = prepararLinha(linha(2, 'São Paulo, SP', 'Rio de Janeiro, RJ', 'Carreta'), P);
+    eq('"Carreta" NAO e mais pendencia', l.status, 'ok');
+    eq('resolveu p/ Carreta Simples', l.veiculo, 'Carreta Simples');
+    eq('e pegou os eixos certos', l.eixos, 6);
+    ok('e monta chave de Qualp', !!l.chaveQualp);
+}
+{
+    // De-para aplicado no lote inteiro, por rotulo.
+    const P = { ...PARAMS, veiculosCadastro: ['Carreta LS', 'Carreta Simples', 'Truck'], eixosPorVeiculo: { 'Carreta LS': 7, 'Carreta Simples': 6, Truck: 3 }, modoPorVeiculo: { 'Carreta LS': 'ANTT', 'Carreta Simples': 'ANTT', Truck: 'ANTT' }, veiculoPadrao: '' };
+    const brutas = [linha(2, 'A, SP', 'B, RJ', 'Carreta'), linha(3, 'C, SP', 'D, RJ', 'Carreta')];
+    const semDePara = brutas.map(b => prepararLinha(b, P));
+    eq('ambiguo: as 2 linhas pendentes', semDePara.filter(l => l.status === 'pendencia').length, 2);
+    const comDePara = brutas.map(b => prepararLinha(b, { ...P, deParaVeiculo: { Carreta: 'Carreta LS' } }));
+    eq('um de-para resolve as 2', comDePara.filter(l => l.status === 'ok').length, 2);
+    eq('com os eixos do escolhido', comDePara[0].eixos, 7);
+}
+
+console.log('\n--- NUMERO DA LINHA: __rowNum__ e nao a posicao no array ---');
+{
+    // Simula o que o sheet_to_json devolve quando a planilha tem uma linha
+    // VAZIA na 3: a linha 4 vem na posicao 1 do array, com __rowNum__ = 3.
+    const { montarLinhasBid } = await import('./bidLote.ts');
+    const bruto = [
+        { Origem: 'São Paulo, SP', Destino: 'Rio de Janeiro, RJ', Veiculo: 'Carreta', __rowNum__: 1 },
+        { Origem: 'Curitiba, PR', Destino: 'Joinville, SC', Veiculo: 'Carreta', __rowNum__: 3 },
+    ];
+    const mapa = { origem: 'Origem', destino: 'Destino', veiculo: 'Veiculo' };
+    const ls = montarLinhasBid(bruto, mapa);
+    eq('1a linha = 2', ls[0].linhaExcel, 2);
+    eq('2a linha = 4 (nao 3): a linha vazia nao desloca mais', ls[1].linhaExcel, 4);
+    // Sem __rowNum__ (defensivo), cai na posicao.
+    const semRowNum = montarLinhasBid([{ Origem: 'A', Destino: 'B', Veiculo: 'C' }], mapa);
+    eq('sem __rowNum__ usa a posicao', semRowNum[0].linhaExcel, 2);
+}
+
+console.log('\n--- EXPORT: ICMS e federais vao pro Excel ---');
+{
+    const s7 = fazStub();
+    const r7 = await processarLoteBid(AMOSTRA, PARAMS, { consultarRota: s7.consultarRota, concorrencia: 3 });
+    const rows = linhasParaExcel(r7.linhas);
+    const cols = Object.keys(rows[0]);
+    ok('tem ICMS % e R$', cols.includes('ICMS %') && cols.includes('ICMS R$'), cols.join(', '));
+    ok('tem Federais R$', cols.includes('Federais R$'));
+    ok('tem a taxa de antecipacao', cols.includes('Taxa antecipação %'));
+    ok('tem as UFs', cols.includes('UF origem') && cols.includes('UF destino'));
+    const boa = rows.find(x => x['Linha'] === 2);
+    ok('e os valores estao preenchidos na linha boa', boa['ICMS R$'] > 0 && boa['Federais R$'] > 0);
 }
 
 console.log('\n--- LOTE VAZIO ---');

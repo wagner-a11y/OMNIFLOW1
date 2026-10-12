@@ -20,7 +20,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileDown, Info, Lock, Upload } from 'lucide-react';
 import {
-    planejarLote, processarLoteBid, resumirBid, rotuloStatus, TETO_ROTAS_DISTINTAS,
+    planejarLote, processarLoteBid, recalcularLote, resumirBid, rotuloStatus,
+    taxaAntecipacaoProporcional, TETO_ROTAS_DISTINTAS,
     type LinhaBid, type LinhaBidBruta, type ParametrosBid, type PlanoLote,
 } from '../utils/bidLote';
 import { lerPlanilhaBid, consultarRotaDoLote, exportarBidExcel } from '../services/bidLote';
@@ -45,6 +46,17 @@ const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`);
 const numero = (v: number | null) =>
     v == null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 
+/** Problema no topo: é a primeira coisa que precisa ser vista. */
+const ordenar = (ls: LinhaBid[]): LinhaBid[] => {
+    const ordem: Record<string, number> = { falha: 0, pendencia: 1, urbano: 2, ok: 3 };
+    return [...ls].sort((a, b) => {
+        const d = (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9);
+        if (d !== 0) return d;
+        if (a.alertas.length !== b.alertas.length) return b.alertas.length - a.alertas.length;
+        return a.linhaExcel - b.linhaExcel;
+    });
+};
+
 const CORES_STATUS: Record<string, string> = {
     ok: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     pendencia: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -58,11 +70,20 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     const [veiculoPadrao, setVeiculoPadrao] = useState('');
     const [profitMargin, setProfitMargin] = useState('15');
     const [cargoType, setCargoType] = useState(tiposDeCarga[0] || 'Carga geral');
-    const [prazoDias, setPrazoDias] = useState('');
+    const [jurosMensal, setJurosMensal] = useState('1,5');
+    const [prazoDias, setPrazoDias] = useState('30');
     const [comissaoPercent, setComissaoPercent] = useState('');
+    /** De-para do operador: rótulo da planilha -> veículo do cadastro. */
+    const [deParaVeiculo, setDeParaVeiculo] = useState<Record<string, string>>({});
 
     // ---- Lote ----
-    const [linhas, setLinhas] = useState<LinhaBid[] | null>(null);
+    /**
+     * Linhas COM A ROTA EM CACHE, exatamente como voltaram da consulta. É a
+     * fonte do motor vivo: a tabela exibida é derivada daqui por recálculo, e
+     * trocar parâmetro NUNCA volta ao Qualp.
+     */
+    const [linhasBrutas, setLinhasBrutas] = useState<LinhaBid[] | null>(null);
+    const [abaInfo, setAbaInfo] = useState<{ usada: string; abas: string[] } | null>(null);
     const [rodando, setRodando] = useState(false);
     const [progresso, setProgresso] = useState({ feitas: 0, total: 0 });
     const [colunasFaltando, setColunasFaltando] = useState<string[]>([]);
@@ -75,11 +96,9 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
      */
     const [pendenteDeOk, setPendenteDeOk] = useState<{ plano: PlanoLote; brutas: LinhaBidBruta[] } | null>(null);
 
-    const prazosDisponiveis = useMemo(
-        () => Object.keys(fedTaxes.anticipationRates || {})
-            .map(k => parseInt(k, 10)).filter(n => !isNaN(n)).sort((a, b) => a - b),
-        [fedTaxes.anticipationRates],
-    );
+    const nJuros = parseFloat(jurosMensal.replace(',', '.')) || 0;
+    const nPrazo = parseInt(prazoDias, 10) || 0;
+    const taxaAplicada = taxaAntecipacaoProporcional(nJuros, nPrazo);
 
     const parametros = (): ParametrosBid => ({
         profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0,
@@ -90,13 +109,28 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
         icmsRates: fedTaxes.icmsRates,
         cargoType,
         veiculoPadrao,
+        veiculosCadastro: veiculos,
+        deParaVeiculo,
         eixosPorVeiculo: Object.fromEntries(veiculos.map(v => [v, vehicleConfigs[v]?.axles])),
         modoPorVeiculo: Object.fromEntries(veiculos.map(v => [v, vehicleConfigs[v]?.calcMode])),
-        prazoDias,
+        jurosMensal: nJuros,
+        prazoDias: nPrazo,
         comissaoPercent,
-        taxasAntecipacao: fedTaxes.anticipationRates,
         comissaoPadrao: fedTaxes.commissionPercent,
     });
+
+    /**
+     * MOTOR VIVO. A tabela exibida é DERIVADA das linhas em cache: qualquer
+     * parâmetro do topo que mude refaz a conta aqui, na hora, sem tocar no
+     * Qualp. É por isso que a tabela não é estado — se fosse, ela congelaria
+     * no valor do momento da consulta.
+     */
+    const linhas = useMemo(() => {
+        if (!linhasBrutas) return null;
+        return ordenar(recalcularLote(linhasBrutas, parametros()));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [linhasBrutas, profitMargin, cargoType, jurosMensal, prazoDias, comissaoPercent,
+        veiculoPadrao, deParaVeiculo, fedTaxes]);
 
     /**
      * Passo 1: ler e PLANEJAR. Não consulta nada — só descobre quantas rotas
@@ -104,13 +138,14 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
      */
     const aoEscolherArquivo = async (file: File | undefined) => {
         if (!file || rodando) return;
-        setLinhas(null);
+        setLinhasBrutas(null);
         setEstatQualp(null);
         setPendenteDeOk(null);
         setNomeArquivo(file.name);
         try {
-            const { linhas: brutas, faltando, totalLinhas } = lerPlanilhaBid(await file.arrayBuffer());
+            const { linhas: brutas, faltando, totalLinhas, abaUsada, abas } = lerPlanilhaBid(await file.arrayBuffer());
             setColunasFaltando(faltando);
+            setAbaInfo({ usada: abaUsada, abas });
             if (!totalLinhas) {
                 onFeedback?.('A planilha está vazia.', 'error');
                 return;
@@ -119,7 +154,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
             if (plano.rotasDistintas === 0) {
                 // Nada a consultar: mostra o resultado (só pendências/urbanas)
                 // sem incomodar o operador com uma confirmação de custo zero.
-                setLinhas(ordenar(plano.linhas));
+                setLinhasBrutas(plano.linhas);
                 onFeedback?.('Nenhuma rota para consultar — confira as pendências.', 'info');
                 return;
             }
@@ -130,17 +165,6 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
         } finally {
             if (inputRef.current) inputRef.current.value = '';
         }
-    };
-
-    /** Problema no topo: é a primeira coisa que precisa ser vista. */
-    const ordenar = (ls: LinhaBid[]) => {
-        const ordem: Record<string, number> = { falha: 0, pendencia: 1, urbano: 2, ok: 3 };
-        return [...ls].sort((a, b) => {
-            const d = (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9);
-            if (d !== 0) return d;
-            if (a.alertas.length !== b.alertas.length) return b.alertas.length - a.alertas.length;
-            return a.linhaExcel - b.linhaExcel;
-        });
     };
 
     /** Passo 2: só aqui o Qualp é chamado, depois do OK explícito. */
@@ -159,12 +183,12 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
 
             // Teto duro: o módulo recusa e não consulta nada.
             if (r.bloqueado) {
-                setLinhas(null);
+                setLinhasBrutas(null);
                 onFeedback?.(r.bloqueado.motivo, 'error');
                 return;
             }
 
-            setLinhas(ordenar(r.linhas));
+            setLinhasBrutas(r.linhas);
             setEstatQualp({ consultas: r.consultasQualp, distintas: r.rotasDistintas, economizadas: r.economizadas });
             onFeedback?.(`Lote processado: ${r.linhas.length} linha(s), ${r.consultasQualp} consulta(s) ao Qualp.`);
         } catch (e: any) {
@@ -176,6 +200,23 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     };
 
     const resumo = linhas ? resumirBid(linhas) : null;
+
+    /**
+     * Rótulos da planilha que o match tolerante não conseguiu ligar sozinho.
+     * Agrupado por rótulo (não por linha): o operador liga "Carreta" uma vez e
+     * as 40 linhas que usam esse rótulo resolvem juntas.
+     */
+    const rotulosPendentes = useMemo(() => {
+        if (!linhas) return [];
+        const mapa = new Map<string, { rotulo: string; linhas: number[]; candidatos: string[] }>();
+        for (const l of linhas) {
+            if (l.veiculo || !l.veiculoPlanilha) continue;
+            const atual = mapa.get(l.veiculoPlanilha) || { rotulo: l.veiculoPlanilha, linhas: [], candidatos: l.candidatosVeiculo };
+            atual.linhas.push(l.linhaExcel);
+            mapa.set(l.veiculoPlanilha, atual);
+        }
+        return [...mapa.values()];
+    }, [linhas]);
 
     return (
         <div className="space-y-6">
@@ -195,7 +236,14 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
 
             {/* Parâmetros do bid */}
             <div className="bg-white border border-[#e5e7eb] p-6 rounded-xl">
-                <h4 className="text-[10px] font-medium text-[#6b7280] uppercase tracking-widest mb-4">Parâmetros deste bid</h4>
+                <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-[10px] font-medium text-[#6b7280] uppercase tracking-widest">Parâmetros deste bid</h4>
+                    {linhasBrutas && (
+                        <span className="text-[9px] font-medium text-emerald-600 uppercase tracking-tight bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                            Recalcula ao vivo · sem nova consulta ao Qualp
+                        </span>
+                    )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                     <div>
                         <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Veículo padrão</label>
@@ -229,19 +277,26 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                         </select>
                     </div>
                     <div>
-                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Prazo de pagamento</label>
-                        <select
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Juros (% ao mês)</label>
+                        <input
+                            type="text"
+                            value={jurosMensal}
+                            onChange={e => setJurosMensal(e.target.value)}
+                            className="w-full px-3 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Prazo (dias)</label>
+                        <input
+                            type="number"
+                            min="0"
                             value={prazoDias}
                             onChange={e => setPrazoDias(e.target.value)}
                             className="w-full px-3 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors"
-                        >
-                            <option value="">Não informado</option>
-                            {prazosDisponiveis.map(d => (
-                                <option key={d} value={String(d)}>
-                                    {d === 0 ? 'À vista' : `${d} dias`} — {(fedTaxes.anticipationRates?.[String(d)] ?? 0).toFixed(2).replace('.', ',')}%
-                                </option>
-                            ))}
-                        </select>
+                        />
+                        <p className="text-[9px] font-medium text-[#1d6fb8] mt-1.5 uppercase tracking-tight">
+                            Taxa aplicada: {taxaAplicada.toFixed(2).replace('.', ',')}% ({jurosMensal || 0}% × {nPrazo}/30)
+                        </p>
                     </div>
                     <div>
                         <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Comissão (%)</label>
@@ -346,6 +401,16 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                 </div>
             )}
 
+            {abaInfo && abaInfo.abas.length > 1 && (
+                <div className="flex items-start gap-2 p-4 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
+                    <Info className="w-4 h-4 text-[#6b7280] mt-0.5 shrink-0" strokeWidth={1.75} />
+                    <p className="text-[11px] font-normal text-[#6b7280]">
+                        O arquivo tem {abaInfo.abas.length} abas ({abaInfo.abas.join(', ')}). Li a aba{' '}
+                        <span className="font-medium text-[#111827]">{abaInfo.usada}</span> — a primeira com dados e colunas reconhecidas.
+                    </p>
+                </div>
+            )}
+
             {colunasFaltando.length > 0 && (
                 <div className="flex items-start gap-2 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                     <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" strokeWidth={1.75} />
@@ -353,6 +418,52 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                         Coluna(s) não encontrada(s): <span className="font-medium">{colunasFaltando.join(', ')}</span>.
                         O lote rodou de todo jeito — o que faltou virou pendência na linha, não erro do arquivo.
                     </p>
+                </div>
+            )}
+
+            {/* DE-PARA DE VEÍCULO — ligar o rótulo da planilha ao cadastro, em vez
+                de só recusar a linha. Por RÓTULO, não por linha: liga uma vez e
+                todas as linhas daquele rótulo resolvem. Recalcula ao vivo. */}
+            {rotulosPendentes.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+                    <div className="flex items-start gap-3 mb-4">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" strokeWidth={1.75} />
+                        <div>
+                            <h4 className="font-medium text-sm text-amber-900 mb-1">
+                                De-para de veículo ({rotulosPendentes.length} rótulo{rotulosPendentes.length > 1 ? 's' : ''} sem ligação)
+                            </h4>
+                            <p className="text-[11px] font-normal text-amber-800">
+                                Estes rótulos da planilha não casaram com o cadastro. Ligue cada um e a tabela recalcula na hora,
+                                sem nova consulta ao Qualp.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {rotulosPendentes.map(r => (
+                            <div key={r.rotulo} className="bg-white border border-amber-200 rounded-lg p-3">
+                                <p className="text-xs font-medium text-[#111827] mb-1">"{r.rotulo}"</p>
+                                <p className="text-[9px] font-medium text-[#6b7280] uppercase tracking-tight mb-2">
+                                    {r.linhas.length} linha(s): {r.linhas.slice(0, 6).join(', ')}{r.linhas.length > 6 ? '…' : ''}
+                                    {r.candidatos.length > 0 && <span className="text-amber-700"> · ambíguo entre {r.candidatos.length}</span>}
+                                </p>
+                                <select
+                                    value={deParaVeiculo[r.rotulo] || ''}
+                                    onChange={e => setDeParaVeiculo(prev => {
+                                        const novo = { ...prev };
+                                        if (e.target.value) novo[r.rotulo] = e.target.value;
+                                        else delete novo[r.rotulo];
+                                        return novo;
+                                    })}
+                                    className="w-full px-2 py-2 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-xs font-normal text-[#111827] outline-none focus:border-[#1d6fb8]"
+                                >
+                                    <option value="">Escolher veículo do cadastro…</option>
+                                    {(r.candidatos.length > 0 ? r.candidatos : veiculos).map(v => (
+                                        <option key={v} value={v}>{v}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 
@@ -401,6 +512,8 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                                     <th className="px-3 py-2.5 text-right font-medium">Pedágio</th>
                                     <th className="px-3 py-2.5 text-right font-medium">Piso ANTT</th>
                                     <th className="px-3 py-2.5 text-right font-medium">Custo</th>
+                                    <th className="px-3 py-2.5 text-right font-medium">ICMS</th>
+                                    <th className="px-3 py-2.5 text-right font-medium">Federais</th>
                                     <th className="px-3 py-2.5 text-right font-medium">Preço sugerido</th>
                                     <th className="px-3 py-2.5 text-right font-medium">Margem líq.</th>
                                     <th className="px-3 py-2.5 text-left font-medium">Status</th>
@@ -422,6 +535,13 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                                         <td className="px-3 py-2.5 text-right text-[#111827]">{brl(l.pedagio)}</td>
                                         <td className="px-3 py-2.5 text-right text-[#111827]">{brl(l.pisoAntt)}</td>
                                         <td className="px-3 py-2.5 text-right text-[#111827]">{brl(l.custoBase)}</td>
+                                        <td className="px-3 py-2.5 text-right text-[#111827]">
+                                            {brl(l.icmsRS)}
+                                            {l.icmsPercent != null && (
+                                                <span className="block text-[9px] font-normal text-[#9ca3af]">{l.icmsPercent.toFixed(1)}%{l.ufOrigem && l.ufDestino ? ` · ${l.ufOrigem}→${l.ufDestino}` : ''}</span>
+                                            )}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right text-[#111827]">{brl(l.federaisRS)}</td>
                                         <td className="px-3 py-2.5 text-right font-medium text-[#1d6fb8]">{brl(l.precoSugerido)}</td>
                                         <td className={`px-3 py-2.5 text-right font-medium ${(l.margemLiquidaRS ?? 0) > 0 ? 'text-emerald-600' : l.margemLiquidaRS == null ? 'text-[#9ca3af]' : 'text-red-600'}`}>
                                             {brl(l.margemLiquidaRS)}
