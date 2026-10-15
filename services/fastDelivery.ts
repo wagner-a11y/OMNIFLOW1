@@ -51,6 +51,14 @@ export const COLUNAS_OTM: Record<string, string[]> = {
     // a coluna repetida, a segunda chega desduplicada com esse nome. A primeira
     // continua vencendo, que e a regra de mapearColunas.
     fimViagem: ['Fim Viagem', 'Fim da Viagem', 'Fim Viagem_1'],
+    // Número de REMESSA da Suzano. Vai para o campo "Remessa" do card no
+    // Pipefy, que é pesquisável — o operador digita o número na busca e acha o
+    // card. NÃO substitui a DT SAP: a DT segue sendo o identificador, no
+    // client_reference e no campo "Solicitação (STE, Coleta, etc)".
+    // Entra aqui (e não num dicionário separado) porque as DUAS operações
+    // querem a remessa; a Demais Plantas herda COLUNAS_OTM. Planilha sem a
+    // coluna cai no aviso âmbar de "coluna não encontrada", que não bloqueia.
+    remessa: ['Remessa', 'Nº Remessa', 'Numero Remessa', 'No Remessa', 'Nr Remessa'],
 };
 
 /** O Excel traz a placa prefixada pela operação: "SUZANO.BXC7J79". */
@@ -455,6 +463,8 @@ export interface LinhaPrevia {
     instrucao: string;
     /** "Fim Viagem" em hora local. null = célula vazia. */
     entregaEm: string | null;
+    /** Numero de remessa da Suzano. '' = celula vazia ou coluna ausente. */
+    remessa: string;
     /** Da NOSSA tabela, ou digitado à mão. null = sem valor, e aí não há margem. */
     valorAPagar: number | null;
     /**
@@ -549,6 +559,8 @@ export interface CamposBasicos {
     instrucao: string;
     /** "Fim Viagem" em hora local ("AAAA-MM-DDTHH:mm"). null = celula vazia. */
     entregaEm: string | null;
+    /** Numero de remessa da Suzano. '' = celula vazia ou coluna ausente. */
+    remessa: string;
 }
 
 /**
@@ -593,6 +605,10 @@ export function camposBasicos(
         valorRecebido: numero(pegar(l, mapa, 'custoFrete')),
         instrucao: String(pegar(l, mapa, 'instrucaoTransporte') ?? '').trim(),
         entregaEm: entregaDoOtm(data(pegar(l, mapa, 'fimViagem'))),
+        // Lida como TEXTO de proposito: remessa e identificador, nao numero de
+        // conta. Virar number perderia zero a esquerda e, acima de 2^53,
+        // arredondaria o digito final -- e a busca do Pipefy nao acharia mais.
+        remessa: String(pegar(l, mapa, 'remessa') ?? '').trim(),
     };
 }
 
@@ -994,6 +1010,8 @@ export interface DadosCotacaoSuzano {
     entregaEm: string | null;
     peso: number | null;
     observacoes: string | null;
+    /** Numero de remessa da planilha. '' ou null = nao informado. */
+    remessa?: string | null;
     valorRecebido: number | null;
     valorAPagar: number | null;
     km: number | null;
@@ -1039,6 +1057,10 @@ export function montarCotacaoSuzano(d: DadosCotacaoSuzano): Record<string, unkno
         // Peso já tem campo próprio, e motorista e placa são ignorados por
         // decisão do Wagner.
         observacoes_gerais: d.observacoes,
+        // Remessa da Suzano. Precisa ser PERSISTIDA porque o card do Pipefy
+        // nasce depois, a partir do registro salvo -- nao da planilha. Vazio
+        // grava null, nao string vazia, pra "nao informado" ser um estado so.
+        remessa: (d.remessa || '').trim() || null,
         nosso_frete: d.valorRecebido,
         frete_terceiro: d.valorAPagar,
         operacao: d.operacao,
@@ -1141,6 +1163,7 @@ export async function criarCotacoesFastDelivery(
             entregaEm: l.entregaEm,
             peso: l.peso,
             observacoes: observacaoDaCarga(l.volume, l.instrucao),
+            remessa: l.remessa,
             valorRecebido: l.valorRecebido,
             valorAPagar: l.valorAPagar,
             km: l.km,
@@ -1230,6 +1253,8 @@ export interface CotacaoHistorico {
     /** Vai para o campo Data de Entrega do card. */
     entregaEm: string | null;
     observacoes: string | null;
+    /** Numero de remessa da Suzano. null = nao informado na planilha. */
+    remessa: string | null;
     valorRecebido: number | null;
     valorAPagar: number | null;
     margem: number | null;
@@ -1245,7 +1270,7 @@ export interface CotacaoHistorico {
 const COLUNAS_HISTORICO =
     'id, proposal_number, client_reference, created_at, origin, destination, operacao, cliente_nome_operacao, ' +
     'veiculo_tipo_operacao, carroceria_tipo_operacao, peso_carga_operacao, coleta_date, entrega_date, ' +
-    'observacoes_gerais, nosso_frete, frete_terceiro, real_profit, real_margin_percent, ' +
+    'observacoes_gerais, remessa, nosso_frete, frete_terceiro, real_profit, real_margin_percent, ' +
     'pipefy_card_id, pipefy_sent_at, pipefy_card_url, ramper_sent_at';
 
 function linhaParaHistorico(r: Record<string, unknown>): CotacaoHistorico {
@@ -1272,6 +1297,7 @@ function linhaParaHistorico(r: Record<string, unknown>): CotacaoHistorico {
         coletaEm: r.coleta_date ? String(r.coleta_date) : null,
         entregaEm: r.entrega_date ? String(r.entrega_date) : null,
         observacoes: r.observacoes_gerais ? String(r.observacoes_gerais) : null,
+        remessa: r.remessa ? String(r.remessa) : null,
         valorRecebido: recebido,
         valorAPagar: pagar,
         margem,
@@ -1527,6 +1553,9 @@ export async function enviarCargaAoPipefy(c: CotacaoHistorico): Promise<Resultad
         localColeta: c.origem,
         localEntrega: c.cliente || undefined,
         referencia: c.dt,
+        // Remessa -> campo "Remessa" do card (short_text, pesquisavel). A DT
+        // SAP continua no `referencia`, que alimenta "Solicitacao (STE...)".
+        remessa: c.remessa ?? undefined,
         cliente: quem.cliente,
         clienteId: quem.clienteId,
         solicitante: quem.solicitante,

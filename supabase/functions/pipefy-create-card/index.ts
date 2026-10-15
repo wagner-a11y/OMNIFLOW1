@@ -27,11 +27,17 @@ const PIPEFY_URL = 'https://api.pipefy.com/graphql';
 // qualquer chamada antiga — cai exatamente onde sempre caiu. É isso que faz
 // esta mudança não ter efeito nenhum sobre quem não pediu por ela.
 //
-// Os dois Pipes são clones estruturais: mesmos 25 campos, com os MESMOS
-// field_id, mesmos 4 obrigatórios, e as conexões de Cliente e Solicitante
-// apontando para as MESMAS tabelas (n4RglqvR / NRSsu5wv). Conferido por
-// inspeção read-only em 14/09/2026 — por isso só o destino muda; nenhum id de
-// cliente precisou ser remapeado.
+// Os dois Pipes continuam clones estruturais, mas o número de campos JÁ MUDOU
+// desde a primeira conferência: em 15/10/2026 são 27 campos em comum (eram 25),
+// com os MESMOS field_id, mesmos 4 obrigatórios, e as conexões de Cliente e
+// Solicitante apontando para as MESMAS tabelas (n4RglqvR / NRSsu5wv). O único
+// campo exclusivo é o `id_viagem` do Fast, do tipo `id` — gerado pelo Pipefy e
+// não gravável. Os dois novos são `remessa` (que esta função envia) e
+// `tipo_de_carga` (que nenhum código nosso alimenta ainda).
+//
+// Conferido por inspeção read-only (`inspect: 'pipe'`) em 14/09/2026 e de novo
+// em 15/10/2026. A contagem envelhece a cada campo que alguém cria no Pipefy —
+// quem for comparar os Pipes roda a inspeção, não confia neste número.
 const PIPE_PADRAO = '304753830';            // "Acompanhamento de Fretes"
 const PHASE_PADRAO = '339926927';           // "Cotações Fechadas"
 
@@ -39,6 +45,24 @@ const DESTINO_POR_OPERACAO: Record<string, { pipe: string; phase: string }> = {
   // Pipe próprio do Fast Delivery: "Fretes - Suzano Fast".
   FAST_DELIVERY: { pipe: '307341584', phase: '344236205' },
   // DEMAIS_PLANTAS não entra aqui de propósito: continua no Pipe padrão.
+};
+
+/**
+ * field_id do campo "Remessa" em CADA Pipe.
+ *
+ * Mapeado por pipe, e não numa constante única, porque o field_id do Pipefy é
+ * um slug derivado do label e NÃO há garantia de ser igual entre Pipes mesmo
+ * com o rótulo idêntico — é o mesmo cuidado que o comentário acima registra.
+ * Hoje os dois saíram 'remessa' (inspeção read-only de 15/10/2026), e manter o
+ * mapa é o que faz um deles poder divergir sem virar card com campo em branco.
+ *
+ * Pipe sem entrada aqui simplesmente não recebe a Remessa: o push é omitido.
+ * Enviar um field_id inexistente NÃO dá erro no Pipefy — o card nasceria com o
+ * campo vazio, calado. Por isso se endereça o id certo, e não um palpite.
+ */
+const REMESSA_FIELD_POR_PIPE: Record<string, string> = {
+  '304753830': 'remessa',   // Acompanhamento de Fretes (padrão / Demais Plantas)
+  '307341584': 'remessa',   // Fretes - Suzano Fast
 };
 
 function destinoDaOperacao(operacao: unknown): { pipe: string; phase: string } {
@@ -371,6 +395,7 @@ Deno.serve(async (req) => {
   const destino = destinoDaOperacao(body.operacao);
 
   // Origens dos campos especiais:
+  const remessa = (body.remessa == null ? '' : String(body.remessa)).trim();             // short_text pesquisável; vazio => omitido
   const clienteRaw = (body.cliente == null ? '' : String(body.cliente)).trim();          // nome (vai no título/resumo)
   const solicitanteRaw = (body.solicitante == null ? '' : String(body.solicitante)).trim();
   const referenciaRaw = (body.referencia == null ? '' : String(body.referencia)).trim();   // -> "Solicitação (STE...)" (short_text)
@@ -406,6 +431,11 @@ Deno.serve(async (req) => {
   push('local_da_entrega', localEntrega);
   push('observa_es_1', observacoes);                  // já vem com "Necessidades: ..." embutido (montado no app)
   push('solicita_o_ste_coleta_etc', referenciaRaw);   // "Solicitação (STE...)" recebe a Referência do Cliente (short_text)
+  // Remessa da Suzano -> campo "Remessa" (short_text, pesquisável). O field_id
+  // é o do Pipe de DESTINO, não um fixo. Vazio => omitido pelo push, e o card
+  // nasce igual ao de hoje. A DT SAP não é tocada: ela está na linha de cima.
+  const remessaFieldId = REMESSA_FIELD_POR_PIPE[destino.pipe];
+  if (remessaFieldId) push(remessaFieldId, remessa);
   // Conexões: só envia se veio um id escolhido no autocomplete. Sem id -> vazio. Nunca cria registro.
   if (clienteId) push('conex_o_de_database', [clienteId]);
   if (solicitanteId) push('solicitante_da_carga', [solicitanteId]);
