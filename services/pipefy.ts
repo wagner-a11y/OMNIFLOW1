@@ -19,6 +19,12 @@ export interface PipefyCardPayload {
     localEntrega?: string;
     observacoes?: string;
     referencia?: string;
+    /**
+     * Numero de REMESSA da Suzano -> campo "Remessa" do card (short_text,
+     * pesquisavel na busca do Pipefy). Separado do `referencia`, que leva a DT
+     * SAP para "Solicitacao (STE, Coleta, etc)". Vazio = campo omitido.
+     */
+    remessa?: string;
     outrasNecessidades?: string;
     cliente?: string;          // nome (vai no título/resumo)
     clienteId?: string;        // id do registro da tabela Clientes (vínculo da conexão); vazio = sem vínculo

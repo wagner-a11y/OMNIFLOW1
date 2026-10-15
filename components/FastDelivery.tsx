@@ -298,6 +298,10 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
         // A entrega vai como o OTM informou: sem a antecipação da coleta.
         entregaEm: l.entregaEm,
         observacoes: observacaoDaCarga(l.volume, l.instrucao),
+        // Remessa da planilha -> campo "Remessa" do card. Vai por aqui pra o
+        // primeiro envio (logo apos a importacao) ja levar o numero, sem
+        // depender de reabrir a cotacao.
+        remessa: l.remessa || null,
         valorRecebido: l.valorRecebido,
         valorAPagar: l.valorAPagar,
         margem: l.margem,

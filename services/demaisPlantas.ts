@@ -388,6 +388,7 @@ export async function criarCotacoesDemaisPlantas(
             entregaEm: l.entregaEm,
             peso: l.peso,
             observacoes: observacaoDaCarga(l.volume, l.instrucao),
+            remessa: l.remessa,
             valorRecebido: l.valorRecebido,
             // O que o operador definiu: da tabela, do piso ANTT ou da mão dele.
             valorAPagar: l.valorAPagar,
@@ -440,6 +441,10 @@ export function comoCargaEnviavel(
         coletaEm: coletaAjustada(l.dataColeta),
         entregaEm: l.entregaEm,
         observacoes: observacaoDaCarga(l.volume, l.instrucao),
+        // Remessa da planilha -> campo "Remessa" do card. Vai por aqui pra o
+        // primeiro envio (logo apos a importacao) ja levar o numero, sem
+        // depender de reabrir a cotacao.
+        remessa: l.remessa || null,
         valorRecebido: l.valorRecebido,
         valorAPagar: l.valorAPagar,
         margem: l.margem,
