@@ -283,6 +283,13 @@ const DemaisPlantas: React.FC<Props> = ({ marginThreshold, ehMaster, autor, aoGr
             <React.Fragment key={`${pendente ? 'p' : 'k'}-${l.linhaExcel}`}>
                 <tr className={pendente ? 'bg-amber-50/60' : 'hover:bg-[#f9fafb]'}>
                     <td className="px-3 py-2 font-mono text-xs">{l.referencia || '—'}</td>
+                    {/* Remessa: vem da coluna PK ("SUZANO.8819073"). Visível aqui
+                        para o operador conferir na hora que o número foi capturado.
+                        Vazia aparece em âmbar: não é pendência (a carga lança), mas
+                        o card vai sem o número pesquisável. */}
+                    <td className="px-3 py-2 font-mono text-xs">
+                        {l.remessa || <span className="text-amber-700" title="Sem remessa: o card vai sem o número pesquisável">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-xs">
                         {dataCurta(coletaAjustada(l.dataColeta))}
                         <span className="block text-[10px] text-[#9ca3af]">OTM {dataCurta(l.dataColeta)}</span>
@@ -377,7 +384,7 @@ const DemaisPlantas: React.FC<Props> = ({ marginThreshold, ehMaster, autor, aoGr
                 {/* PROTEÇÃO DE MARGEM — avisa, não impede. */}
                 {l.alertaMargem && (
                     <tr className={l.alertaMargem.nivel === 'erro' ? 'bg-red-50/60' : 'bg-amber-50/40'}>
-                        <td colSpan={10} className="px-3 pb-2 pt-0">
+                        <td colSpan={11} className="px-3 pb-2 pt-0">
                             <span className={`text-[11px] font-medium flex items-center gap-1.5 ${l.alertaMargem.nivel === 'erro' ? 'text-red-800' : 'text-[#92400e]'}`}>
                                 <AlertTriangle className={`w-3 h-3 shrink-0 ${l.alertaMargem.nivel === 'erro' ? 'text-red-600' : 'text-amber-600'}`} strokeWidth={2} />
                                 {l.alertaMargem.texto} Dá para cotar assim mesmo.
@@ -388,7 +395,7 @@ const DemaisPlantas: React.FC<Props> = ({ marginThreshold, ehMaster, autor, aoGr
 
                 {l.alertaVolume && (
                     <tr className="bg-amber-50/40">
-                        <td colSpan={10} className="px-3 pb-2 pt-0">
+                        <td colSpan={11} className="px-3 pb-2 pt-0">
                             <span className="text-[11px] font-medium text-[#92400e] flex items-center gap-1.5">
                                 <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" strokeWidth={2} />
                                 {l.alertaVolume.texto}
@@ -399,7 +406,7 @@ const DemaisPlantas: React.FC<Props> = ({ marginThreshold, ehMaster, autor, aoGr
 
                 {pendente && (
                     <tr className="bg-amber-50/60">
-                        <td colSpan={10} className="px-3 pb-2 pt-0">
+                        <td colSpan={11} className="px-3 pb-2 pt-0">
                             {l.pendencias.map((p, i) => (
                                 <span key={i} className="text-[11px] font-medium text-[#92400e] flex flex-wrap items-center gap-2">
                                     <span>linha {l.linhaExcel} · {p.texto}</span>
@@ -423,6 +430,7 @@ const DemaisPlantas: React.FC<Props> = ({ marginThreshold, ehMaster, autor, aoGr
         <thead className="bg-[#f9fafb] text-[10px] uppercase text-[#6b7280]">
             <tr>
                 <th className="px-3 py-2 text-left font-medium">DT</th>
+                <th className="px-3 py-2 text-left font-medium">Remessa</th>
                 <th className="px-3 py-2 text-left font-medium">Coleta (−1h)</th>
                 <th className="px-3 py-2 text-left font-medium">Origem</th>
                 <th className="px-3 py-2 text-left font-medium">Destino / cliente</th>

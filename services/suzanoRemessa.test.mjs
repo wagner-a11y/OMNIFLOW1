@@ -14,7 +14,7 @@
 import * as XLSX from 'xlsx';
 import {
     COLUNAS_OTM, abrirPlanilhaOtm, camposBasicos, mapearColunas,
-    montarCotacaoSuzano, enviarCargaAoPipefy,
+    montarCotacaoSuzano, enviarCargaAoPipefy, remessaDoPk,
 } from './fastDelivery.ts';
 import { COLUNAS_DEMAIS_PLANTAS } from './demaisPlantas.ts';
 
@@ -35,7 +35,11 @@ const planilha = (aoa) => {
     return XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
 };
 
-// Cabeçalho mínimo do OTM + a coluna de Remessa.
+// Cabeçalho mínimo do OTM. A 9a coluna e a de remessa do cenario em teste:
+// na planilha REAL e o "PK" ("SUZANO.8819073"); uma coluna "Remessa" explicita
+// nao existe hoje, e e tratada como fallback preferencial se um dia vier.
+const CAB_PK = ['DT SAP', 'Data Coleta', 'Cidade de Destino', 'UF', 'Nome Destino',
+    'Tipo Equipamento', 'Peso', 'Custo Frete', 'PK'];
 const CAB = ['DT SAP', 'Data Coleta', 'Cidade de Destino', 'UF', 'Nome Destino',
     'Tipo Equipamento', 'Peso', 'Custo Frete', 'Remessa'];
 const linhaOtm = (dt, remessa) => [dt, '2026-10-20', 'Cotia', 'SP', 'Cliente X', 'TRUCK', 1200, 3500, remessa];
@@ -177,6 +181,93 @@ console.log('\n--- 5) CADEIA COMPLETA: um .xlsx -> payload ---');
     const { payload } = await enviar(carga({ dt: row.client_reference, remessa: row.remessa }));
     eq('planilha -> banco -> card, sem perder digito', payload.remessa, '0099887766');
     eq('e a DT SAP atravessa igual', payload.referencia, '1429999');
+}
+
+console.log('\n--- 7) REMESSA VINDA DO PK (o caso real do OTM) ---');
+eq('"SUZANO.8819073" -> "8819073"', remessaDoPk('SUZANO.8819073'), '8819073');
+eq('prefixo em caixa baixa tambem', remessaDoPk('suzano.8819073'), '8819073');
+eq('espacos em volta', remessaDoPk('  SUZANO.8819073  '), '8819073');
+eq('zeros a esquerda preservados', remessaDoPk('SUZANO.0008819073'), '0008819073');
+eq('numero longo inteiro', remessaDoPk('SUZANO.900300123456789'), '900300123456789');
+eq('PK sem ponto vale inteiro', remessaDoPk('8819073'), '8819073');
+eq('mais de um ponto: pega depois do ULTIMO', remessaDoPk('SUZANO.BR.8819073'), '8819073');
+eq('PK vazio', remessaDoPk(''), '');
+eq('PK nulo', remessaDoPk(null), '');
+eq('PK undefined', remessaDoPk(undefined), '');
+eq('so o prefixo, sem numero', remessaDoPk('SUZANO.'), '');
+eq('numero puro vindo como number do xlsx', remessaDoPk(8819073), '8819073');
+
+{
+    // Dicionario reconhece o PK.
+    eq('COLUNAS_OTM reconhece PK', COLUNAS_OTM.pk, ['PK']);
+    const { mapa } = mapearColunas(CAB_PK, COLUNAS_OTM);
+    eq('a coluna PK casa', mapa.pk, 'PK');
+}
+{
+    // O caso REAL: planilha com PK e SEM coluna Remessa.
+    const { bruto, mapa } = abrirPlanilhaOtm(planilha([CAB_PK, linhaOtm('1429723', 'SUZANO.8819073')]), COLUNAS_OTM);
+    const base = camposBasicos(bruto[0], mapa, 0);
+    eq('remessa derivada do PK', base.remessa, '8819073');
+    eq('e o DT SAP segue no campo dele', base.referencia, '1429723');
+    const { faltando } = mapearColunas(CAB_PK, COLUNAS_OTM);
+    ok('a planilha de hoje NAO reclama de PK', !faltando.includes('PK'), faltando.join(', '));
+    ok('mas avisa da coluna Remessa ausente (fallback, nao obrigatoria)', faltando.includes('Remessa'));
+}
+{
+    // Zero a esquerda atravessando a planilha de verdade (vai como texto).
+    const { bruto, mapa } = abrirPlanilhaOtm(planilha([CAB_PK, linhaOtm('1429724', 'SUZANO.0008819073')]), COLUNAS_OTM);
+    eq('zeros sobrevivem ao xlsx', camposBasicos(bruto[0], mapa, 0).remessa, '0008819073');
+}
+{
+    // PRECEDENCIA: coluna explicita "Remessa" VENCE o PK.
+    const cab = [...CAB_PK, 'Remessa'];
+    const linha = [...linhaOtm('1429725', 'SUZANO.1111111'), '2222222'];
+    const { bruto, mapa } = abrirPlanilhaOtm(planilha([cab, linha]), COLUNAS_OTM);
+    const base = camposBasicos(bruto[0], mapa, 0);
+    eq('com as duas colunas, a Remessa explicita vence', base.remessa, '2222222');
+}
+{
+    // Remessa explicita VAZIA cai de volta no PK: coluna presente mas em branco
+    // nao pode apagar o numero que o PK tem.
+    const cab = [...CAB_PK, 'Remessa'];
+    const linha = [...linhaOtm('1429726', 'SUZANO.3333333'), ''];
+    const { bruto, mapa } = abrirPlanilhaOtm(planilha([cab, linha]), COLUNAS_OTM);
+    eq('coluna Remessa vazia -> usa o PK', camposBasicos(bruto[0], mapa, 0).remessa, '3333333');
+}
+{
+    // Nem PK nem Remessa: fica vazia, e a carga ainda lanca.
+    const cab = CAB_PK.slice(0, 8);
+    const { bruto, mapa } = abrirPlanilhaOtm(planilha([cab, linhaOtm('1429727', '').slice(0, 8)]), COLUNAS_OTM);
+    eq('sem PK e sem Remessa -> vazia', camposBasicos(bruto[0], mapa, 0).remessa, '');
+}
+
+console.log('\n--- 8) PK -> PAYLOAD DO CARD, nos DOIS fluxos ---');
+{
+    const { bruto, mapa } = abrirPlanilhaOtm(planilha([CAB_PK, linhaOtm('1429999', 'SUZANO.8819073')]), COLUNAS_OTM);
+    const base = camposBasicos(bruto[0], mapa, 0);
+    const row = montarCotacaoSuzano({ ...dadosBase, dt: base.referencia, remessa: base.remessa });
+    eq('o banco recebe a remessa do PK', row.remessa, '8819073');
+    eq('e o client_reference segue sendo a DT', row.client_reference, '1429999');
+
+    // Fast
+    const fast = await enviar(carga({ dt: row.client_reference, remessa: row.remessa }));
+    eq('FAST: PK -> payload do card', fast.payload.remessa, '8819073');
+    eq('FAST: a DT atravessa igual', fast.payload.referencia, '1429999');
+
+    // Demais Plantas: MESMO parser (herda o dicionario), outro Pipe.
+    const dp = await enviar(carga({
+        dt: row.client_reference, remessa: row.remessa,
+        operacao: 'DEMAIS_PLANTAS', origem: 'Mogi das Cruzes, SP',
+    }));
+    eq('DEMAIS PLANTAS: PK -> payload do card', dp.payload.remessa, '8819073');
+    eq('DEMAIS PLANTAS: a DT atravessa igual', dp.payload.referencia, '1429999');
+    ok('o titulo nao carrega a remessa em nenhum dos dois',
+        !String(fast.payload.titulo).includes('8819073') && !String(dp.payload.titulo).includes('8819073'));
+}
+{
+    // As Demais Plantas herdam o PK pelo dicionario, nao por copia.
+    const { COLUNAS_DEMAIS_PLANTAS: DP } = await import('./demaisPlantas.ts');
+    eq('COLUNAS_DEMAIS_PLANTAS herda o PK', DP.pk, COLUNAS_OTM.pk);
 }
 
 console.log('\n--- 6) EDGE FUNCTION: field_id da Remessa POR PIPE ---');
