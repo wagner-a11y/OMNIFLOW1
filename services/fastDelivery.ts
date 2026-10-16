@@ -58,8 +58,33 @@ export const COLUNAS_OTM: Record<string, string[]> = {
     // Entra aqui (e não num dicionário separado) porque as DUAS operações
     // querem a remessa; a Demais Plantas herda COLUNAS_OTM. Planilha sem a
     // coluna cai no aviso âmbar de "coluna não encontrada", que não bloqueia.
+    // De onde a REMESSA sai de verdade. O export do OTM nao tem coluna
+    // "Remessa": o numero vem na coluna PK, no formato "SUZANO.8819073" — a
+    // remessa e a parte depois do ponto.
+    pk: ['PK'],
+    // Coluna explicita de remessa: FALLBACK preferencial. Hoje a planilha nao
+    // traz nenhuma destas, e o numero sai do PK. Se um dia o export passar a
+    // trazer a coluna propria, ela VENCE o PK — sem precisar mexer em codigo.
     remessa: ['Remessa', 'Nº Remessa', 'Numero Remessa', 'No Remessa', 'Nr Remessa'],
 };
+
+/**
+ * Extrai a remessa do PK do OTM.
+ *
+ *   "SUZANO.8819073" -> "8819073"
+ *
+ * Pega o que vem depois do ULTIMO ponto. PK sem ponto vale inteiro (o OTM pode
+ * mudar o prefixo, e perder o numero por causa disso seria pior que aceitar o
+ * valor cru). Devolve TEXTO: remessa e identificador, e como numero perderia
+ * zero a esquerda e, acima de 2^53, arredondaria o ultimo digito — e aí a
+ * busca do Pipefy nao acharia o card, que e o objetivo todo.
+ */
+export function remessaDoPk(pk: unknown): string {
+    const bruto = String(pk ?? '').trim();
+    if (!bruto) return '';
+    const ponto = bruto.lastIndexOf('.');
+    return (ponto >= 0 ? bruto.slice(ponto + 1) : bruto).trim();
+}
 
 /** O Excel traz a placa prefixada pela operação: "SUZANO.BXC7J79". */
 export const PREFIXO_PLACA = /^SUZANO\./i;
@@ -605,10 +630,12 @@ export function camposBasicos(
         valorRecebido: numero(pegar(l, mapa, 'custoFrete')),
         instrucao: String(pegar(l, mapa, 'instrucaoTransporte') ?? '').trim(),
         entregaEm: entregaDoOtm(data(pegar(l, mapa, 'fimViagem'))),
-        // Lida como TEXTO de proposito: remessa e identificador, nao numero de
-        // conta. Virar number perderia zero a esquerda e, acima de 2^53,
-        // arredondaria o digito final -- e a busca do Pipefy nao acharia mais.
-        remessa: String(pegar(l, mapa, 'remessa') ?? '').trim(),
+        // A remessa sai do PK ("SUZANO.8819073" -> "8819073"). Uma coluna
+        // explicita "Remessa"/"Nº Remessa" VENCE quando existir: e dado direto
+        // do OTM, nao derivado. Os dois caminhos convivem, entao nem a planilha
+        // de hoje (so PK) nem uma futura (com coluna propria) quebra.
+        remessa: String(pegar(l, mapa, 'remessa') ?? '').trim()
+            || remessaDoPk(pegar(l, mapa, 'pk')),
     };
 }
 

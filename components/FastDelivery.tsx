@@ -421,6 +421,14 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
             <React.Fragment key={`${pendente ? 'p' : 'k'}-${l.linhaExcel}`}>
             <tr className={pendente ? 'bg-amber-50/60' : 'hover:bg-[#f9fafb]'}>
                 <td className="px-3 py-2 font-mono text-xs">{l.referencia || '—'}</td>
+                {/* Remessa: vem da coluna PK ("SUZANO.8819073"). Visível aqui
+                    para o operador conferir na hora que o número foi capturado
+                    — sem ela, só o banco respondia isso. Vazia aparece em âmbar:
+                    não é pendência (a carga lança), mas o card vai sem o número
+                    pesquisável, e isso tem de se ver. */}
+                <td className="px-3 py-2 font-mono text-xs">
+                    {l.remessa || <span className="text-amber-700" title="Sem remessa: o card vai sem o número pesquisável">—</span>}
+                </td>
                 <td className="px-3 py-2 text-xs">
                     {dataCurta(coletaAjustada(l.dataColeta))}
                     <span className="block text-[10px] text-[#9ca3af]">OTM {dataCurta(l.dataColeta)}</span>
@@ -498,7 +506,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 passa da conta e entra assim mesmo. */}
             {l.alertaVolume && !pendente && (
                 <tr className="bg-amber-50/40">
-                    <td colSpan={10} className="px-3 pb-2 pt-0">
+                    <td colSpan={11} className="px-3 pb-2 pt-0">
                         <span className="text-[11px] font-medium text-[#92400e] flex items-center gap-1.5">
                             <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" strokeWidth={2} />
                             {l.alertaVolume.texto} — confira antes de fechar. Dá para cotar assim mesmo.
@@ -511,7 +519,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                 carroceria mandar, e o padrão entra à vista de todos. */}
             {l.avisoCarroceria && !pendente && (
                 <tr className="bg-amber-50/40">
-                    <td colSpan={10} className="px-3 pb-2 pt-0">
+                    <td colSpan={11} className="px-3 pb-2 pt-0">
                         <span className="text-[11px] font-medium text-[#92400e] flex flex-wrap items-center gap-1.5">
                             <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" strokeWidth={2} />
                             {l.avisoCarroceria} O preço não muda.
@@ -534,6 +542,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
         <thead className="bg-[#f9fafb] text-[10px] uppercase text-[#6b7280]">
             <tr>
                 <th className="px-3 py-2 text-left font-medium">DT</th>
+                <th className="px-3 py-2 text-left font-medium">Remessa</th>
                 <th className="px-3 py-2 text-left font-medium">Coleta (−1h)</th>
                 <th className="px-3 py-2 text-left font-medium">Destino / cliente</th>
                 <th className="px-3 py-2 text-left font-medium">Veículo</th>
@@ -640,7 +649,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                                     <React.Fragment key={`p-${l.linhaExcel}`}>
                                         {renderLinha(l, true)}
                                         <tr className="bg-amber-50/60">
-                                            <td colSpan={9} className="px-3 pb-2 pt-0">
+                                            <td colSpan={11} className="px-3 pb-2 pt-0">
                                                 {l.pendencias.map((p, i) => (
                                                     <span key={i} className="text-[11px] font-medium text-[#92400e] flex flex-wrap items-center gap-2">
                                                         <span>linha {l.linhaExcel} · {p.texto}</span>
@@ -826,7 +835,7 @@ const FastDelivery: React.FC<Props> = ({ marginThreshold, autor, aoGravar, ehMas
                                     ? visiveis.map(l => renderLinha(l))
                                     : (
                                         <tr>
-                                            <td colSpan={10} className="px-6 py-6 text-center text-xs text-[#6b7280]">
+                                            <td colSpan={11} className="px-6 py-6 text-center text-xs text-[#6b7280]">
                                                 {filtro === 'novas'
                                                     ? 'Nenhuma linha nova: todas as DTs desta planilha já foram lançadas.'
                                                     : 'Nenhuma linha neste filtro.'}
