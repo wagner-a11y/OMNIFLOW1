@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { calcularCustosOcultos } from './utils/custosOcultos';
 import { calcularPreco } from './utils/motorPreco';
+import { criarCoalescedor } from './utils/coalescer';
 import { BidLote } from './components/BidLote';
 import { CRMBoard } from './components/CRMBoard';
 import { GmailIntakeBoard } from './components/GmailIntakeBoard';
@@ -603,19 +604,31 @@ const App: React.FC = () => {
     useEffect(() => {
         console.log('--- Real-Time Collaboration: Starting Subscriptions ---');
 
+        // Coalescedor: junta uma rajada de eventos de freight_calculations numa
+        // ÚNICA releitura do Histórico. Antes, cada evento relia a maior tabela
+        // (getFreightCalculations), em CADA cliente conectado — um Bid em Lote /
+        // import Suzano / cron do gmail-intake viravam N releituras por usuário.
+        // O funil e o Histórico continuam ao vivo (derivam de `history`); só
+        // mudou a cadência: no máximo uma releitura a cada 1,5s por rajada.
+        const refrescoHistorico = criarCoalescedor(() => {
+            getFreightCalculations().then(setHistory);
+        }, 1500);
+
         const channel = supabase
             .channel('db-changes-unified')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'freight_calculations' }, (payload) => {
                 console.log('Real-Time Update: freight_calculations', payload.eventType);
-                getFreightCalculations().then(data => {
-                    setHistory(data);
-                    // Force refresh if editing to prevent stale data
-                    if (editingId && payload.eventType === 'UPDATE' && (payload.new as any).id === editingId) {
-                        showFeedback("Este registro foi alterado por outro usuário.");
-                    }
-                });
-                // Mantém a lixeira em sincronia (soft delete/restore chegam como UPDATE).
-                getDeletedFreightCalculations().then(setTrash);
+                // Aviso de edição concorrente: verificação imediata, não depende
+                // do refetch (comportamento idêntico ao anterior).
+                if (editingId && payload.eventType === 'UPDATE' && (payload.new as any).id === editingId) {
+                    showFeedback("Este registro foi alterado por outro usuário.");
+                }
+                // Releitura do Histórico coalescida (ver refrescoHistorico).
+                refrescoHistorico.disparar();
+                // A LIXEIRA não é mais relida a cada evento. Ela é recarregada ao
+                // abrir a aba Lixeira (efeito dedicado abaixo), e as mutações
+                // locais (mover/restaurar/apagar) já atualizam `trash` na hora —
+                // isso tira do caminho de cada evento uma 2ª leitura da tabela.
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
                 console.log('Real-Time Update: customers');
@@ -658,9 +671,20 @@ const App: React.FC = () => {
 
         return () => {
             console.log('Cleaning up Real-Time subscriptions');
+            refrescoHistorico.cancelar();
             supabase.removeChannel(channel);
         };
     }, []);
+
+    // Lixeira sob demanda: recarrega ao ABRIR a aba (reflete deletes/restores
+    // feitos por outros usuários), em vez de reler a cada evento de realtime.
+    // As mutações locais já mantêm `trash` correto para quem age; esta leitura
+    // autoritativa roda só quando a Lixeira é realmente aberta.
+    useEffect(() => {
+        if (activeTab === 'trash') {
+            getDeletedFreightCalculations().then(setTrash);
+        }
+    }, [activeTab]);
 
     // spotStats persistence moved to database service
 

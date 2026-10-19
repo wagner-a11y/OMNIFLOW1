@@ -404,11 +404,38 @@ const mapFreightRow = (item: any): FreightCalculation => ({
         deletedByName: item.deleted_by_name || undefined
 });
 
+// Colunas que o Histórico/lixeira realmente usam — é EXATAMENTE o conjunto que
+// mapFreightRow lê. Trocar `select('*')` por esta lista evita arrastar qualquer
+// coluna que a tela não consome (e qualquer coluna larga que venha a ser
+// adicionada à tabela no futuro), sem mudar nada do que aparece na tela.
+// Se mapFreightRow passar a ler um campo novo, acrescente-o aqui também.
+const FREIGHT_COLUMNS = [
+    'id', 'proposal_number', 'client_reference', 'origin', 'destination', 'destinations',
+    'distance_km', 'vehicle_type', 'merchandise_type', 'weight', 'customer_id',
+    'suggested_freight', 'base_freight', 'tolls', 'extra_costs', 'extra_costs_description',
+    'goods_value', 'insurance_percent', 'ad_valorem', 'profit_margin', 'icms_percent',
+    'icms_manual', 'pagador_mg', 'pis_percent', 'cofins_percent', 'csll_percent', 'irpj_percent',
+    'total_freight', 'created_at', 'disponibilidade', 'status', 'real_profit', 'real_margin_percent',
+    'elaboration_seconds', 'payment_term_days', 'commission_percent', 'origem_dados',
+    'tipo_precificacao', 'operacao', 'is_edited', 'created_by', 'created_by_name', 'updated_by',
+    'updated_by_name', 'updated_at', 'lost_reason', 'lost_obs', 'lost_file_url', 'other_costs',
+    'coleta_date', 'entrega_date', 'data_fechamento', 'cliente_nome_operacao',
+    'referencia_cliente_operacao', 'solicitante', 'coleta_endereco', 'entrega_endereco',
+    'peso_carga_operacao', 'veiculo_tipo_operacao', 'carroceria_tipo_operacao', 'material_tipo',
+    'nosso_frete', 'frete_terceiro', 'valor_carga', 'outras_necessidades', 'observacoes_gerais',
+    'pipeline_stage', 'origem_entrada', 'gmail_message_id', 'gmail_confianca', 'motorista_nome',
+    'motorista_cpf', 'motorista_telefone', 'placa_cavalo', 'placa_carreta_1', 'placa_carreta_2',
+    'motorista_doc_url', 'placa_cavalo_doc_url', 'placa_carreta_1_doc_url', 'placa_carreta_2_doc_url',
+    'pipefy_card_id', 'pipefy_card_url', 'pipefy_sent_at', 'cliente_pipefy_id', 'solicitante_pipefy_id',
+    'mercadoria_nova_usada', 'outras_necessidades_pipefy', 'necessidade_gr',
+    'deleted_at', 'deleted_by', 'deleted_by_name',
+].join(', ');
+
 // Histórico: somente cotações ativas (não estão na lixeira).
 export const getFreightCalculations = async (): Promise<FreightCalculation[]> => {
     const { data, error } = await supabase
         .from('freight_calculations')
-        .select('*')
+        .select(FREIGHT_COLUMNS)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(500);
@@ -425,7 +452,7 @@ export const getFreightCalculations = async (): Promise<FreightCalculation[]> =>
 export const getDeletedFreightCalculations = async (): Promise<FreightCalculation[]> => {
     const { data, error } = await supabase
         .from('freight_calculations')
-        .select('*')
+        .select(FREIGHT_COLUMNS)
         .not('deleted_at', 'is', null)
         .order('deleted_at', { ascending: false })
         .limit(500);
@@ -1001,8 +1028,17 @@ const mapContato = (r: any): CrmContato => ({
 // Carrega empresas (não deletadas) com seus contatos (não deletados).
 export const getCrmEmpresas = async (): Promise<CrmEmpresa[]> => {
     const [{ data: emps, error: e1 }, { data: cts, error: e2 }] = await Promise.all([
-        supabase.from('crm_empresa').select('*').is('deleted_at', null).order('atualizado_em', { ascending: false }).limit(2000),
-        supabase.from('crm_contato').select('*').is('deleted_at', null).limit(10000),
+        // Colunas explícitas (exatamente o que mapEmpresa/mapContato leem): tira
+        // o select('*') sem mudar nada da tela. O board do CRM lê os contatos de
+        // TODAS as empresas para montar contadores, bolinhas de status, origem e
+        // o selo "prova" já nos cards fechados — por isso os contatos continuam
+        // carregados em bloco (um lazy-load por empresa mudaria o que aparece).
+        supabase.from('crm_empresa')
+            .select('id, nome, chave_grupo, etapa, proximo_passo, responsavel, resumo, last_touch, criado_em, atualizado_em')
+            .is('deleted_at', null).order('atualizado_em', { ascending: false }).limit(2000),
+        supabase.from('crm_contato')
+            .select('id, empresa_id, nome, cargo, email, telefone, canal, origem, status, data, codigo, evidencia, print_ref, resumo_ultimo')
+            .is('deleted_at', null).limit(10000),
     ]);
     if (e1 || e2) { console.error('Erro getCrmEmpresas:', e1 || e2); return []; }
     const porEmpresa = new Map<string, CrmContato[]>();

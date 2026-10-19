@@ -57,7 +57,7 @@ interface Dados {
 
 const STALE_MIN = 15; // acima disso sem coleta bem-sucedida, o painel se marca desatualizado
 
-const POLL_MS = 30_000; // relê o cache a cada 30s (cron grava a cada 2 min)
+const POLL_MS = 120_000; // relê o cache a cada 2 min, alinhado ao cron que o grava (antes 30s = 4x mais leituras que o dado muda)
 
 /**
  * A URL do projeto, com as duas defesas que faltavam aqui.
