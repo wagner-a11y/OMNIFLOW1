@@ -20,6 +20,12 @@ eq('nulo', classifySefaz(null), 'PENDENTE');
 eq('Não Transmitido', classifySefaz('Não Transmitido'), 'PENDENTE');
 eq('110 Denegado', classifySefaz('110 - Uso Denegado'), 'DENEGADO');
 eq('301 Denegado', classifySefaz('301 - Uso Denegado'), 'DENEGADO');
+// cStat 220: rejeição de EVENTO (cancelamento fora do prazo) sobre um CT-e AUTORIZADO.
+// O documento é válido -> AUTORIZADO, mesmo o texto contendo "Rejeição".
+eq('220 CT-e autorizada >7 dias -> AUTORIZADO',
+   classifySefaz('220 - Rejeicao: CT-e autorizada ha mais de 7 dias (168 horas)'), 'AUTORIZADO');
+// Regressão: 217 (CT-e não consta na base) continua PENDENTE — não confundir com 220.
+eq('217 Rejeição continua PENDENTE', classifySefaz('217 - Rejeicao: ...'), 'PENDENTE');
 
 // ---- validarContrato ----
 const base = { id: '1', data_emissao: '2026-07-08', nroConhecimento: '51869', valor_frete: '10.00', tipo_cte: 'Normal', status_sefaz: '100 - Autorizado', substituiCTe: '0' };
@@ -82,6 +88,18 @@ const r2 = agregar([
 ], '2026-07-01', '2026-07-09', '2026-07-08');
 eq('sentinela: 2 divergências', r2.divergencias.length, 2);
 eq('sentinela: valor NÃO muda (100 sem protocolo ainda soma)', r2.faturamentoAutorizado, 10);
+
+// ---- agregar: cStat 220 conta no faturamento, NÃO trava (caso real CTe 58108) ----
+const r3 = agregar([
+    S({ id: '1', nroConhecimento: '58108', valor_frete: '5400.00',
+        status_sefaz: '220 - Rejeicao: CT-e autorizada ha mais de 7 dias (168 horas)' }),
+    S({ id: '2', nroConhecimento: '57785', valor_frete: '750.00', status_sefaz: 'Não Transmitido', protocoloCTe: '' }),
+    S({ id: '3', nroConhecimento: '57705', valor_frete: '1835.00', status_sefaz: 'Não Transmitido', protocoloCTe: '' }),
+], '2026-07-01', '2026-07-09', '2026-07-08');
+eq('220: 58108 conta no faturamento (5400)', r3.faturamentoAutorizado, 5400);
+eq('220: travado = só os 2 Não Transmitido (2585)', r3.valorTravado, 2585);
+eq('220: pendências = 2 (58108 saiu)', r3.pendencias.length, 2);
+eq('220: 58108 NÃO está nas pendências', r3.pendencias.some(p => p.nroConhecimento === '58108'), false);
 
 console.log(`\n${pass} passaram, ${fail} falharam`);
 process.exit(fail ? 1 : 0);

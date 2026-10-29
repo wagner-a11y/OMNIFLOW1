@@ -30,6 +30,12 @@ export function classifySefaz(statusSefaz: string | null | undefined): Categoria
     if (code === '100') return 'AUTORIZADO';
     if (code === '101' || lower.includes('cancelamento') || lower.includes('cancelado')) return 'CANCELADO';
     if (code === '110' || code === '301' || code === '302' || lower.includes('denegado')) return 'DENEGADO';
+    // cStat 220 = "CT-e autorizada há mais de 7 dias (168 horas)": é a rejeição de um
+    // EVENTO (cancelamento/CC-e tentado fora do prazo), NÃO do documento. O próprio
+    // texto afirma que o CT-e está autorizado — logo o documento é VÁLIDO e deve contar
+    // no faturamento, não travar. Precede o `rejei` genérico de propósito: sem isto,
+    // um CT-e autorizado caía em PENDENTE só porque o status do evento diz "Rejeição".
+    if (code === '220') return 'AUTORIZADO';
     if (lower.includes('rejei')) return 'PENDENTE';
     return 'PENDENTE'; // vazio / não transmitido / desconhecido
 }
