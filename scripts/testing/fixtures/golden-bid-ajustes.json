@@ -1,0 +1,5895 @@
+{
+ "geradoEm": "main e757e08",
+ "motor": [
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 3302.9500000000003,
+    "finalFreight": 3302.9500000000003,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 195.86493500000003,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -195.86493500000006,
+    "realMarginPercent": -5.9300000000000015,
+    "motoristaTabelado": 6617.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 3885.8235294117653,
+    "finalFreight": 3885.8235294117653,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 230.4293352941177,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 352.4441941176474,
+    "realMarginPercent": 9.070000000000007,
+    "motoristaTabelado": 5597.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 4893.259259259259,
+    "finalFreight": 4893.259259259259,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 290.1702740740741,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1300.138985185185,
+    "realMarginPercent": 26.57,
+    "motoristaTabelado": 4407.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 3773.4500000000003,
+    "finalFreight": 3773.4500000000003,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 223.76558500000004,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -223.7655850000001,
+    "realMarginPercent": -5.9300000000000015,
+    "motoristaTabelado": 6147.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 4439.352941176471,
+    "finalFreight": 4439.352941176471,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 263.2536294117648,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 402.64931176470645,
+    "realMarginPercent": 9.070000000000011,
+    "motoristaTabelado": 5127.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 5590.2962962962965,
+    "finalFreight": 5590.2962962962965,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 331.5045703703704,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1485.3417259259263,
+    "realMarginPercent": 26.570000000000004,
+    "motoristaTabelado": 3937.1000000000004,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 3802.9500000000003,
+    "finalFreight": 3802.9500000000003,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 225.51493500000004,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 186.98506499999985,
+    "realMarginPercent": 4.916842582731822,
+    "motoristaTabelado": 6117.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 4474.058823529413,
+    "finalFreight": 4474.058823529413,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 265.3116882352942,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 818.2971352941181,
+    "realMarginPercent": 18.289816195322057,
+    "motoristaTabelado": 5097.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 5634,
+    "finalFreight": 5634,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 334.0962,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1909.4537999999998,
+    "realMarginPercent": 33.891618743343976,
+    "motoristaTabelado": 3907.6000000000004,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 4273.450000000001,
+    "finalFreight": 4273.450000000001,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 253.41558500000008,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 159.08441500000026,
+    "realMarginPercent": 3.7226225883068773,
+    "motoristaTabelado": 5647.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 5027.588235294119,
+    "finalFreight": 5027.588235294119,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 298.13598235294126,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 868.5022529411776,
+    "realMarginPercent": 17.27472920006086,
+    "motoristaTabelado": 4627.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 6331.037037037037,
+    "finalFreight": 6331.037037037037,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 375.4304962962963,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 2094.656540740741,
+    "realMarginPercent": 33.08552024710714,
+    "motoristaTabelado": 3437.1000000000004,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 3802.9500000000003,
+    "finalFreight": 3802.9500000000003,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 225.51493500000004,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 99.48506499999985,
+    "realMarginPercent": 2.6159971863947686,
+    "motoristaTabelado": 6117.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 4474.058823529413,
+    "finalFreight": 4474.058823529413,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 265.3116882352942,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 730.7971352941181,
+    "realMarginPercent": 16.334097608435563,
+    "motoristaTabelado": 5097.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 5634,
+    "finalFreight": 5634,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 334.0962,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1821.9537999999998,
+    "realMarginPercent": 32.33854810081647,
+    "motoristaTabelado": 3907.6000000000004,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 4273.450000000001,
+    "finalFreight": 4273.450000000001,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 253.41558500000008,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 71.58441500000026,
+    "realMarginPercent": 1.675096584726632,
+    "motoristaTabelado": 5647.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 5027.588235294119,
+    "finalFreight": 5027.588235294119,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 298.13598235294126,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 781.0022529411776,
+    "realMarginPercent": 15.53433209701765,
+    "motoristaTabelado": 4627.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 6331.037037037037,
+    "finalFreight": 6331.037037037037,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 375.4304962962963,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 2007.156540740741,
+    "realMarginPercent": 31.703440194690476,
+    "motoristaTabelado": 3437.1000000000004,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 3302.9500000000003,
+    "finalFreight": 3551.5591397849466,
+    "icmsAmount": 248.60913978494628,
+    "fedTaxesAmount": 210.60745698924737,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -210.60745698924757,
+    "realMarginPercent": -5.930000000000007,
+    "motoristaTabelado": 6141.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 3885.8235294117653,
+    "finalFreight": 4178.3048703352315,
+    "icmsAmount": 292.48134092346623,
+    "fedTaxesAmount": 247.77347881087925,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 335.1000506008859,
+    "realMarginPercent": 8.020000000000008,
+    "motoristaTabelado": 5193,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 4893.259259259259,
+    "finalFreight": 5261.569095977698,
+    "icmsAmount": 368.30983671843893,
+    "fedTaxesAmount": 312.0110473914776,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1278.2982118677814,
+    "realMarginPercent": 24.29499999999999,
+    "motoristaTabelado": 4086.3000000000006,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 3773.4500000000003,
+    "finalFreight": 4057.4731182795704,
+    "icmsAmount": 284.0231182795699,
+    "fedTaxesAmount": 240.60815591397855,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -240.6081559139784,
+    "realMarginPercent": -5.929999999999997,
+    "motoristaTabelado": 5671.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 4439.352941176471,
+    "finalFreight": 4773.49778621126,
+    "icmsAmount": 334.14484503478826,
+    "fedTaxesAmount": 283.06841872232775,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 382.834522454144,
+    "realMarginPercent": 8.020000000000021,
+    "motoristaTabelado": 4722.5,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 5590.2962962962965,
+    "finalFreight": 6011.071286340104,
+    "icmsAmount": 420.77499004380735,
+    "fedTaxesAmount": 356.4565272799682,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1460.389769016328,
+    "realMarginPercent": 24.294999999999998,
+    "motoristaTabelado": 3615.8000000000006,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 3802.9500000000003,
+    "finalFreight": 4089.1935483870975,
+    "icmsAmount": 286.24354838709684,
+    "fedTaxesAmount": 242.48917741935492,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 170.0108225806457,
+    "realMarginPercent": 4.157563601940612,
+    "motoristaTabelado": 5641.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 4474.058823529413,
+    "finalFreight": 4810.8159392789385,
+    "icmsAmount": 336.7571157495257,
+    "fedTaxesAmount": 285.2813851992411,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 798.3274383301709,
+    "realMarginPercent": 16.594429061649507,
+    "motoristaTabelado": 4693,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 5634,
+    "finalFreight": 6058.064516129033,
+    "icmsAmount": 424.06451612903237,
+    "fedTaxesAmount": 359.2432258064517,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1884.3067741935488,
+    "realMarginPercent": 31.104105431309907,
+    "motoristaTabelado": 3586.3000000000006,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 4273.450000000001,
+    "finalFreight": 4595.107526881721,
+    "icmsAmount": 321.6575268817205,
+    "fedTaxesAmount": 272.4898763440861,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 140.0101236559144,
+    "realMarginPercent": 3.0469390071253994,
+    "motoristaTabelado": 5171.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 5027.588235294119,
+    "finalFreight": 5406.008855154967,
+    "icmsAmount": 378.42061986084775,
+    "fedTaxesAmount": 320.5763251106896,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 846.0619101834295,
+    "realMarginPercent": 15.6503981560566,
+    "motoristaTabelado": 4222.5,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 6331.037037037037,
+    "finalFreight": 6807.566706491439,
+    "icmsAmount": 476.52966945440073,
+    "fedTaxesAmount": 403.68870569494237,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 2066.3983313420954,
+    "realMarginPercent": 30.35443382980964,
+    "motoristaTabelado": 3115.8000000000006,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 3802.9500000000003,
+    "finalFreight": 4089.1935483870975,
+    "icmsAmount": 286.24354838709684,
+    "fedTaxesAmount": 242.48917741935492,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 82.51082258064571,
+    "realMarginPercent": 2.0177773833471515,
+    "motoristaTabelado": 5641.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 4474.058823529413,
+    "finalFreight": 4810.8159392789385,
+    "icmsAmount": 336.7571157495257,
+    "fedTaxesAmount": 285.2813851992411,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 710.8274383301709,
+    "realMarginPercent": 14.775610775845069,
+    "motoristaTabelado": 4693,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 5634,
+    "finalFreight": 6058.064516129033,
+    "icmsAmount": 424.06451612903237,
+    "fedTaxesAmount": 359.2432258064517,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1796.8067741935488,
+    "realMarginPercent": 29.659749733759323,
+    "motoristaTabelado": 3586.3000000000006,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 4273.450000000001,
+    "finalFreight": 4595.107526881721,
+    "icmsAmount": 321.6575268817205,
+    "fedTaxesAmount": 272.4898763440861,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 52.51012365591441,
+    "realMarginPercent": 1.1427398237957713,
+    "motoristaTabelado": 5171.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 5027.588235294119,
+    "finalFreight": 5406.008855154967,
+    "icmsAmount": 378.42061986084775,
+    "fedTaxesAmount": 320.5763251106896,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 758.5619101834295,
+    "realMarginPercent": 14.031828850226416,
+    "motoristaTabelado": 4222.5,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 6331.037037037037,
+    "finalFreight": 6807.566706491439,
+    "icmsAmount": 476.52966945440073,
+    "fedTaxesAmount": 403.68870569494237,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1978.8983313420954,
+    "realMarginPercent": 29.069099381062145,
+    "motoristaTabelado": 3115.8000000000006,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 3302.9500000000003,
+    "finalFreight": 3753.352272727273,
+    "icmsAmount": 450.40227272727276,
+    "fedTaxesAmount": 222.5737897727273,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -222.5737897727272,
+    "realMarginPercent": -5.929999999999998,
+    "motoristaTabelado": 5801.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 3885.8235294117653,
+    "finalFreight": 4415.708556149733,
+    "icmsAmount": 529.885026737968,
+    "fedTaxesAmount": 261.8515173796792,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 321.02201203208597,
+    "realMarginPercent": 7.2700000000000085,
+    "motoristaTabelado": 4904,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 4893.259259259259,
+    "finalFreight": 5560.521885521885,
+    "icmsAmount": 667.2626262626262,
+    "fedTaxesAmount": 329.7389478114478,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1260.5703114478115,
+    "realMarginPercent": 22.67,
+    "motoristaTabelado": 3856.8,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 3773.4500000000003,
+    "finalFreight": 4288.011363636364,
+    "icmsAmount": 514.5613636363637,
+    "fedTaxesAmount": 254.2790738636364,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -254.2790738636363,
+    "realMarginPercent": -5.929999999999999,
+    "motoristaTabelado": 5331.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 4439.352941176471,
+    "finalFreight": 5044.719251336899,
+    "icmsAmount": 605.3663101604278,
+    "fedTaxesAmount": 299.15185160427814,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 366.751089572193,
+    "realMarginPercent": 7.2700000000000085,
+    "motoristaTabelado": 4433.5,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 5590.2962962962965,
+    "finalFreight": 6352.609427609428,
+    "icmsAmount": 762.3131313131314,
+    "fedTaxesAmount": 376.7097390572391,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1440.1365572390573,
+    "realMarginPercent": 22.669999999999998,
+    "motoristaTabelado": 3386.3,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 3802.9500000000003,
+    "finalFreight": 4321.534090909091,
+    "icmsAmount": 518.584090909091,
+    "fedTaxesAmount": 256.2669715909091,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 156.23302840909037,
+    "realMarginPercent": 3.615221472803995,
+    "motoristaTabelado": 5301.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 4474.058823529413,
+    "finalFreight": 5084.157754010696,
+    "icmsAmount": 610.0989304812836,
+    "fedTaxesAmount": 301.4905548128343,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 782.1182687165779,
+    "realMarginPercent": 15.383438251883408,
+    "motoristaTabelado": 4404,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 5634,
+    "finalFreight": 6402.272727272727,
+    "icmsAmount": 768.2727272727273,
+    "fedTaxesAmount": 379.65477272727276,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1863.895227272727,
+    "realMarginPercent": 29.113024494142703,
+    "motoristaTabelado": 3356.8,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 4273.450000000001,
+    "finalFreight": 4856.193181818183,
+    "icmsAmount": 582.7431818181819,
+    "fedTaxesAmount": 287.9722556818183,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 124.52774431818216,
+    "realMarginPercent": 2.5643078777100534,
+    "motoristaTabelado": 4831.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 5027.588235294119,
+    "finalFreight": 5713.168449197862,
+    "icmsAmount": 685.5802139037435,
+    "fedTaxesAmount": 338.79088903743326,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 827.8473462566858,
+    "realMarginPercent": 14.49016169605356,
+    "motoristaTabelado": 3933.5,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 6331.037037037037,
+    "finalFreight": 7194.36026936027,
+    "icmsAmount": 863.3232323232323,
+    "fedTaxesAmount": 426.62556397306406,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 2043.4614730639728,
+    "realMarginPercent": 28.403657817454274,
+    "motoristaTabelado": 2886.3,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 3802.9500000000003,
+    "finalFreight": 4321.534090909091,
+    "icmsAmount": 518.584090909091,
+    "fedTaxesAmount": 256.2669715909091,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 68.73302840909037,
+    "realMarginPercent": 1.5904775240273874,
+    "motoristaTabelado": 5301.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 4474.058823529413,
+    "finalFreight": 5084.157754010696,
+    "icmsAmount": 610.0989304812836,
+    "fedTaxesAmount": 301.4905548128343,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 694.6182687165779,
+    "realMarginPercent": 13.662405895423294,
+    "motoristaTabelado": 4404,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 5634,
+    "finalFreight": 6402.272727272727,
+    "icmsAmount": 768.2727272727273,
+    "fedTaxesAmount": 379.65477272727276,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1776.395227272727,
+    "realMarginPercent": 27.74632232871849,
+    "motoristaTabelado": 3356.8,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 4273.450000000001,
+    "finalFreight": 4856.193181818183,
+    "icmsAmount": 582.7431818181819,
+    "fedTaxesAmount": 287.9722556818183,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 37.02774431818216,
+    "realMarginPercent": 0.7624849945594377,
+    "motoristaTabelado": 4831.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 5027.588235294119,
+    "finalFreight": 5713.168449197862,
+    "icmsAmount": 685.5802139037435,
+    "fedTaxesAmount": 338.79088903743326,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 740.3473462566858,
+    "realMarginPercent": 12.958612245375537,
+    "motoristaTabelado": 3933.5,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 6331.037037037037,
+    "finalFreight": 7194.36026936027,
+    "icmsAmount": 863.3232323232323,
+    "fedTaxesAmount": 426.62556397306406,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1955.9614730639728,
+    "realMarginPercent": 27.187427371327612,
+    "motoristaTabelado": 2886.3,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 3302.9500000000003,
+    "finalFreight": 4027.987804878049,
+    "icmsAmount": 725.0378048780487,
+    "fedTaxesAmount": 238.85967682926832,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -238.85967682926866,
+    "realMarginPercent": -5.930000000000009,
+    "motoristaTabelado": 5393.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 3885.8235294117653,
+    "finalFreight": 4738.809182209469,
+    "icmsAmount": 852.9856527977045,
+    "fedTaxesAmount": 281.01138450502157,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 301.8621449067432,
+    "realMarginPercent": 6.370000000000001,
+    "motoristaTabelado": 4557.2,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3302.9500000000003,
+    "realDirectCosts": 3302.9500000000003,
+    "priceAfterMargin": 4893.259259259259,
+    "finalFreight": 5967.389340560072,
+    "icmsAmount": 1074.130081300813,
+    "fedTaxesAmount": 353.8661878952123,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1236.4430713640463,
+    "realMarginPercent": 20.71999999999999,
+    "motoristaTabelado": 3581.4,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 3773.4500000000003,
+    "finalFreight": 4601.768292682927,
+    "icmsAmount": 828.3182926829268,
+    "fedTaxesAmount": 272.88485975609757,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -272.8848597560982,
+    "realMarginPercent": -5.930000000000014,
+    "motoristaTabelado": 4923.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 4439.352941176471,
+    "finalFreight": 5413.845050215208,
+    "icmsAmount": 974.4921090387375,
+    "fedTaxesAmount": 321.04101147776186,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 344.86192969870854,
+    "realMarginPercent": 6.3699999999999966,
+    "motoristaTabelado": 4086.7,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3773.4500000000003,
+    "realDirectCosts": 3773.4500000000003,
+    "priceAfterMargin": 5590.2962962962965,
+    "finalFreight": 6817.43450767841,
+    "icmsAmount": 1227.1382113821137,
+    "fedTaxesAmount": 404.27386630532976,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1412.5724299909666,
+    "realMarginPercent": 20.72,
+    "motoristaTabelado": 3110.9,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 3802.9500000000003,
+    "finalFreight": 4637.743902439024,
+    "icmsAmount": 834.7939024390244,
+    "fedTaxesAmount": 275.01821341463415,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 137.48178658536517,
+    "realMarginPercent": 2.9644109178400835,
+    "motoristaTabelado": 4893.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 4474.058823529413,
+    "finalFreight": 5456.169296987088,
+    "icmsAmount": 982.1104734576759,
+    "fedTaxesAmount": 323.55083931133436,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 760.0579842180782,
+    "realMarginPercent": 13.930249280164094,
+    "motoristaTabelado": 4057.2,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3390.4500000000003,
+    "priceAfterMargin": 5634,
+    "finalFreight": 6870.7317073170725,
+    "icmsAmount": 1236.731707317073,
+    "fedTaxesAmount": 407.43439024390244,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1836.1156097560975,
+    "realMarginPercent": 26.723727369542065,
+    "motoristaTabelado": 3081.4,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 4273.450000000001,
+    "finalFreight": 5211.524390243903,
+    "icmsAmount": 938.0743902439026,
+    "fedTaxesAmount": 309.0433963414635,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 103.456603658537,
+    "realMarginPercent": 1.9851505224116426,
+    "motoristaTabelado": 4423.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 5027.588235294119,
+    "finalFreight": 6131.205164992827,
+    "icmsAmount": 1103.6169296987089,
+    "fedTaxesAmount": 363.5804662840747,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 803.0577690100431,
+    "realMarginPercent": 13.097877944049888,
+    "motoristaTabelado": 3586.7,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3860.9500000000003,
+    "priceAfterMargin": 6331.037037037037,
+    "finalFreight": 7720.776874435411,
+    "icmsAmount": 1389.7398373983738,
+    "fedTaxesAmount": 457.8420686540199,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 2012.244968383016,
+    "realMarginPercent": 26.06272660262784,
+    "motoristaTabelado": 2610.9,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 3802.9500000000003,
+    "finalFreight": 4637.743902439024,
+    "icmsAmount": 834.7939024390244,
+    "fedTaxesAmount": 275.01821341463415,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 49.98178658536517,
+    "realMarginPercent": 1.077717692843699,
+    "motoristaTabelado": 4893.6,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 4474.058823529413,
+    "finalFreight": 5456.169296987088,
+    "icmsAmount": 982.1104734576759,
+    "fedTaxesAmount": 323.55083931133436,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 672.5579842180782,
+    "realMarginPercent": 12.326560038917169,
+    "motoristaTabelado": 4057.2,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3802.9500000000003,
+    "realDirectCosts": 3477.9500000000003,
+    "priceAfterMargin": 5634,
+    "finalFreight": 6870.7317073170725,
+    "icmsAmount": 1236.731707317073,
+    "fedTaxesAmount": 407.43439024390244,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1748.6156097560975,
+    "realMarginPercent": 25.450209442669507,
+    "motoristaTabelado": 3081.4,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 4273.450000000001,
+    "finalFreight": 5211.524390243903,
+    "icmsAmount": 938.0743902439026,
+    "fedTaxesAmount": 309.0433963414635,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 15.956603658537006,
+    "realMarginPercent": 0.3061791994758414,
+    "motoristaTabelado": 4423.1,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 5027.588235294119,
+    "finalFreight": 6131.205164992827,
+    "icmsAmount": 1103.6169296987089,
+    "fedTaxesAmount": 363.5804662840747,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 715.5577690100431,
+    "realMarginPercent": 11.670752319554458,
+    "motoristaTabelado": 3586.7,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": false,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4273.450000000001,
+    "realDirectCosts": 3948.4500000000003,
+    "priceAfterMargin": 6331.037037037037,
+    "finalFreight": 7720.776874435411,
+    "icmsAmount": 1389.7398373983738,
+    "fedTaxesAmount": 457.8420686540199,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1924.744968383016,
+    "realMarginPercent": 24.929420959646173,
+    "motoristaTabelado": 2610.9,
+    "bfEfetivo": 3120.55
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6800,
+    "realDirectCosts": 6800,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -403.2399999999998,
+    "realMarginPercent": -5.929999999999997,
+    "motoristaTabelado": 6617.6,
+    "bfEfetivo": 6617.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5780,
+    "realDirectCosts": 5780,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 616.7600000000002,
+    "realMarginPercent": 9.070000000000004,
+    "motoristaTabelado": 5597.6,
+    "bfEfetivo": 5597.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4590,
+    "realDirectCosts": 4590,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1806.7600000000002,
+    "realMarginPercent": 26.570000000000004,
+    "motoristaTabelado": 4407.6,
+    "bfEfetivo": 4407.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6800,
+    "realDirectCosts": 6800,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -403.2399999999998,
+    "realMarginPercent": -5.929999999999997,
+    "motoristaTabelado": 6147.1,
+    "bfEfetivo": 6147.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5780,
+    "realDirectCosts": 5780,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 616.7600000000002,
+    "realMarginPercent": 9.070000000000004,
+    "motoristaTabelado": 5127.1,
+    "bfEfetivo": 5127.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4590,
+    "realDirectCosts": 4590,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1806.7600000000002,
+    "realMarginPercent": 26.570000000000004,
+    "motoristaTabelado": 3937.1000000000004,
+    "bfEfetivo": 3937.1000000000004
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6800,
+    "realDirectCosts": 6387.5,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 9.260000000000218,
+    "realMarginPercent": 0.1361764705882385,
+    "motoristaTabelado": 6117.6,
+    "bfEfetivo": 6117.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5780,
+    "realDirectCosts": 5367.5,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1029.2600000000002,
+    "realMarginPercent": 15.13617647058824,
+    "motoristaTabelado": 5097.6,
+    "bfEfetivo": 5097.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4590,
+    "realDirectCosts": 4177.500000000001,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 2219.2599999999993,
+    "realMarginPercent": 32.636176470588225,
+    "motoristaTabelado": 3907.6000000000004,
+    "bfEfetivo": 3907.6000000000004
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6800,
+    "realDirectCosts": 6387.5,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 9.260000000000218,
+    "realMarginPercent": 0.1361764705882385,
+    "motoristaTabelado": 5647.1,
+    "bfEfetivo": 5647.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5780,
+    "realDirectCosts": 5367.5,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1029.2600000000002,
+    "realMarginPercent": 15.13617647058824,
+    "motoristaTabelado": 4627.1,
+    "bfEfetivo": 4627.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4590,
+    "realDirectCosts": 4177.500000000001,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 2219.2599999999993,
+    "realMarginPercent": 32.636176470588225,
+    "motoristaTabelado": 3437.1000000000004,
+    "bfEfetivo": 3437.1000000000004
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6800,
+    "realDirectCosts": 6475,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": -78.23999999999978,
+    "realMarginPercent": -1.1505882352941144,
+    "motoristaTabelado": 6117.6,
+    "bfEfetivo": 6117.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5780,
+    "realDirectCosts": 5455,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 941.7600000000002,
+    "realMarginPercent": 13.849411764705884,
+    "motoristaTabelado": 5097.6,
+    "bfEfetivo": 5097.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4590,
+    "realDirectCosts": 4265.000000000001,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 2131.7599999999993,
+    "realMarginPercent": 31.34941176470587,
+    "motoristaTabelado": 3907.6000000000004,
+    "bfEfetivo": 3907.6000000000004
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6800,
+    "realDirectCosts": 6475,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": -78.23999999999978,
+    "realMarginPercent": -1.1505882352941144,
+    "motoristaTabelado": 5647.1,
+    "bfEfetivo": 5647.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5780,
+    "realDirectCosts": 5455,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 941.7600000000002,
+    "realMarginPercent": 13.849411764705884,
+    "motoristaTabelado": 4627.1,
+    "bfEfetivo": 4627.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 0,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4590,
+    "realDirectCosts": 4265.000000000001,
+    "priceAfterMargin": 6800,
+    "finalFreight": 6800,
+    "icmsAmount": 0,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 2131.7599999999993,
+    "realMarginPercent": 31.34941176470587,
+    "motoristaTabelado": 3437.1000000000004,
+    "bfEfetivo": 3437.1000000000004
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6324,
+    "realDirectCosts": 6324,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -403.2399999999998,
+    "realMarginPercent": -5.929999999999997,
+    "motoristaTabelado": 6141.6,
+    "bfEfetivo": 6141.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5375.4,
+    "realDirectCosts": 5375.4,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 545.3600000000006,
+    "realMarginPercent": 8.020000000000008,
+    "motoristaTabelado": 5193,
+    "bfEfetivo": 5193
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4268.700000000001,
+    "realDirectCosts": 4268.700000000001,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1652.0599999999995,
+    "realMarginPercent": 24.29499999999999,
+    "motoristaTabelado": 4086.3000000000006,
+    "bfEfetivo": 4086.3000000000006
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6324,
+    "realDirectCosts": 6324,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -403.2399999999998,
+    "realMarginPercent": -5.929999999999997,
+    "motoristaTabelado": 5671.1,
+    "bfEfetivo": 5671.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5375.4,
+    "realDirectCosts": 5375.4,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 545.3600000000006,
+    "realMarginPercent": 8.020000000000008,
+    "motoristaTabelado": 4722.5,
+    "bfEfetivo": 4722.5
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4268.700000000001,
+    "realDirectCosts": 4268.700000000001,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1652.0599999999995,
+    "realMarginPercent": 24.29499999999999,
+    "motoristaTabelado": 3615.8000000000006,
+    "bfEfetivo": 3615.8000000000006
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6324,
+    "realDirectCosts": 5911.5,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 9.260000000000218,
+    "realMarginPercent": 0.1361764705882385,
+    "motoristaTabelado": 5641.6,
+    "bfEfetivo": 5641.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5375.4,
+    "realDirectCosts": 4962.9,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 957.8600000000006,
+    "realMarginPercent": 14.086176470588244,
+    "motoristaTabelado": 4693,
+    "bfEfetivo": 4693
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4268.700000000001,
+    "realDirectCosts": 3856.2000000000007,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 2064.5599999999995,
+    "realMarginPercent": 30.36117647058823,
+    "motoristaTabelado": 3586.3000000000006,
+    "bfEfetivo": 3586.3000000000006
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6324,
+    "realDirectCosts": 5911.5,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 9.260000000000218,
+    "realMarginPercent": 0.1361764705882385,
+    "motoristaTabelado": 5171.1,
+    "bfEfetivo": 5171.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5375.4,
+    "realDirectCosts": 4962.9,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 957.8600000000006,
+    "realMarginPercent": 14.086176470588244,
+    "motoristaTabelado": 4222.5,
+    "bfEfetivo": 4222.5
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4268.700000000001,
+    "realDirectCosts": 3856.2000000000007,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 2064.5599999999995,
+    "realMarginPercent": 30.36117647058823,
+    "motoristaTabelado": 3115.8000000000006,
+    "bfEfetivo": 3115.8000000000006
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6324,
+    "realDirectCosts": 5999,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": -78.23999999999978,
+    "realMarginPercent": -1.1505882352941144,
+    "motoristaTabelado": 5641.6,
+    "bfEfetivo": 5641.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5375.4,
+    "realDirectCosts": 5050.4,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 870.3600000000006,
+    "realMarginPercent": 12.799411764705889,
+    "motoristaTabelado": 4693,
+    "bfEfetivo": 4693
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4268.700000000001,
+    "realDirectCosts": 3943.7000000000007,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1977.0599999999995,
+    "realMarginPercent": 29.074411764705875,
+    "motoristaTabelado": 3586.3000000000006,
+    "bfEfetivo": 3586.3000000000006
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 6324,
+    "realDirectCosts": 5999,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": -78.23999999999978,
+    "realMarginPercent": -1.1505882352941144,
+    "motoristaTabelado": 5171.1,
+    "bfEfetivo": 5171.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5375.4,
+    "realDirectCosts": 5050.4,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 870.3600000000006,
+    "realMarginPercent": 12.799411764705889,
+    "motoristaTabelado": 4222.5,
+    "bfEfetivo": 4222.5
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 7,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4268.700000000001,
+    "realDirectCosts": 3943.7000000000007,
+    "priceAfterMargin": 6324,
+    "finalFreight": 6800,
+    "icmsAmount": 476.00000000000006,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1977.0599999999995,
+    "realMarginPercent": 29.074411764705875,
+    "motoristaTabelado": 3115.8000000000006,
+    "bfEfetivo": 3115.8000000000006
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5984,
+    "realDirectCosts": 5984,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -403.2399999999998,
+    "realMarginPercent": -5.929999999999997,
+    "motoristaTabelado": 5801.6,
+    "bfEfetivo": 5801.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5086.4,
+    "realDirectCosts": 5086.4,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 494.3600000000006,
+    "realMarginPercent": 7.2700000000000085,
+    "motoristaTabelado": 4904,
+    "bfEfetivo": 4904
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4039.2000000000003,
+    "realDirectCosts": 4039.2000000000003,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1541.56,
+    "realMarginPercent": 22.669999999999998,
+    "motoristaTabelado": 3856.8,
+    "bfEfetivo": 3856.8
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5984,
+    "realDirectCosts": 5984,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -403.2399999999998,
+    "realMarginPercent": -5.929999999999997,
+    "motoristaTabelado": 5331.1,
+    "bfEfetivo": 5331.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5086.4,
+    "realDirectCosts": 5086.4,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 494.3600000000006,
+    "realMarginPercent": 7.2700000000000085,
+    "motoristaTabelado": 4433.5,
+    "bfEfetivo": 4433.5
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4039.2000000000003,
+    "realDirectCosts": 4039.2000000000003,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1541.56,
+    "realMarginPercent": 22.669999999999998,
+    "motoristaTabelado": 3386.3,
+    "bfEfetivo": 3386.3
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5984,
+    "realDirectCosts": 5571.5,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 9.260000000000218,
+    "realMarginPercent": 0.1361764705882385,
+    "motoristaTabelado": 5301.6,
+    "bfEfetivo": 5301.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5086.4,
+    "realDirectCosts": 4673.9,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 906.8600000000006,
+    "realMarginPercent": 13.336176470588242,
+    "motoristaTabelado": 4404,
+    "bfEfetivo": 4404
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4039.2000000000003,
+    "realDirectCosts": 3626.7000000000003,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1954.06,
+    "realMarginPercent": 28.736176470588237,
+    "motoristaTabelado": 3356.8,
+    "bfEfetivo": 3356.8
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5984,
+    "realDirectCosts": 5571.5,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 9.260000000000218,
+    "realMarginPercent": 0.1361764705882385,
+    "motoristaTabelado": 4831.1,
+    "bfEfetivo": 4831.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5086.4,
+    "realDirectCosts": 4673.9,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 906.8600000000006,
+    "realMarginPercent": 13.336176470588242,
+    "motoristaTabelado": 3933.5,
+    "bfEfetivo": 3933.5
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4039.2000000000003,
+    "realDirectCosts": 3626.7000000000003,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1954.06,
+    "realMarginPercent": 28.736176470588237,
+    "motoristaTabelado": 2886.3,
+    "bfEfetivo": 2886.3
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5984,
+    "realDirectCosts": 5659,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": -78.23999999999978,
+    "realMarginPercent": -1.1505882352941144,
+    "motoristaTabelado": 5301.6,
+    "bfEfetivo": 5301.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5086.4,
+    "realDirectCosts": 4761.4,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 819.3600000000006,
+    "realMarginPercent": 12.04941176470589,
+    "motoristaTabelado": 4404,
+    "bfEfetivo": 4404
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4039.2000000000003,
+    "realDirectCosts": 3714.2000000000003,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1866.56,
+    "realMarginPercent": 27.449411764705882,
+    "motoristaTabelado": 3356.8,
+    "bfEfetivo": 3356.8
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5984,
+    "realDirectCosts": 5659,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": -78.23999999999978,
+    "realMarginPercent": -1.1505882352941144,
+    "motoristaTabelado": 4831.1,
+    "bfEfetivo": 4831.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5086.4,
+    "realDirectCosts": 4761.4,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 819.3600000000006,
+    "realMarginPercent": 12.04941176470589,
+    "motoristaTabelado": 3933.5,
+    "bfEfetivo": 3933.5
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 12,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4039.2000000000003,
+    "realDirectCosts": 3714.2000000000003,
+    "priceAfterMargin": 5984,
+    "finalFreight": 6800,
+    "icmsAmount": 816,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1866.56,
+    "realMarginPercent": 27.449411764705882,
+    "motoristaTabelado": 2886.3,
+    "bfEfetivo": 2886.3
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5576,
+    "realDirectCosts": 5576,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -403.2399999999998,
+    "realMarginPercent": -5.929999999999997,
+    "motoristaTabelado": 5393.6,
+    "bfEfetivo": 5393.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4739.599999999999,
+    "realDirectCosts": 4739.599999999999,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 433.16000000000076,
+    "realMarginPercent": 6.370000000000012,
+    "motoristaTabelado": 4557.2,
+    "bfEfetivo": 4557.2
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3763.8,
+    "realDirectCosts": 3763.8,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1408.96,
+    "realMarginPercent": 20.72,
+    "motoristaTabelado": 3581.4,
+    "bfEfetivo": 3581.4
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5576,
+    "realDirectCosts": 5576,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": -403.2399999999998,
+    "realMarginPercent": -5.929999999999997,
+    "motoristaTabelado": 4923.1,
+    "bfEfetivo": 4923.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4739.599999999999,
+    "realDirectCosts": 4739.599999999999,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 433.16000000000076,
+    "realMarginPercent": 6.370000000000012,
+    "motoristaTabelado": 4086.7,
+    "bfEfetivo": 4086.7
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 0,
+    "insurancePercent": 0,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3763.8,
+    "realDirectCosts": 3763.8,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 0,
+    "adValoremCost": 0,
+    "realProfitAmount": 1408.96,
+    "realMarginPercent": 20.72,
+    "motoristaTabelado": 3110.9,
+    "bfEfetivo": 3110.9
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5576,
+    "realDirectCosts": 5163.5,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 9.260000000000218,
+    "realMarginPercent": 0.1361764705882385,
+    "motoristaTabelado": 4893.6,
+    "bfEfetivo": 4893.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4739.599999999999,
+    "realDirectCosts": 4327.099999999999,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 845.6600000000008,
+    "realMarginPercent": 12.436176470588247,
+    "motoristaTabelado": 4057.2,
+    "bfEfetivo": 4057.2
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3763.8,
+    "realDirectCosts": 3351.3,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1821.46,
+    "realMarginPercent": 26.786176470588234,
+    "motoristaTabelado": 3081.4,
+    "bfEfetivo": 3081.4
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5576,
+    "realDirectCosts": 5163.5,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 9.260000000000218,
+    "realMarginPercent": 0.1361764705882385,
+    "motoristaTabelado": 4423.1,
+    "bfEfetivo": 4423.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4739.6,
+    "realDirectCosts": 4327.1,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 845.6599999999999,
+    "realMarginPercent": 12.436176470588233,
+    "motoristaTabelado": 3586.7,
+    "bfEfetivo": 3586.7
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 250000,
+    "insurancePercent": 0.2,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3763.8,
+    "realDirectCosts": 3351.3,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 87.50000000000001,
+    "realProfitAmount": 1821.46,
+    "realMarginPercent": 26.786176470588234,
+    "motoristaTabelado": 2610.9,
+    "bfEfetivo": 2610.9
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5576,
+    "realDirectCosts": 5251,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": -78.23999999999978,
+    "realMarginPercent": -1.1505882352941144,
+    "motoristaTabelado": 4893.6,
+    "bfEfetivo": 4893.6
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4739.599999999999,
+    "realDirectCosts": 4414.599999999999,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 758.1600000000008,
+    "realMarginPercent": 11.149411764705894,
+    "motoristaTabelado": 4057.2,
+    "bfEfetivo": 4057.2
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 0,
+    "otherCosts": [],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3763.8,
+    "realDirectCosts": 3438.8,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1733.96,
+    "realMarginPercent": 25.499411764705883,
+    "motoristaTabelado": 3081.4,
+    "bfEfetivo": 3081.4
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 0,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 5576,
+    "realDirectCosts": 5251,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": -78.23999999999978,
+    "realMarginPercent": -1.1505882352941144,
+    "motoristaTabelado": 4423.1,
+    "bfEfetivo": 4423.1
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 15,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 4739.6,
+    "realDirectCosts": 4414.6,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 758.1599999999999,
+    "realMarginPercent": 11.14941176470588,
+    "motoristaTabelado": 3586.7,
+    "bfEfetivo": 3586.7
+   }
+  },
+  {
+   "entrada": {
+    "baseFreight": 3120.55,
+    "tolls": 182.4,
+    "extraCosts": 120.5,
+    "otherCosts": [
+     {
+      "id": "1",
+      "description": "Escolta",
+      "value": 350
+     }
+    ],
+    "goodsValue": 500000,
+    "insurancePercent": 0.1,
+    "profitMargin": 32.5,
+    "icmsPercent": 18,
+    "fedTaxes": {
+     "pis": 0.65,
+     "cofins": 3,
+     "csll": 1.08,
+     "irpj": 1.2,
+     "insurancePolicyRate": 0.035
+    },
+    "modoTabelado": true,
+    "valorFinalTabelado": 6800
+   },
+   "saida": {
+    "directCosts": 3763.8,
+    "realDirectCosts": 3438.8,
+    "priceAfterMargin": 5576,
+    "finalFreight": 6800,
+    "icmsAmount": 1224,
+    "fedTaxesAmount": 403.24,
+    "adValoremSelling": 500,
+    "adValoremCost": 175.00000000000003,
+    "realProfitAmount": 1733.96,
+    "realMarginPercent": 25.499411764705883,
+    "motoristaTabelado": 2610.9,
+    "bfEfetivo": 2610.9
+   }
+  }
+ ],
+ "bid": {
+  "params": {
+   "profitMargin": 15,
+   "fedTaxes": {
+    "pis": 0.65,
+    "cofins": 3,
+    "csll": 1.08,
+    "irpj": 1.2,
+    "insurancePolicyRate": 0.035
+   },
+   "icmsRates": {},
+   "cargoType": "Carga geral",
+   "veiculoPadrao": "Carreta",
+   "veiculosCadastro": [
+    "Carreta",
+    "Truck"
+   ],
+   "deParaVeiculo": {},
+   "eixosPorVeiculo": {
+    "Carreta": 6,
+    "Truck": 3
+   },
+   "modoPorVeiculo": {
+    "Carreta": "ANTT",
+    "Truck": "ANTT"
+   },
+   "jurosMensal": 1.5,
+   "prazoDias": 45,
+   "comissaoPercent": "",
+   "comissaoPadrao": 1
+  },
+  "linhas": [
+   {
+    "margem": 0,
+    "bruta": {
+     "linhaExcel": 2,
+     "origem": "São Paulo, SP",
+     "destino": "Rio de Janeiro, RJ",
+     "veiculoPlanilha": "Carreta"
+    },
+    "rota": {
+     "km": 430.5,
+     "pedagioCheio": 182.4,
+     "pisoAntt": 3120.55
+    },
+    "saida": {
+     "km": 430.5,
+     "pedagio": 182.4,
+     "pisoAntt": 3120.55,
+     "custoBase": 3302.9500000000003,
+     "icmsPercent": 12,
+     "icmsRS": 450.40227272727276,
+     "federaisRS": 222.5737897727273,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 3753.352272727273,
+     "margemBrutaRS": -222.5737897727272,
+     "margemBrutaPercent": -5.929999999999998,
+     "custoAntecipacao": 70.212375,
+     "custoComissao": 37.53352272727273,
+     "margemLiquidaRS": -330.31968749999993,
+     "margemLiquidaPercent": -8.800657745348852,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 0,
+    "bruta": {
+     "linhaExcel": 3,
+     "origem": "Campinas, SP",
+     "destino": "Belo Horizonte, MG",
+     "veiculoPlanilha": "Truck"
+    },
+    "rota": {
+     "km": 587.2,
+     "pedagioCheio": 240.1,
+     "pisoAntt": 4015.9
+    },
+    "saida": {
+     "km": 587.2,
+     "pedagio": 240.1,
+     "pisoAntt": 4015.9,
+     "custoBase": 4256,
+     "icmsPercent": 12,
+     "icmsRS": 580.3636363636363,
+     "federaisRS": 286.79636363636365,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 4836.363636363636,
+     "margemBrutaRS": -286.7963636363638,
+     "margemBrutaPercent": -5.930000000000004,
+     "custoAntecipacao": 90.35775,
+     "custoComissao": 48.36363636363636,
+     "margemLiquidaRS": -425.5177500000002,
+     "margemLiquidaPercent": -8.798299342105267,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 0,
+    "bruta": {
+     "linhaExcel": 4,
+     "origem": "São Paulo, SP",
+     "destino": "Salvador, BA",
+     "veiculoPlanilha": ""
+    },
+    "rota": {
+     "km": 1962.3,
+     "pedagioCheio": 310.75,
+     "pisoAntt": 9840.2
+    },
+    "saida": {
+     "km": 1962.3,
+     "pedagio": 310.75,
+     "pisoAntt": 9840.2,
+     "custoBase": 10150.95,
+     "icmsPercent": 7,
+     "icmsRS": 764.0500000000002,
+     "federaisRS": 647.2595000000001,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 10915.000000000002,
+     "margemBrutaRS": -647.2595000000001,
+     "margemBrutaPercent": -5.93,
+     "custoAntecipacao": 221.4045,
+     "custoComissao": 109.15000000000002,
+     "margemLiquidaRS": -977.8140000000001,
+     "margemLiquidaPercent": -8.958442510306917,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 0,
+    "bruta": {
+     "linhaExcel": 5,
+     "origem": "Recife, PE",
+     "destino": "Recife Antigo, PE",
+     "veiculoPlanilha": "Carreta"
+    },
+    "rota": {
+     "km": 12,
+     "pedagioCheio": 0,
+     "pisoAntt": 600
+    },
+    "saida": {
+     "km": 12,
+     "pedagio": 0,
+     "pisoAntt": 600,
+     "custoBase": 600,
+     "icmsPercent": 0,
+     "icmsRS": 0,
+     "federaisRS": 35.580000000000005,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 600,
+     "margemBrutaRS": -35.58000000000004,
+     "margemBrutaPercent": -5.930000000000007,
+     "custoAntecipacao": 13.5,
+     "custoComissao": 6,
+     "margemLiquidaRS": -55.08000000000004,
+     "margemLiquidaPercent": -9.180000000000007,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 15,
+    "bruta": {
+     "linhaExcel": 2,
+     "origem": "São Paulo, SP",
+     "destino": "Rio de Janeiro, RJ",
+     "veiculoPlanilha": "Carreta"
+    },
+    "rota": {
+     "km": 430.5,
+     "pedagioCheio": 182.4,
+     "pisoAntt": 3120.55
+    },
+    "saida": {
+     "km": 430.5,
+     "pedagio": 182.4,
+     "pisoAntt": 3120.55,
+     "custoBase": 3302.9500000000003,
+     "icmsPercent": 12,
+     "icmsRS": 529.885026737968,
+     "federaisRS": 261.8515173796792,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 4415.708556149733,
+     "margemBrutaRS": 321.02201203208597,
+     "margemBrutaPercent": 7.2700000000000085,
+     "custoAntecipacao": 70.212375,
+     "custoComissao": 44.15708556149733,
+     "margemLiquidaRS": 206.65255147058863,
+     "margemLiquidaPercent": 4.679940916453481,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 15,
+    "bruta": {
+     "linhaExcel": 3,
+     "origem": "Campinas, SP",
+     "destino": "Belo Horizonte, MG",
+     "veiculoPlanilha": "Truck"
+    },
+    "rota": {
+     "km": 587.2,
+     "pedagioCheio": 240.1,
+     "pisoAntt": 4015.9
+    },
+    "saida": {
+     "km": 587.2,
+     "pedagio": 240.1,
+     "pisoAntt": 4015.9,
+     "custoBase": 4256,
+     "icmsPercent": 12,
+     "icmsRS": 682.7807486631016,
+     "federaisRS": 337.40748663101607,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 5689.8395721925135,
+     "margemBrutaRS": 413.65133689839604,
+     "margemBrutaPercent": 7.270000000000006,
+     "custoAntecipacao": 90.35775,
+     "custoComissao": 56.898395721925134,
+     "margemLiquidaRS": 266.3951911764709,
+     "margemLiquidaPercent": 4.681945559210532,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 15,
+    "bruta": {
+     "linhaExcel": 4,
+     "origem": "São Paulo, SP",
+     "destino": "Salvador, BA",
+     "veiculoPlanilha": ""
+    },
+    "rota": {
+     "km": 1962.3,
+     "pedagioCheio": 310.75,
+     "pisoAntt": 9840.2
+    },
+    "saida": {
+     "km": 1962.3,
+     "pedagio": 310.75,
+     "pisoAntt": 9840.2,
+     "custoBase": 10150.95,
+     "icmsPercent": 7,
+     "icmsRS": 898.8823529411766,
+     "federaisRS": 761.4817647058825,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 12841.176470588236,
+     "margemBrutaRS": 1029.8623529411761,
+     "margemBrutaPercent": 8.019999999999996,
+     "custoAntecipacao": 221.4045,
+     "custoComissao": 128.41176470588238,
+     "margemLiquidaRS": 680.0460882352938,
+     "margemLiquidaPercent": 5.295823866239118,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 15,
+    "bruta": {
+     "linhaExcel": 5,
+     "origem": "Recife, PE",
+     "destino": "Recife Antigo, PE",
+     "veiculoPlanilha": "Carreta"
+    },
+    "rota": {
+     "km": 12,
+     "pedagioCheio": 0,
+     "pisoAntt": 600
+    },
+    "saida": {
+     "km": 12,
+     "pedagio": 0,
+     "pisoAntt": 600,
+     "custoBase": 600,
+     "icmsPercent": 0,
+     "icmsRS": 0,
+     "federaisRS": 41.858823529411765,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 705.8823529411765,
+     "margemBrutaRS": 64.02352941176468,
+     "margemBrutaPercent": 9.069999999999997,
+     "custoAntecipacao": 13.5,
+     "custoComissao": 7.0588235294117645,
+     "margemLiquidaRS": 43.464705882352916,
+     "margemLiquidaPercent": 6.157499999999996,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 25,
+    "bruta": {
+     "linhaExcel": 2,
+     "origem": "São Paulo, SP",
+     "destino": "Rio de Janeiro, RJ",
+     "veiculoPlanilha": "Carreta"
+    },
+    "rota": {
+     "km": 430.5,
+     "pedagioCheio": 182.4,
+     "pisoAntt": 3120.55
+    },
+    "saida": {
+     "km": 430.5,
+     "pedagio": 182.4,
+     "pisoAntt": 3120.55,
+     "custoBase": 3302.9500000000003,
+     "icmsPercent": 12,
+     "icmsRS": 600.5363636363636,
+     "federaisRS": 296.7650530303031,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 5004.469696969697,
+     "margemBrutaRS": 804.2182803030305,
+     "margemBrutaPercent": 16.070000000000004,
+     "custoAntecipacao": 70.212375,
+     "custoComissao": 50.04469696969697,
+     "margemLiquidaRS": 683.9612083333336,
+     "margemLiquidaPercent": 13.667006690988364,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 25,
+    "bruta": {
+     "linhaExcel": 3,
+     "origem": "Campinas, SP",
+     "destino": "Belo Horizonte, MG",
+     "veiculoPlanilha": "Truck"
+    },
+    "rota": {
+     "km": 587.2,
+     "pedagioCheio": 240.1,
+     "pisoAntt": 4015.9
+    },
+    "saida": {
+     "km": 587.2,
+     "pedagio": 240.1,
+     "pisoAntt": 4015.9,
+     "custoBase": 4256,
+     "icmsPercent": 12,
+     "icmsRS": 773.8181818181819,
+     "federaisRS": 382.39515151515155,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 6448.484848484849,
+     "margemBrutaRS": 1036.2715151515158,
+     "margemBrutaPercent": 16.07000000000001,
+     "custoAntecipacao": 90.35775,
+     "custoComissao": 64.48484848484848,
+     "margemLiquidaRS": 881.4289166666673,
+     "margemLiquidaPercent": 13.668775493421062,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 25,
+    "bruta": {
+     "linhaExcel": 4,
+     "origem": "São Paulo, SP",
+     "destino": "Salvador, BA",
+     "veiculoPlanilha": ""
+    },
+    "rota": {
+     "km": 1962.3,
+     "pedagioCheio": 310.75,
+     "pisoAntt": 9840.2
+    },
+    "saida": {
+     "km": 1962.3,
+     "pedagio": 310.75,
+     "pisoAntt": 9840.2,
+     "custoBase": 10150.95,
+     "icmsPercent": 7,
+     "icmsRS": 1018.7333333333335,
+     "federaisRS": 863.0126666666667,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 14553.333333333334,
+     "margemBrutaRS": 2520.637333333332,
+     "margemBrutaPercent": 17.31999999999999,
+     "custoAntecipacao": 221.4045,
+     "custoComissao": 145.53333333333333,
+     "margemLiquidaRS": 2153.699499999999,
+     "margemLiquidaPercent": 14.798668117269804,
+     "status": "ok"
+    }
+   },
+   {
+    "margem": 25,
+    "bruta": {
+     "linhaExcel": 5,
+     "origem": "Recife, PE",
+     "destino": "Recife Antigo, PE",
+     "veiculoPlanilha": "Carreta"
+    },
+    "rota": {
+     "km": 12,
+     "pedagioCheio": 0,
+     "pisoAntt": 600
+    },
+    "saida": {
+     "km": 12,
+     "pedagio": 0,
+     "pisoAntt": 600,
+     "custoBase": 600,
+     "icmsPercent": 0,
+     "icmsRS": 0,
+     "federaisRS": 47.440000000000005,
+     "taxaAntecipacao": 2.25,
+     "precoSugerido": 800,
+     "margemBrutaRS": 152.55999999999995,
+     "margemBrutaPercent": 19.069999999999993,
+     "custoAntecipacao": 13.5,
+     "custoComissao": 8,
+     "margemLiquidaRS": 131.05999999999995,
+     "margemLiquidaPercent": 16.382499999999993,
+     "status": "ok"
+    }
+   }
+  ]
+ }
+}

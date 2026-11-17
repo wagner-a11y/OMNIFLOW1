@@ -7,7 +7,8 @@
         "dev": "vite",
         "build": "tsc && vite build",
         "preview": "vite preview",
-        "tipos": "tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters"
+        "tipos": "tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters",
+        "test": "node scripts/testing/rodarTestes.mjs"
     },
     "dependencies": {
         "@supabase/supabase-js": "^2.91.1",

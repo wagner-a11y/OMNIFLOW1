@@ -12,6 +12,12 @@
  * testar dedup, concorrência e tratamento de falha SEM gastar cota paga.
  *
  * Fase 1 não persiste nada: vive na tela e sai em Excel.
+ *
+ * AJUSTES DE CUSTO (ICMS opcional, adicional sobre o piso, seguro, abertura):
+ * tudo entra por parâmetros que o motor JÁ recebe — `icmsPercent`,
+ * `baseFreight`, `goodsValue`, `insurancePercent`. O motor não muda. Os
+ * parâmetros novos do bid são opcionais e o default de cada um é o
+ * comportamento anterior: ICMS incluso, adicional 0, sem seguro.
  */
 
 import { calcularPreco, type ParametrosTributarios } from './motorPreco';
@@ -31,6 +37,33 @@ export const COLUNAS_BID: Record<string, string[]> = {
     origem: ['Origem', 'Cidade Origem', 'Cidade de Origem', 'Municipio Origem', 'Município Origem'],
     destino: ['Destino', 'Cidade Destino', 'Cidade de Destino', 'Municipio Destino', 'Município Destino'],
     veiculo: ['Veiculo', 'Veículo', 'Tipo Veiculo', 'Tipo de Veículo', 'Tipo de Veiculo', 'Equipamento'],
+};
+
+/**
+ * Colunas que o bid LÊ quando existem, mas cuja falta não é problema: não
+ * entram no `COLUNAS_BID` porque lá toda coluna ausente vira aviso amarelo de
+ * "coluna não encontrada", e planilha sem valor de NF é o caso comum.
+ */
+export const COLUNAS_BID_OPCIONAIS: Record<string, string[]> = {
+    valorMercadoria: [
+        'Valor Mercadoria', 'Valor da Mercadoria', 'Valor de Mercadoria', 'Valor NF', 'Valor da NF',
+        'Valor Nota', 'Valor Nota Fiscal', 'Valor da Nota Fiscal', 'Valor Carga', 'Valor da Carga',
+    ],
+    tabelaCompra: ['Tabela de Compra', 'Tabela Compra', 'Valor Compra', 'Valor de Compra', 'Frete Compra'],
+};
+
+/**
+ * Número de célula de planilha: aceita número nativo e texto em formato
+ * brasileiro ("R$ 1.234,56"). Vazio ou ilegível = null, nunca zero — zero de
+ * valor de mercadoria zeraria o seguro sem ninguém ver.
+ */
+export const lerNumeroPlanilha = (v: unknown): number | null => {
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    let t = String(v ?? '').replace(/R\$/gi, '').replace(/\s/g, '');
+    if (!t) return null;
+    if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(t);
+    return Number.isFinite(n) ? n : null;
 };
 
 /**
@@ -140,6 +173,10 @@ export interface LinhaBidBruta {
     destino: string;
     /** Exatamente o que veio na coluna. '' = célula vazia. */
     veiculoPlanilha: string;
+    /** Valor da mercadoria / NF, quando a planilha tem a coluna. null = célula vazia. */
+    valorMercadoria?: number | null;
+    /** Tabela de compra própria da linha (R$), quando a planilha tem a coluna. */
+    tabelaCompra?: number | null;
 }
 
 export interface LinhaBid extends LinhaBidBruta {
@@ -191,7 +228,7 @@ export interface LinhaBid extends LinhaBidBruta {
     km: number | null;
     pedagio: number | null;
     pisoAntt: number | null;
-    /** Base de custo da Fase 1: piso ANTT + pedágio cheio. */
+    /** Custo direto: custo motorista + pedágio. Sem adicional, = piso ANTT + pedágio. */
     custoBase: number | null;
     icmsPercent: number | null;
     icmsRS: number | null;
@@ -205,7 +242,50 @@ export interface LinhaBid extends LinhaBidBruta {
     custoComissao: number | null;
     margemLiquidaRS: number | null;
     margemLiquidaPercent: number | null;
+
+    // ---- Abertura de custos ----
+    /** Adicional sobre o piso aplicado (%): o próprio da linha ou o padrão da rodada. */
+    adicionalPisoPct: number | null;
+    /** true = a linha tem adicional próprio, não segue o padrão da rodada. */
+    adicionalProprio: boolean;
+    /** Piso × adicional% (R$). Não incide sobre pedágio. */
+    adicionalPisoRS: number | null;
+    /** O que se paga ao terceiro: piso com adicional, ou a tabela de compra se maior. */
+    custoMotorista: number | null;
+    /** Valor de mercadoria usado no seguro: o da linha ou o padrão da rodada. */
+    valorMercadoriaEfetivo: number | null;
+    /** Ad valorem cobrado (%). 0 enquanto não definido ou sem valor de NF. */
+    seguroPct: number | null;
+    /** Ad valorem COBRADO do cliente (R$) — entra no preço, regra da calculadora. */
+    seguroRS: number | null;
+    /** Taxa de custo do seguro aplicada (%): apólice no ad valorem, taxa DDR no DDR. */
+    seguroCustoPct: number | null;
+    /** Custo real do seguro (R$): valor da NF × taxa de custo. */
+    seguroCustoRS: number | null;
+    comissaoPct: number | null;
+    federaisPct: number | null;
+    /** Motor rodado com ICMS zerado na formação do preço. */
+    freteSemIcms: number | null;
+    /** Motor rodado com a alíquota da rota. */
+    freteComIcms: number | null;
+    /** Frete com ICMS se a rodada é com ICMS incluso; senão, frete sem ICMS. */
+    precoOfertado: number | null;
+    /** ICMS que está DENTRO do preço ofertado (0 quando o ICMS vai por fora). */
+    icmsNoPrecoRS: number | null;
+    /** Frete sem ICMS / custo direto (formato 1,20). */
+    markup: number | null;
 }
+
+/**
+ * Os dois modos de seguro do bid. Muda só o CUSTO (o que a Omnicargo paga):
+ *   ad_valorem -> taxa da apólice das Configurações (a da calculadora)
+ *   ddr        -> taxa DDR do bid, sobre o valor da NF
+ * O % COBRADO do cliente é campo à parte, editável nos dois modos.
+ */
+export type SeguroModo = 'ddr' | 'ad_valorem';
+
+/** Custo do seguro em DDR: 0,004% do valor da NF (NF de 500.000 -> R$ 20,00). */
+export const TAXA_CUSTO_DDR_PADRAO = 0.004;
 
 export interface ParametrosBid {
     /** Margem pretendida (%) aplicada a todas as linhas. */
@@ -233,7 +313,75 @@ export interface ParametrosBid {
     /** Comissão (%) como string; '' = cai no padrão das Configurações. */
     comissaoPercent: string;
     comissaoPadrao?: number;
+    // ---- Ajustes de custo. Todos opcionais; o default é o comportamento anterior ----
+    /** false = preço ofertado SEM ICMS (ICMS por fora). Default true. */
+    icmsIncluso?: boolean;
+    /** Adicional sobre o piso ANTT (%) das linhas sem valor próprio. Default 0. */
+    adicionalPisoPadraoPct?: number;
+    /** Adicional próprio por linha: linhaExcel -> %. Ausente = segue o padrão. */
+    adicionalPorLinha?: Record<number, number>;
+    /** Ausente = sem seguro nenhum, que é como o bid calculava antes. */
+    seguroModo?: SeguroModo;
+    /** Ad valorem COBRADO do cliente (%), nos dois modos. null = não definido. */
+    seguroPct?: number | null;
+    /** Taxa de custo do seguro em DDR (%). Default TAXA_CUSTO_DDR_PADRAO. */
+    taxaCustoDdrPct?: number;
+    /** Valor de mercadoria das linhas que não trazem o seu. */
+    valorMercadoriaPadrao?: number | null;
+    /** Valor de mercadoria editado na tela: linhaExcel -> R$. Vence o da planilha. */
+    valorMercadoriaPorLinha?: Record<number, number>;
 }
+
+/** Acima disto o adicional gera aviso amarelo (não bloqueia). */
+export const ADICIONAL_PISO_AVISO_PCT = 50;
+
+export interface ValidacaoAdicional {
+    ok: boolean;
+    erro: string | null;
+    aviso: string | null;
+}
+
+/**
+ * Valida um adicional sobre o piso. Negativo é BLOQUEADO: o custo motorista
+ * nunca fica abaixo do piso ANTT. Acima de 50% é só aviso.
+ */
+export const validarAdicionalPiso = (v: number): ValidacaoAdicional => {
+    if (!Number.isFinite(v)) return { ok: false, erro: 'Adicional inválido', aviso: null };
+    if (v < 0) return { ok: false, erro: 'Adicional negativo é bloqueado: o custo motorista nunca fica abaixo do piso ANTT', aviso: null };
+    if (v > ADICIONAL_PISO_AVISO_PCT) return { ok: true, erro: null, aviso: `Adicional acima de ${ADICIONAL_PISO_AVISO_PCT}% — confira` };
+    return { ok: true, erro: null, aviso: null };
+};
+
+/**
+ * Grava o adicional próprio em várias linhas de uma vez ("aplicar às
+ * selecionadas", ou a edição de uma célula). `valor` null devolve as linhas ao
+ * padrão da rodada. Valor inválido não altera nada e devolve o erro.
+ */
+export const aplicarAdicionalLinhas = (
+    atual: Record<number, number>,
+    linhasExcel: number[],
+    valor: number | null,
+): { mapa: Record<number, number>; erro: string | null } => {
+    if (valor != null) {
+        const v = validarAdicionalPiso(valor);
+        if (!v.ok) return { mapa: atual, erro: v.erro };
+    }
+    const mapa = { ...atual };
+    for (const n of linhasExcel) {
+        if (valor == null) delete mapa[n];
+        else mapa[n] = valor;
+    }
+    return { mapa, erro: null };
+};
+
+/**
+ * O adicional só vale para veículo de tabela ANTT. Veículo sem modo no
+ * cadastro segue a mesma regra do preparo, que só barra modo DIFERENTE de ANTT.
+ */
+export const adicionalEditavel = (l: LinhaBid, p: ParametrosBid): boolean => {
+    const modo = l.veiculo ? p.modoPorVeiculo[l.veiculo] : undefined;
+    return l.status === 'ok' && l.pisoAntt != null && (!modo || modo === 'ANTT');
+};
 
 /**
  * Chave de dedup: a MESMA combinação que a Edge Function recebe. Rota repetida
@@ -276,8 +424,20 @@ export const montarLinhasBid = (
             origem: ler('origem'),
             destino: ler('destino'),
             veiculoPlanilha: ler('veiculo'),
+            // Só aparecem quando a planilha tem a coluna: sem ela a linha fica
+            // exatamente como era.
+            ...(mapa.valorMercadoria ? { valorMercadoria: lerNumeroPlanilha(l[mapa.valorMercadoria]) } : {}),
+            ...(mapa.tabelaCompra ? { tabelaCompra: lerNumeroPlanilha(l[mapa.tabelaCompra]) } : {}),
         };
     });
+
+/** Abertura de custos de uma linha que não fechou preço. */
+const ABERTURA_VAZIA = {
+    adicionalPisoPct: null, adicionalProprio: false, adicionalPisoRS: null, custoMotorista: null,
+    valorMercadoriaEfetivo: null, seguroPct: null, seguroRS: null, seguroCustoPct: null, seguroCustoRS: null,
+    comissaoPct: null, federaisPct: null, freteSemIcms: null, freteComIcms: null,
+    precoOfertado: null, icmsNoPrecoRS: null, markup: null,
+} as const;
 
 /**
  * Resolve veículo, eixos e as pendências de PLANILHA de uma linha — tudo o que
@@ -339,6 +499,7 @@ export const prepararLinha = (bruta: LinhaBidBruta, p: ParametrosBid): LinhaBid 
         precoSugerido: null, margemBrutaRS: null, margemBrutaPercent: null,
         custoAntecipacao: null, custoComissao: null,
         margemLiquidaRS: null, margemLiquidaPercent: null,
+        ...ABERTURA_VAZIA,
     };
 };
 
@@ -405,6 +566,8 @@ export interface RotaDoLote {
     km: number;
     pedagioCheio: number;
     pisoAntt: number | null;
+    /** Quando o Qualp respondeu esta rota (ISO). Vai para o cabeçalho do Excel. */
+    consultadoEm?: string;
 }
 
 /**
@@ -436,29 +599,61 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
             pisoAntt: null, custoBase: null, icmsPercent: null, icmsRS: null, federaisRS: null,
             taxaAntecipacao: null, precoSugerido: null, margemBrutaRS: null, margemBrutaPercent: null,
             custoAntecipacao: null, custoComissao: null, margemLiquidaRS: null, margemLiquidaPercent: null,
+            ...ABERTURA_VAZIA,
         };
     }
 
-    // Base de custo da Fase 1: piso ANTT (o que se paga ao terceiro) + pedágio.
-    const custoBase = rota.pisoAntt + rota.pedagioCheio;
+    // ADICIONAL SOBRE O PISO: incide só no piso, nunca no pedágio. Negativo
+    // não passa (o setter já barra; o Math.max é a segunda trava). Com
+    // adicional 0, piso × 1 é o próprio piso — bit a bit o número de antes.
+    const adicionalLinha = p.adicionalPorLinha?.[linha.linhaExcel];
+    const adicionalProprio = adicionalLinha != null;
+    const adicionalPisoPct = Math.max(0, adicionalLinha ?? p.adicionalPisoPadraoPct ?? 0);
+    const pisoComAdicional = rota.pisoAntt * (1 + adicionalPisoPct / 100);
+    // Tabela de compra própria da linha: paga-se o MAIOR dos dois.
+    const tabelaCompra = linha.tabelaCompra ?? null;
+    const custoMotorista = tabelaCompra != null ? Math.max(pisoComAdicional, tabelaCompra) : pisoComAdicional;
+
+    // Custo direto: custo motorista + pedágio.
+    const custoBase = custoMotorista + rota.pedagioCheio;
 
     // ICMS pela UF da rota, com os overrides do master. Sem UF reconhecida o
     // getIcmsRate cai no seu próprio padrão (12%) — mesma regra da calculadora.
     const icmsPercent = getIcmsRate(linha.ufOrigem, linha.ufDestino, p.icmsRates || {}, false);
 
-    const preco = calcularPreco({
-        baseFreight: rota.pisoAntt,     // o que se paga ao terceiro
+    // SEGURO: a regra é a do motor — goodsValue × insurancePercent no preço,
+    // goodsValue × fedTaxes.insurancePolicyRate no custo. O modo só troca a
+    // taxa de CUSTO que entra nesse mesmo parâmetro: a da apólice no ad
+    // valorem, a taxa DDR no DDR. Sem modo (rodada de antes) ou sem valor de
+    // NF, goodsValue 0 — exatamente o que o bid fazia antes.
+    const seguroModo = p.seguroModo;
+    const valorMercadoriaEfetivo = p.valorMercadoriaPorLinha?.[linha.linhaExcel]
+        ?? linha.valorMercadoria ?? p.valorMercadoriaPadrao ?? null;
+    const comSeguro = seguroModo != null && valorMercadoriaEfetivo != null;
+    const seguroPct = comSeguro ? Math.max(0, p.seguroPct ?? 0) : 0;
+    const seguroCustoPct = seguroModo === 'ddr'
+        ? (p.taxaCustoDdrPct ?? TAXA_CUSTO_DDR_PADRAO)
+        : p.fedTaxes.insurancePolicyRate;
+
+    const entrada = {
+        baseFreight: custoMotorista,    // o que se paga ao terceiro
         tolls: rota.pedagioCheio,
         extraCosts: 0,
         otherCosts: [],
-        goodsValue: 0,                  // a planilha do bid não traz valor de carga
-        insurancePercent: 0,
+        goodsValue: comSeguro ? valorMercadoriaEfetivo : 0,
+        insurancePercent: seguroPct,
         profitMargin: p.profitMargin,
-        icmsPercent,
-        fedTaxes: p.fedTaxes,
+        fedTaxes: seguroModo === 'ddr' ? { ...p.fedTaxes, insurancePolicyRate: seguroCustoPct } : p.fedTaxes,
         modoTabelado: false,
         valorFinalTabelado: 0,
-    });
+    };
+    // O motor roda DUAS vezes: com a alíquota da rota e com ICMS zerado na
+    // formação do preço. A rodada escolhe qual é o preço ofertado; a margem e
+    // todos os custos seguem a mesma escolha.
+    const comIcms = calcularPreco({ ...entrada, icmsPercent });
+    const semIcms = calcularPreco({ ...entrada, icmsPercent: 0 });
+    const icmsIncluso = p.icmsIncluso ?? true;
+    const preco = icmsIncluso ? comIcms : semIcms;
 
     // Antecipação do bid: juros ao mês × prazo/30, sobre o valor PAGO ao
     // terceiro. A comissão segue sobre a receita.
@@ -475,6 +670,12 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
 
     // Compliance: preço abaixo do piso ANTT nunca pode sair.
     const alertas: string[] = [];
+    if (seguroModo != null && valorMercadoriaEfetivo == null) {
+        alertas.push('Seguro sem valor de NF: custo e cobrança de seguro zerados nesta linha');
+    }
+    if (adicionalPisoPct > ADICIONAL_PISO_AVISO_PCT) {
+        alertas.push(`Adicional sobre o piso de ${adicionalPisoPct}% (acima de ${ADICIONAL_PISO_AVISO_PCT}%)`);
+    }
     if (preco.finalFreight < rota.pisoAntt) {
         alertas.push(`Preço sugerido (R$ ${preco.finalFreight.toFixed(2)}) ABAIXO do piso ANTT (R$ ${rota.pisoAntt.toFixed(2)})`);
     }
@@ -489,7 +690,9 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
         pisoAntt: rota.pisoAntt,
         custoBase,
         icmsPercent,
-        icmsRS: preco.icmsAmount,
+        // Alíquota e ICMS ficam sempre visíveis, mesmo com o ICMS por fora:
+        // é o valor que o embarcador vai ter de recolher.
+        icmsRS: comIcms.icmsAmount,
         federaisRS: preco.fedTaxesAmount,
         taxaAntecipacao,
         precoSugerido: preco.finalFreight,
@@ -499,6 +702,22 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
         custoComissao: ocultos.custoComissao,
         margemLiquidaRS: ocultos.lucroLiquido,
         margemLiquidaPercent: ocultos.margemLiquidaPercent,
+        adicionalPisoPct,
+        adicionalProprio,
+        adicionalPisoRS: pisoComAdicional - rota.pisoAntt,
+        custoMotorista,
+        valorMercadoriaEfetivo,
+        seguroPct,
+        seguroRS: preco.adValoremSelling,
+        seguroCustoPct: comSeguro ? seguroCustoPct : 0,
+        seguroCustoRS: preco.adValoremCost,
+        comissaoPct: ocultos.comissaoPercent,
+        federaisPct: p.fedTaxes.pis + p.fedTaxes.cofins + p.fedTaxes.csll + p.fedTaxes.irpj,
+        freteSemIcms: semIcms.finalFreight,
+        freteComIcms: comIcms.finalFreight,
+        precoOfertado: preco.finalFreight,
+        icmsNoPrecoRS: preco.icmsAmount,
+        markup: custoBase > 0 ? semIcms.finalFreight / custoBase : null,
     };
 };
 
@@ -746,34 +965,168 @@ export const rotuloStatus = (l: LinhaBid): string => {
     return 'Pendência';
 };
 
-/** Linhas prontas para o `XLSX.utils.json_to_sheet`. */
+// ---------------------------------------------------------------------------
+// Abertura de custos: UMA definição de colunas para a tela e para o Excel
+// ---------------------------------------------------------------------------
+
+export type FormatoColuna = 'texto' | 'brl' | 'pct' | 'km' | 'inteiro' | 'markup';
+
+export interface ColunaAbertura {
+    id: string;
+    titulo: string;
+    formato: FormatoColuna;
+    /** Item 1–16 da abertura de custos. */
+    grupo: number;
+    /** Visível sem "Abrir custos". O Excel sai sempre com todas. */
+    sempreVisivel: boolean;
+    /** Entra somada na linha de totais (colunas em R$). */
+    soma: boolean;
+    valor: (l: LinhaBid) => number | string | null;
+}
+
+const col = (
+    grupo: number, id: string, titulo: string, formato: FormatoColuna,
+    valor: (l: LinhaBid) => number | string | null,
+    sempreVisivel = false,
+): ColunaAbertura => ({ id, titulo, formato, grupo, sempreVisivel, soma: formato === 'brl', valor });
+
+/**
+ * A ordem é a da abertura de custos (1 a 16). Sempre visíveis: rota (1), custo
+ * motorista (4), pedágio (5), o bloco de ICMS e fretes (11, 13, 14), markup
+ * (12), preço ofertado (15) e margem líquida (16).
+ */
+export const COLUNAS_ABERTURA: ColunaAbertura[] = [
+    col(1, 'origem', 'Origem', 'texto', l => l.origem, true),
+    col(1, 'ufOrigem', 'UF origem', 'texto', l => l.ufOrigem, true),
+    col(1, 'destino', 'Destino', 'texto', l => l.destino, true),
+    col(1, 'ufDestino', 'UF destino', 'texto', l => l.ufDestino, true),
+    col(1, 'km', 'Km', 'km', l => l.km, true),
+    col(1, 'veiculo', 'Veículo', 'texto', l => l.veiculo, true),
+    col(1, 'eixos', 'Eixos', 'inteiro', l => l.eixos, true),
+    col(2, 'pisoAntt', 'Piso ANTT R$', 'brl', l => l.pisoAntt),
+    col(3, 'adicionalPisoPct', 'Adicional piso %', 'pct', l => l.adicionalPisoPct),
+    col(3, 'adicionalPisoRS', 'Adicional piso R$', 'brl', l => l.adicionalPisoRS),
+    col(4, 'custoMotorista', 'Custo motorista R$', 'brl', l => l.custoMotorista, true),
+    col(5, 'pedagio', 'Pedágio R$', 'brl', l => l.pedagio, true),
+    col(6, 'custoDireto', 'Custo direto R$', 'brl', l => l.custoBase),
+    col(7, 'valorMercadoria', 'Valor NF R$', 'brl', l => l.valorMercadoriaEfetivo),
+    col(7, 'seguroPct', 'Ad valorem cobrado %', 'pct', l => l.seguroPct),
+    col(7, 'seguroRS', 'Ad valorem cobrado R$', 'brl', l => l.seguroRS),
+    col(7, 'seguroCustoPct', 'Custo seguro %', 'pct', l => l.seguroCustoPct),
+    col(7, 'seguroCustoRS', 'Custo seguro R$', 'brl', l => l.seguroCustoRS),
+    col(8, 'custoFinanceiroPct', 'Custo financeiro %', 'pct', l => l.taxaAntecipacao),
+    col(8, 'custoFinanceiroRS', 'Custo financeiro R$', 'brl', l => l.custoAntecipacao),
+    col(9, 'comissaoPct', 'Comissão %', 'pct', l => l.comissaoPct),
+    col(9, 'comissaoRS', 'Comissão R$', 'brl', l => l.custoComissao),
+    col(10, 'federaisPct', 'Impostos federais %', 'pct', l => l.federaisPct),
+    col(10, 'federaisRS', 'Impostos federais R$', 'brl', l => l.federaisRS),
+    col(11, 'icmsPct', 'Alíquota ICMS %', 'pct', l => l.icmsPercent, true),
+    col(11, 'icmsRS', 'ICMS R$', 'brl', l => l.icmsRS, true),
+    col(12, 'markup', 'Markup', 'markup', l => l.markup, true),
+    col(13, 'freteSemIcms', 'Frete sem ICMS R$', 'brl', l => l.freteSemIcms, true),
+    col(14, 'freteComIcms', 'Frete com ICMS R$', 'brl', l => l.freteComIcms, true),
+    col(15, 'precoOfertado', 'Preço ofertado R$', 'brl', l => l.precoOfertado, true),
+    col(16, 'margemLiquidaRS', 'Margem líquida R$', 'brl', l => l.margemLiquidaRS, true),
+    col(16, 'margemLiquidaPct', 'Margem líquida %', 'pct', l => l.margemLiquidaPercent, true),
+];
+
+/**
+ * Linha de totais: soma das colunas em R$ das linhas que fecharam preço;
+ * markup e margem PONDERADOS (razão das somas, não média das razões).
+ */
+export const totaisAbertura = (linhas: LinhaBid[]): Record<string, number | null> => {
+    const ok = linhas.filter(l => l.status === 'ok');
+    const soma = (f: (l: LinhaBid) => number | null) => ok.reduce((a, l) => a + (f(l) ?? 0), 0);
+    const tot: Record<string, number | null> = {};
+    for (const c of COLUNAS_ABERTURA) {
+        if (c.soma) tot[c.id] = soma(l => { const v = c.valor(l); return typeof v === 'number' ? v : null; });
+    }
+    const custoDireto = soma(l => l.custoBase);
+    const ofertado = soma(l => l.precoOfertado);
+    tot.markup = custoDireto > 0 ? soma(l => l.freteSemIcms) / custoDireto : null;
+    tot.margemLiquidaPct = ofertado > 0 ? (soma(l => l.margemLiquidaRS) / ofertado) * 100 : null;
+    return tot;
+};
+
+const ROTULO_SEGURO: Record<SeguroModo, string> = {
+    ddr: 'DDR',
+    ad_valorem: 'Ad valorem',
+};
+
+/**
+ * "Qualp, consultado em <data>": o piso do bid vem do Qualp, e a data é a da
+ * consulta das rotas. Rotas consultadas em dias diferentes (um de-para no dia
+ * seguinte, por exemplo) saem como intervalo.
+ */
+export const origemPisoExcel = (linhas: LinhaBid[]): string => {
+    const datas = [...new Set(linhas
+        .map(l => l.rota?.consultadoEm)
+        .filter((d): d is string => !!d)
+        .map(d => new Date(d).toLocaleDateString('pt-BR'))
+        .sort((a, b) => a.split('/').reverse().join('').localeCompare(b.split('/').reverse().join(''))))];
+    if (!datas.length) return 'Qualp, sem data de consulta';
+    return `Qualp, consultado em ${datas.length === 1 ? datas[0] : `${datas[0]} a ${datas[datas.length - 1]}`}`;
+};
+
+/** Os parâmetros da rodada, como saem no topo do Excel. */
+export const parametrosRodadaExcel = (p: ParametrosBid, dataCalculo: Date, linhas: LinhaBid[] = []): [string, string][] => {
+    const n = (v: number, casas = 2) => v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+    const seguroModo = p.seguroModo;
+    const taxaCusto = seguroModo === 'ddr' ? (p.taxaCustoDdrPct ?? TAXA_CUSTO_DDR_PADRAO) : p.fedTaxes.insurancePolicyRate;
+    return [
+        ['ICMS', (p.icmsIncluso ?? true) ? 'Incluso no preço' : 'NÃO incluso (ICMS por fora ou por conta do embarcador)'],
+        ['Adicional padrão sobre o piso', `${n(p.adicionalPisoPadraoPct ?? 0)}%`],
+        ['Seguro', seguroModo ? ROTULO_SEGURO[seguroModo] : 'Sem seguro'],
+        ['Ad valorem cobrado', p.seguroPct != null ? `${n(p.seguroPct, 3)}%` : 'Não definido'],
+        ['Taxa de custo do seguro', seguroModo
+            ? `${n(taxaCusto, 3)}% (${seguroModo === 'ddr' ? 'DDR' : 'apólice'}) sobre o valor da NF`
+            : '—'],
+        ['Valor de NF padrão', p.valorMercadoriaPadrao != null ? `R$ ${n(p.valorMercadoriaPadrao)}` : '—'],
+        ['Prazo de pagamento', `${p.prazoDias} dias (juros ${n(p.jurosMensal)}% a.m. → ${n(taxaAntecipacaoProporcional(p.jurosMensal, p.prazoDias))}%)`],
+        ['Margem pretendida', `${n(p.profitMargin)}%`],
+        ['Piso ANTT', origemPisoExcel(linhas)],
+        ['Data do cálculo', dataCalculo.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })],
+    ];
+};
+
+/** Colunas de controle que o Excel leva além da abertura. */
+const ROTULO_ROTA: Record<LinhaBid['fonteRota'], string> = {
+    qualp: 'Consultada no Qualp', cache: 'Reusada (dedup)', 'nao-consultada': 'Não consultada',
+};
+
+/**
+ * A planilha inteira como matriz (`XLSX.utils.aoa_to_sheet`): bloco de
+ * parâmetros da rodada, linha em branco, cabeçalho e as linhas com TODAS as
+ * colunas da abertura, na mesma ordem da tela, e a linha de totais.
+ */
+export const montarPlanilhaBid = (linhas: LinhaBid[], p: ParametrosBid, dataCalculo: Date): (string | number)[][] => {
+    const vazio = (v: number | string | null) => (v == null ? '' : v);
+    const tot = totaisAbertura(linhas);
+    return [
+        ['Parâmetros da rodada'],
+        ...parametrosRodadaExcel(p, dataCalculo, linhas),
+        [],
+        ['Linha', ...COLUNAS_ABERTURA.map(c => c.titulo), 'Adicional próprio', 'Status', 'Rota', 'Observações'],
+        ...linhas.map(l => [
+            l.linhaExcel,
+            ...COLUNAS_ABERTURA.map(c => vazio(c.valor(l))),
+            l.adicionalProprio ? 'Sim' : '',
+            rotuloStatus(l),
+            ROTULO_ROTA[l.fonteRota],
+            [...l.pendencias, ...l.alertas].join(' | '),
+        ]),
+        ['Total', ...COLUNAS_ABERTURA.map(c => vazio(tot[c.id] ?? null)), '', '', '', ''],
+    ];
+};
+
+/** Linhas como objetos (título -> valor), na ordem da abertura. */
 export const linhasParaExcel = (linhas: LinhaBid[]): Record<string, unknown>[] =>
     linhas.map(l => ({
         'Linha': l.linhaExcel,
-        'Origem': l.origem,
-        'Destino': l.destino,
-        'Veículo': l.veiculo,
-        'Veículo da planilha': l.veiculoDaLinha ? 'Sim' : 'Não (padrão do bid)',
-        'Eixos': l.eixos ?? '',
-        'KM': l.km ?? '',
-        'Pedágio': l.pedagio ?? '',
-        'Piso ANTT': l.pisoAntt ?? '',
-        'Custo base (piso + pedágio)': l.custoBase ?? '',
-        'ICMS %': l.icmsPercent ?? '',
-        'ICMS R$': l.icmsRS ?? '',
-        'Federais R$': l.federaisRS ?? '',
-        'UF origem': l.ufOrigem,
-        'UF destino': l.ufDestino,
-        'Preço sugerido': l.precoSugerido ?? '',
-        'Margem bruta R$': l.margemBrutaRS ?? '',
-        'Margem bruta %': l.margemBrutaPercent ?? '',
-        'Taxa antecipação %': l.taxaAntecipacao ?? '',
-        'Antecipação R$': l.custoAntecipacao ?? '',
-        'Comissão R$': l.custoComissao ?? '',
-        'Margem líquida R$': l.margemLiquidaRS ?? '',
-        'Margem líquida %': l.margemLiquidaPercent ?? '',
-        // Procedencia da rota: serve pra conferir consumo do Qualp contra a fatura.
-        'Rota': { qualp: 'Consultada no Qualp', cache: 'Reusada (dedup)', 'nao-consultada': 'Não consultada' }[l.fonteRota],
+        ...Object.fromEntries(COLUNAS_ABERTURA.map(c => [c.titulo, c.valor(l) ?? ''])),
+        'Adicional próprio': l.adicionalProprio ? 'Sim' : '',
         'Status': rotuloStatus(l),
+        // Procedencia da rota: serve pra conferir consumo do Qualp contra a fatura.
+        'Rota': ROTULO_ROTA[l.fonteRota],
         'Observações': [...l.pendencias, ...l.alertas].join(' | '),
     }));

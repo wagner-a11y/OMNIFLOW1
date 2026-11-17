@@ -15,14 +15,21 @@
 // Linha problemática não derruba o lote: pendência, frete urbano e falha do
 // Qualp viram STATUS da linha, e as linhas com problema ficam no TOPO — uma
 // pendência no meio de 70 linhas passa despercebida.
+//
+// AJUSTES DE CUSTO: ICMS incluso ou por fora, adicional sobre o piso (padrão
+// da rodada + próprio por linha), seguro e a abertura total de custos. Tudo
+// recalcula sobre a rota em cache — nenhum ajuste volta ao Qualp.
 // ============================================================================
 
 import React, { useMemo, useRef, useState } from 'react';
-import { AlertTriangle, FileDown, Info, Lock, Upload } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, FileDown, Info, Lock, Upload } from 'lucide-react';
 import {
     planejarLote, processarLoteBid, reaplicarLote, extrairCacheDeRotas,
     resumirBid, rotuloStatus, taxaAntecipacaoProporcional, TETO_ROTAS_DISTINTAS,
-    type LinhaBid, type LinhaBidBruta, type ParametrosBid, type PlanoLote,
+    COLUNAS_ABERTURA, totaisAbertura, validarAdicionalPiso, aplicarAdicionalLinhas, adicionalEditavel,
+    ADICIONAL_PISO_AVISO_PCT, TAXA_CUSTO_DDR_PADRAO,
+    type LinhaBid, type LinhaBidBruta, type ParametrosBid, type PlanoLote, type SeguroModo,
+    type ColunaAbertura, type FormatoColuna,
 } from '../utils/bidLote';
 import { lerPlanilhaBid, consultarRotaDoLote, exportarBidExcel } from '../services/bidLote';
 import type { ANTTCoefficients, FederalTaxes } from '../types';
@@ -45,6 +52,81 @@ const brl = (v: number | null) =>
 const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`);
 const numero = (v: number | null) =>
     v == null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+
+/** "1,5" -> 1.5. Percentual digitado; vazio ou ilegível = NaN. */
+const lerPercentual = (s: string): number => (s.trim() === '' ? NaN : Number(s.trim().replace(',', '.')));
+/** "500.000,00" -> 500000. Valor em R$ digitado; vazio = null. */
+const lerReais = (s: string): number | null => {
+    const t = s.replace(/R\$/gi, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    if (!t) return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
+};
+
+const formatar = (formato: FormatoColuna, v: number | string | null): string => {
+    if (v == null || v === '') return '—';
+    if (typeof v === 'string') return v;
+    switch (formato) {
+        case 'brl': return brl(v);
+        case 'pct': return `${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })}%`;
+        case 'km': return numero(v);
+        case 'markup': return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        default: return String(v);
+    }
+};
+
+/**
+ * Célula editável (adicional % ou valor de mercadoria). Confirma no blur ou
+ * Enter; vazio devolve a linha ao padrão da rodada. Sinal de menos não entra:
+ * negativo é bloqueado na digitação, não só na validação.
+ */
+const CelulaEditavel: React.FC<{
+    valor: number | null;
+    texto: string;
+    proprio: boolean;
+    desabilitado: boolean;
+    aviso: boolean;
+    titulo: string;
+    onSalvar: (bruto: string) => string | null;
+    onErro: (msg: string) => void;
+}> = ({ valor, texto, proprio, desabilitado, aviso, titulo, onSalvar, onErro }) => {
+    if (desabilitado) return <span className="text-[#d1d5db]" title="Só para veículo de tabela ANTT com preço calculado">—</span>;
+    const confirmar = (el: HTMLInputElement) => {
+        if (el.value === texto) return;
+        const erro = onSalvar(el.value);
+        if (erro) { onErro(erro); el.value = texto; }
+    };
+    return (
+        <input
+            key={`${valor}-${proprio}`}
+            type="text"
+            inputMode="decimal"
+            defaultValue={texto}
+            title={titulo}
+            onChange={e => {
+                if (e.target.value.includes('-')) {
+                    e.target.value = e.target.value.replace(/-/g, '');
+                    onErro('Valor negativo é bloqueado.');
+                }
+            }}
+            onBlur={e => confirmar(e.currentTarget)}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            className={`w-20 px-1.5 py-1 rounded-md border text-right text-xs outline-none focus:border-[#1d6fb8] ${
+                aviso ? 'bg-amber-50 border-amber-300 text-amber-800'
+                    : proprio ? 'bg-[#eff6ff] border-[#93c5fd] text-[#1d4ed8] font-medium'
+                        : 'bg-[#f9fafb] border-[#e5e7eb] text-[#111827]'}`}
+        />
+    );
+};
+
+/** Colunas congeladas na rolagem horizontal: seleção, # e origem. */
+const CONGELADA: Record<string, { left: number; width: number }> = {
+    sel: { left: 0, width: 32 },
+    num: { left: 32, width: 44 },
+    origem: { left: 76, width: 170 },
+};
+const estiloCongelada = (id: string): React.CSSProperties | undefined =>
+    CONGELADA[id] ? { position: 'sticky', left: CONGELADA[id].left, minWidth: CONGELADA[id].width, maxWidth: CONGELADA[id].width } : undefined;
 
 /** Problema no topo: é a primeira coisa que precisa ser vista. */
 const ordenar = (ls: LinhaBid[]): LinhaBid[] => {
@@ -75,6 +157,22 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     const [comissaoPercent, setComissaoPercent] = useState('');
     /** De-para do operador: rótulo da planilha -> veículo do cadastro. */
     const [deParaVeiculo, setDeParaVeiculo] = useState<Record<string, string>>({});
+    // ---- Ajustes de custo da rodada (defaults = comportamento anterior) ----
+    const [icmsIncluso, setIcmsIncluso] = useState(true);
+    const [adicionalPadrao, setAdicionalPadrao] = useState('0');
+    /** Adicional próprio por linha (linhaExcel -> %). Ausente = segue o padrão. */
+    const [adicionalPorLinha, setAdicionalPorLinha] = useState<Record<number, number>>({});
+    // Ad valorem começa com o % cobrado VAZIO (não definido, com aviso); DDR
+    // começa cobrando 0 — trocar o modo reposiciona o campo nesse ponto de partida.
+    const [seguroModo, setSeguroModo] = useState<SeguroModo>('ad_valorem');
+    const [seguroPct, setSeguroPct] = useState('');
+    const [taxaCustoDdr, setTaxaCustoDdr] = useState(String(TAXA_CUSTO_DDR_PADRAO).replace('.', ','));
+    const [valorMercadoriaPadrao, setValorMercadoriaPadrao] = useState('');
+    /** Valor de mercadoria editado na tela (linhaExcel -> R$). Vence o da planilha. */
+    const [valorMercadoriaPorLinha, setValorMercadoriaPorLinha] = useState<Record<number, number>>({});
+    const [abrirCustos, setAbrirCustos] = useState(false);
+    const [selecionadas, setSelecionadas] = useState<Set<number>>(new Set());
+    const [adicionalMassa, setAdicionalMassa] = useState('');
 
     // ---- Lote ----
     /**
@@ -105,6 +203,9 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     const nJuros = parseFloat(jurosMensal.replace(',', '.')) || 0;
     const nPrazo = parseInt(prazoDias, 10) || 0;
     const taxaAplicada = taxaAntecipacaoProporcional(nJuros, nPrazo);
+    const nAdicionalPadrao = lerPercentual(adicionalPadrao);
+    const adicionalPadraoValido = Number.isFinite(nAdicionalPadrao) ? Math.max(0, nAdicionalPadrao) : 0;
+    const avisoAdicionalPadrao = validarAdicionalPiso(adicionalPadraoValido).aviso;
 
     const parametros = (): ParametrosBid => ({
         profitMargin: parseFloat(profitMargin.replace(',', '.')) || 0,
@@ -123,6 +224,14 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
         prazoDias: nPrazo,
         comissaoPercent,
         comissaoPadrao: fedTaxes.commissionPercent,
+        icmsIncluso,
+        adicionalPisoPadraoPct: adicionalPadraoValido,
+        adicionalPorLinha,
+        seguroModo,
+        seguroPct: Number.isFinite(lerPercentual(seguroPct)) ? Math.max(0, lerPercentual(seguroPct)) : null,
+        taxaCustoDdrPct: Number.isFinite(lerPercentual(taxaCustoDdr)) ? Math.max(0, lerPercentual(taxaCustoDdr)) : TAXA_CUSTO_DDR_PADRAO,
+        valorMercadoriaPadrao: lerReais(valorMercadoriaPadrao),
+        valorMercadoriaPorLinha,
     });
 
     /**
@@ -139,7 +248,9 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
         return reaplicarLote(brutasArquivo, parametros(), extrairCacheDeRotas(linhasBrutas));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [linhasBrutas, brutasArquivo, profitMargin, cargoType, jurosMensal, prazoDias,
-        comissaoPercent, veiculoPadrao, deParaVeiculo, fedTaxes]);
+        comissaoPercent, veiculoPadrao, deParaVeiculo, fedTaxes,
+        icmsIncluso, adicionalPadrao, adicionalPorLinha, seguroModo, seguroPct, taxaCustoDdr,
+        valorMercadoriaPadrao, valorMercadoriaPorLinha]);
 
     const linhas = useMemo(() => (reaplicado ? ordenar(reaplicado.linhas) : null), [reaplicado]);
     /** Rotas que apareceram depois do lote inicial (tipicamente via de-para). */
@@ -155,6 +266,10 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
         setBrutasArquivo(null);
         setEstatQualp(null);
         setPendenteDeOk(null);
+        // Ajustes por linha valem para a planilha em que foram feitos.
+        setAdicionalPorLinha({});
+        setValorMercadoriaPorLinha({});
+        setSelecionadas(new Set());
         setNomeArquivo(file.name);
         try {
             const { linhas: brutas, faltando, totalLinhas, abaUsada, abas } = lerPlanilhaBid(await file.arrayBuffer());
@@ -227,6 +342,92 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     };
 
     const resumo = linhas ? resumirBid(linhas) : null;
+    const totais = useMemo(() => (linhas ? totaisAbertura(linhas) : null), [linhas]);
+    const colunasVisiveis = abrirCustos ? COLUNAS_ABERTURA : COLUNAS_ABERTURA.filter(c => c.sempreVisivel);
+    const paramsAtuais = parametros();
+    const editaveis = linhas ? linhas.filter(l => adicionalEditavel(l, paramsAtuais)).map(l => l.linhaExcel) : [];
+    const todasSelecionadas = editaveis.length > 0 && editaveis.every(n => selecionadas.has(n));
+
+    const erro = (msg: string) => onFeedback?.(msg, 'error');
+    const seguroNaoDefinido = seguroModo === 'ad_valorem' && !Number.isFinite(lerPercentual(seguroPct));
+
+    /** Edição de uma célula de adicional. Vazio = volta ao padrão da rodada. */
+    const salvarAdicionalLinha = (linhaExcel: number, bruto: string): string | null => {
+        const v = bruto.trim() === '' ? null : lerPercentual(bruto);
+        const r = aplicarAdicionalLinhas(adicionalPorLinha, [linhaExcel], v);
+        if (r.erro) return r.erro;
+        setAdicionalPorLinha(r.mapa);
+        if (v != null) { const a = validarAdicionalPiso(v).aviso; if (a) onFeedback?.(`Linha ${linhaExcel}: ${a}`, 'info'); }
+        return null;
+    };
+
+    const aplicarNasSelecionadas = () => {
+        if (!selecionadas.size) { erro('Selecione ao menos uma linha.'); return; }
+        const v = lerPercentual(adicionalMassa);
+        const r = aplicarAdicionalLinhas(adicionalPorLinha, [...selecionadas], v);
+        if (r.erro) { erro(r.erro); return; }
+        setAdicionalPorLinha(r.mapa);
+        const a = validarAdicionalPiso(v).aviso;
+        onFeedback?.(`Adicional de ${adicionalMassa}% aplicado a ${selecionadas.size} linha(s).${a ? ` ${a}.` : ''}`, a ? 'info' : 'success');
+    };
+
+    const aplicarPadraoATodas = () => {
+        setAdicionalPorLinha({});
+        onFeedback?.(`Todas as linhas seguem o adicional padrão (${adicionalPadraoValido}%).`);
+    };
+
+    const salvarValorMercadoriaLinha = (linhaExcel: number, bruto: string): string | null => {
+        const v = lerReais(bruto);
+        if (v != null && v < 0) return 'Valor de mercadoria negativo é bloqueado.';
+        setValorMercadoriaPorLinha(prev => {
+            const novo = { ...prev };
+            if (v == null) delete novo[linhaExcel]; else novo[linhaExcel] = v;
+            return novo;
+        });
+        return null;
+    };
+
+    const celula = (c: ColunaAbertura, l: LinhaBid): React.ReactNode => {
+        if (c.id === 'adicionalPisoPct') {
+            const pctLinha = l.adicionalPisoPct;
+            return (
+                <CelulaEditavel
+                    valor={pctLinha}
+                    texto={pctLinha == null ? '' : String(pctLinha).replace('.', ',')}
+                    proprio={l.adicionalProprio}
+                    desabilitado={!adicionalEditavel(l, paramsAtuais)}
+                    aviso={(pctLinha ?? 0) > ADICIONAL_PISO_AVISO_PCT}
+                    titulo={l.adicionalProprio ? 'Adicional próprio desta linha (vazio = volta ao padrão)' : 'Segue o padrão da rodada'}
+                    onSalvar={b => salvarAdicionalLinha(l.linhaExcel, b)}
+                    onErro={erro}
+                />
+            );
+        }
+        if (c.id === 'valorMercadoria') {
+            const proprio = valorMercadoriaPorLinha[l.linhaExcel] != null;
+            return (
+                <CelulaEditavel
+                    valor={l.valorMercadoriaEfetivo}
+                    texto={l.valorMercadoriaEfetivo == null ? '' : l.valorMercadoriaEfetivo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    proprio={proprio}
+                    desabilitado={l.status !== 'ok'}
+                    aviso={l.valorMercadoriaEfetivo == null}
+                    titulo="Valor da NF desta linha (vazio = planilha ou padrão)"
+                    onSalvar={b => salvarValorMercadoriaLinha(l.linhaExcel, b)}
+                    onErro={erro}
+                />
+            );
+        }
+        if (c.id === 'veiculo') {
+            return (
+                <>
+                    {l.veiculo || '—'}
+                    {l.veiculo && !l.veiculoDaLinha && <span className="ml-1 text-[9px] font-medium text-blue-500 uppercase">padrão</span>}
+                </>
+            );
+        }
+        return formatar(c.formato, c.valor(l));
+    };
 
     /**
      * Rótulos da planilha que o match tolerante não conseguiu ligar sozinho.
@@ -247,6 +448,24 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
 
     return (
         <div className="space-y-6">
+            {/* Selos da rodada: fixos no topo enquanto a tabela rola. */}
+            {(!icmsIncluso || seguroNaoDefinido) && (
+                <div className="sticky top-0 z-30 space-y-2">
+                    {!icmsIncluso && (
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-[#1d6fb8] text-white rounded-xl shadow-sm">
+                            <Info className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                            <p className="text-xs font-medium">Preço SEM ICMS. ICMS por fora ou por conta do embarcador.</p>
+                        </div>
+                    )}
+                    {seguroNaoDefinido && (
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl">
+                            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" strokeWidth={1.75} />
+                            <p className="text-xs font-medium">Seguro não definido. Ad valorem cobrado do cliente ainda vazio.</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Aviso do que esta tela é e do que ela NÃO faz */}
             <div className="flex items-start gap-3 p-4 bg-[#f9fafb] border border-[#e5e7eb] rounded-xl">
                 <Lock className="w-4 h-4 text-[#6b7280] mt-0.5 shrink-0" strokeWidth={1.75} />
@@ -256,7 +475,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                         Roda cada rota da planilha pelo <strong className="font-medium">mesmo motor de preço da calculadora</strong>.
                         Nada é salvo: não cria cotação, não consome numeração de proposta e não entra no histórico nem no funil.
                         O resultado vive nesta tela e sai em Excel.
-                        Base de custo da Fase 1: <strong className="font-medium">piso ANTT + pedágio</strong>.
+                        Custo direto: <strong className="font-medium">piso ANTT (+ adicional) + pedágio</strong>.
                     </p>
                 </div>
             </div>
@@ -337,6 +556,102 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                         />
                     </div>
                 </div>
+
+                {/* Ajustes de custo da rodada */}
+                <h4 className="text-[10px] font-medium text-[#6b7280] uppercase tracking-widest mt-6 mb-4 pt-5 border-t border-[#f3f4f6]">Ajustes de custo</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">ICMS no preço</label>
+                        <select
+                            value={icmsIncluso ? 'sim' : 'nao'}
+                            onChange={e => setIcmsIncluso(e.target.value === 'sim')}
+                            className="w-full px-3 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors"
+                        >
+                            <option value="sim">Incluso</option>
+                            <option value="nao">Por fora (sem ICMS)</option>
+                        </select>
+                        <p className="text-[9px] font-medium text-[#9ca3af] mt-1.5 uppercase tracking-tight">Alíquota segue a regra da rota.</p>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Adicional sobre o piso (%)</label>
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={adicionalPadrao}
+                            onChange={e => {
+                                if (e.target.value.includes('-')) { erro('Adicional negativo é bloqueado: o custo motorista nunca fica abaixo do piso ANTT.'); return; }
+                                setAdicionalPadrao(e.target.value);
+                            }}
+                            className={`w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors ${avisoAdicionalPadrao ? 'bg-amber-50 border-amber-300' : 'bg-[#f9fafb] border-[#e5e7eb]'}`}
+                        />
+                        <p className={`text-[9px] font-medium mt-1.5 uppercase tracking-tight ${avisoAdicionalPadrao ? 'text-amber-700' : 'text-[#9ca3af]'}`}>
+                            {avisoAdicionalPadrao || 'Padrão da rodada. Não incide sobre pedágio.'}
+                        </p>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Seguro</label>
+                        <select
+                            value={seguroModo}
+                            onChange={e => {
+                                const modo = e.target.value as SeguroModo;
+                                setSeguroModo(modo);
+                                setSeguroPct(modo === 'ddr' ? '0' : '');
+                            }}
+                            className="w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors bg-[#f9fafb] border-[#e5e7eb]"
+                        >
+                            <option value="ad_valorem">Ad valorem</option>
+                            <option value="ddr">DDR</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Ad valorem cobrado (%)</label>
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={seguroPct}
+                            onChange={e => { if (!e.target.value.includes('-')) setSeguroPct(e.target.value); }}
+                            placeholder="Ex.: 0,10"
+                            className={`w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors ${seguroNaoDefinido ? 'bg-amber-50 border-amber-300' : 'bg-[#f9fafb] border-[#e5e7eb]'}`}
+                        />
+                        <p className={`text-[9px] font-medium mt-1.5 uppercase tracking-tight ${seguroNaoDefinido ? 'text-amber-700' : 'text-[#9ca3af]'}`}>
+                            {seguroNaoDefinido ? 'Seguro não definido' : 'Cobrado do cliente, entra no preço.'}
+                        </p>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Custo do seguro (%)</label>
+                        {seguroModo === 'ddr' ? (
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                value={taxaCustoDdr}
+                                onChange={e => { if (!e.target.value.includes('-')) setTaxaCustoDdr(e.target.value); }}
+                                className="w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors bg-[#f9fafb] border-[#e5e7eb]"
+                            />
+                        ) : (
+                            <input
+                                type="text"
+                                value={fedTaxes.insurancePolicyRate.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}
+                                disabled
+                                className="w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors bg-[#f9fafb] border-[#e5e7eb] disabled:opacity-60"
+                            />
+                        )}
+                        <p className="text-[9px] font-medium text-[#9ca3af] mt-1.5 uppercase tracking-tight">
+                            {seguroModo === 'ddr' ? 'Taxa DDR sobre a NF.' : 'Taxa da apólice (Configurações).'}
+                        </p>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Valor NF padrão (R$)</label>
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={valorMercadoriaPadrao}
+                            onChange={e => { if (!e.target.value.includes('-')) setValorMercadoriaPadrao(e.target.value); }}
+                            placeholder="Ex.: 500.000,00"
+                            className="w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors bg-[#f9fafb] border-[#e5e7eb]"
+                        />
+                        <p className="text-[9px] font-medium text-[#9ca3af] mt-1.5 uppercase tracking-tight">Para linhas sem valor de NF.</p>
+                    </div>
+                </div>
             </div>
 
             {/* Importar */}
@@ -344,7 +659,8 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                 <div>
                     <h4 className="font-medium text-sm text-[#111827] mb-1">Planilha de rotas</h4>
                     <p className="text-[11px] font-normal text-[#6b7280]">
-                        Colunas: <span className="font-medium">Origem</span>, <span className="font-medium">Destino</span>, <span className="font-medium">Veículo</span>.
+                        Colunas: <span className="font-medium">Origem</span>, <span className="font-medium">Destino</span>, <span className="font-medium">Veículo</span>
+                        {' '}(opcionais: <span className="font-medium">Valor NF</span>, <span className="font-medium">Tabela de compra</span>).
                         {' '}Importar só LÊ o arquivo — a consulta ao Qualp é confirmada depois, com o custo na tela.
                         Teto de {TETO_ROTAS_DISTINTAS} rotas distintas por lote.
                         {nomeArquivo && <span className="ml-2 text-[#111827]">· {nomeArquivo}</span>}
@@ -368,7 +684,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                     />
                     {linhas && linhas.length > 0 && (
                         <button
-                            onClick={() => { exportarBidExcel(linhas); onFeedback?.('Excel gerado.'); }}
+                            onClick={() => { exportarBidExcel(linhas, parametros()); onFeedback?.('Excel gerado.'); }}
                             className="px-4 py-2.5 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg font-medium text-xs hover:bg-[#f9fafb] transition-colors flex items-center gap-2"
                         >
                             <FileDown className="w-3.5 h-3.5 text-[#1d6fb8]" strokeWidth={1.75} /> Exportar Excel
@@ -530,9 +846,9 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                         { rot: 'Linhas', val: String(resumo.total), cor: 'text-[#111827]' },
                         { rot: 'Com preço', val: String(resumo.ok), cor: 'text-emerald-600' },
                         { rot: 'Pendência', val: String(resumo.pendencia + resumo.urbano + resumo.falha), cor: resumo.pendencia + resumo.urbano + resumo.falha > 0 ? 'text-amber-600' : 'text-[#9ca3af]' },
-                        { rot: 'Alerta de piso', val: String(resumo.comAlerta), cor: resumo.comAlerta > 0 ? 'text-red-600' : 'text-[#9ca3af]' },
+                        { rot: 'Com alerta', val: String(resumo.comAlerta), cor: resumo.comAlerta > 0 ? 'text-red-600' : 'text-[#9ca3af]' },
                         { rot: 'Margem líq. média', val: pct(resumo.margemLiquidaMedia), cor: 'text-[#111827]' },
-                        { rot: 'Preço sugerido total', val: brl(resumo.totalPrecoSugerido), cor: 'text-[#1d6fb8]' },
+                        { rot: 'Preço ofertado total', val: brl(resumo.totalPrecoSugerido), cor: 'text-[#1d6fb8]' },
                     ].map(c => (
                         <div key={c.rot} className="bg-white border border-[#e5e7eb] rounded-xl p-4">
                             <p className="text-[9px] font-medium text-[#6b7280] uppercase tracking-widest mb-1">{c.rot}</p>
@@ -553,64 +869,110 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                 </div>
             )}
 
-            {/* Resultado */}
+            {/* Resultado — colunas da abertura de custos (mesma definição do Excel) */}
             {linhas && (
                 <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[#e5e7eb] bg-[#f9fafb]">
+                        <button
+                            onClick={() => setAbrirCustos(v => !v)}
+                            className="px-3 py-2 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg font-medium text-xs hover:bg-[#f3f4f6] transition-colors flex items-center gap-1.5"
+                        >
+                            {abrirCustos ? <ChevronDown className="w-3.5 h-3.5" strokeWidth={1.75} /> : <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.75} />}
+                            {abrirCustos ? 'Fechar custos' : 'Abrir custos'}
+                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tight">Adicional</span>
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                value={adicionalMassa}
+                                onChange={e => {
+                                    if (e.target.value.includes('-')) { erro('Adicional negativo é bloqueado.'); return; }
+                                    setAdicionalMassa(e.target.value);
+                                }}
+                                placeholder="%"
+                                className={`w-16 px-2 py-2 border rounded-lg text-xs text-right outline-none focus:border-[#1d6fb8] ${(lerPercentual(adicionalMassa) || 0) > ADICIONAL_PISO_AVISO_PCT ? 'bg-amber-50 border-amber-300' : 'bg-white border-[#e5e7eb]'}`}
+                            />
+                            <button
+                                onClick={aplicarNasSelecionadas}
+                                disabled={!selecionadas.size || adicionalMassa.trim() === ''}
+                                className="px-3 py-2 bg-[#1d6fb8] text-white rounded-lg font-medium text-xs hover:bg-[#185a96] disabled:opacity-40 transition-colors"
+                            >
+                                Aplicar às selecionadas ({selecionadas.size})
+                            </button>
+                            <button
+                                onClick={aplicarPadraoATodas}
+                                className="px-3 py-2 bg-white border border-[#e5e7eb] text-[#111827] rounded-lg font-medium text-xs hover:bg-[#f3f4f6] transition-colors"
+                            >
+                                Aplicar padrão a todas
+                            </button>
+                        </div>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                             <thead className="bg-[#f9fafb] border-b border-[#e5e7eb]">
                                 <tr className="text-[#6b7280]">
-                                    <th className="px-3 py-2.5 text-left font-medium">#</th>
-                                    <th className="px-3 py-2.5 text-left font-medium">Origem</th>
-                                    <th className="px-3 py-2.5 text-left font-medium">Destino</th>
-                                    <th className="px-3 py-2.5 text-left font-medium">Veículo</th>
-                                    <th className="px-3 py-2.5 text-right font-medium">KM</th>
-                                    <th className="px-3 py-2.5 text-right font-medium">Pedágio</th>
-                                    <th className="px-3 py-2.5 text-right font-medium">Piso ANTT</th>
-                                    <th className="px-3 py-2.5 text-right font-medium">Custo</th>
-                                    <th className="px-3 py-2.5 text-right font-medium">ICMS</th>
-                                    <th className="px-3 py-2.5 text-right font-medium">Federais</th>
-                                    <th className="px-3 py-2.5 text-right font-medium">Preço sugerido</th>
-                                    <th className="px-3 py-2.5 text-right font-medium">Margem líq.</th>
+                                    <th style={estiloCongelada('sel')} className="z-10 bg-[#f9fafb] px-2 py-2.5">
+                                        <input
+                                            type="checkbox"
+                                            checked={todasSelecionadas}
+                                            disabled={!editaveis.length}
+                                            onChange={() => setSelecionadas(todasSelecionadas ? new Set() : new Set(editaveis))}
+                                            title="Selecionar todas as linhas com adicional editável"
+                                        />
+                                    </th>
+                                    <th style={estiloCongelada('num')} className="z-10 bg-[#f9fafb] px-3 py-2.5 text-left font-medium">#</th>
+                                    {colunasVisiveis.map(c => (
+                                        <th
+                                            key={c.id}
+                                            style={estiloCongelada(c.id)}
+                                            className={`px-3 py-2.5 font-medium whitespace-nowrap ${c.formato === 'texto' ? 'text-left' : 'text-right'} ${CONGELADA[c.id] ? 'z-10 bg-[#f9fafb] shadow-[1px_0_0_#e5e7eb]' : ''}`}
+                                        >
+                                            {c.titulo}
+                                        </th>
+                                    ))}
                                     <th className="px-3 py-2.5 text-left font-medium">Status</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {linhas.map(l => (
-                                    <tr key={l.linhaExcel} className="border-b border-[#f3f4f6] last:border-0 hover:bg-[#f9fafb]">
-                                        <td className="px-3 py-2.5 text-[#9ca3af]">{l.linhaExcel}</td>
-                                        <td className="px-3 py-2.5 text-[#111827]">{l.origem || '—'}</td>
-                                        <td className="px-3 py-2.5 text-[#111827]">{l.destino || '—'}</td>
-                                        <td className="px-3 py-2.5 text-[#111827]">
-                                            {l.veiculo || '—'}
-                                            {l.veiculo && !l.veiculoDaLinha && (
-                                                <span className="ml-1 text-[9px] font-medium text-blue-500 uppercase">padrão</span>
-                                            )}
+                                    <tr key={l.linhaExcel} className="group border-b border-[#f3f4f6] last:border-0 hover:bg-[#f9fafb]">
+                                        <td style={estiloCongelada('sel')} className="z-10 bg-white group-hover:bg-[#f9fafb] px-2 py-2.5 text-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={selecionadas.has(l.linhaExcel)}
+                                                disabled={!adicionalEditavel(l, paramsAtuais)}
+                                                onChange={() => setSelecionadas(prev => {
+                                                    const novo = new Set(prev);
+                                                    if (novo.has(l.linhaExcel)) novo.delete(l.linhaExcel); else novo.add(l.linhaExcel);
+                                                    return novo;
+                                                })}
+                                            />
                                         </td>
-                                        <td className="px-3 py-2.5 text-right text-[#111827]">{numero(l.km)}</td>
-                                        <td className="px-3 py-2.5 text-right text-[#111827]">{brl(l.pedagio)}</td>
-                                        <td className="px-3 py-2.5 text-right text-[#111827]">{brl(l.pisoAntt)}</td>
-                                        <td className="px-3 py-2.5 text-right text-[#111827]">{brl(l.custoBase)}</td>
-                                        <td className="px-3 py-2.5 text-right text-[#111827]">
-                                            {brl(l.icmsRS)}
-                                            {l.icmsPercent != null && (
-                                                <span className="block text-[9px] font-normal text-[#9ca3af]">{l.icmsPercent.toFixed(1)}%{l.ufOrigem && l.ufDestino ? ` · ${l.ufOrigem}→${l.ufDestino}` : ''}</span>
-                                            )}
+                                        <td style={estiloCongelada('num')} className="z-10 bg-white group-hover:bg-[#f9fafb] px-3 py-2.5 text-[#9ca3af]">
+                                            {l.linhaExcel}
+                                            {l.adicionalProprio && <span className="block w-1.5 h-1.5 mt-0.5 rounded-full bg-[#1d6fb8]" title="Adicional próprio" />}
                                         </td>
-                                        <td className="px-3 py-2.5 text-right text-[#111827]">{brl(l.federaisRS)}</td>
-                                        <td className="px-3 py-2.5 text-right font-medium text-[#1d6fb8]">{brl(l.precoSugerido)}</td>
-                                        <td className={`px-3 py-2.5 text-right font-medium ${(l.margemLiquidaRS ?? 0) > 0 ? 'text-emerald-600' : l.margemLiquidaRS == null ? 'text-[#9ca3af]' : 'text-red-600'}`}>
-                                            {brl(l.margemLiquidaRS)}
-                                            {l.margemLiquidaPercent != null && (
-                                                <span className="block text-[9px] font-normal text-[#9ca3af]">{pct(l.margemLiquidaPercent)}</span>
-                                            )}
-                                        </td>
+                                        {colunasVisiveis.map(c => (
+                                            <td
+                                                key={c.id}
+                                                style={estiloCongelada(c.id)}
+                                                className={`px-3 py-2.5 whitespace-nowrap ${c.formato === 'texto' ? 'text-left' : 'text-right'} ${
+                                                    CONGELADA[c.id] ? 'z-10 bg-white group-hover:bg-[#f9fafb] shadow-[1px_0_0_#e5e7eb] truncate' : ''} ${
+                                                    c.id === 'precoOfertado' ? 'font-medium text-[#1d6fb8]'
+                                                        : c.id.startsWith('margemLiquida') ? `font-medium ${(l.margemLiquidaRS ?? 0) > 0 ? 'text-emerald-600' : l.margemLiquidaRS == null ? 'text-[#9ca3af]' : 'text-red-600'}`
+                                                            : 'text-[#111827]'}`}
+                                                title={c.id === 'origem' ? l.origem : undefined}
+                                            >
+                                                {celula(c, l)}
+                                            </td>
+                                        ))}
                                         <td className="px-3 py-2.5">
                                             <span className={`inline-block px-2 py-0.5 rounded-md border text-[9px] font-medium uppercase tracking-tight ${CORES_STATUS[l.status]}`}>
                                                 {rotuloStatus(l)}
                                             </span>
                                             {(l.pendencias.length > 0 || l.alertas.length > 0) && (
-                                                <p className="text-[9px] font-normal text-[#6b7280] mt-1 max-w-xs">
+                                                <p className="text-[9px] font-normal text-[#6b7280] mt-1 max-w-xs whitespace-normal">
                                                     {[...l.alertas, ...l.pendencias].join(' · ')}
                                                 </p>
                                             )}
@@ -618,6 +980,24 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                                     </tr>
                                 ))}
                             </tbody>
+                            {totais && (
+                                <tfoot className="bg-[#f9fafb] border-t border-[#e5e7eb] font-medium">
+                                    <tr className="text-[#111827]">
+                                        <td style={estiloCongelada('sel')} className="z-10 bg-[#f9fafb]" />
+                                        <td style={estiloCongelada('num')} className="z-10 bg-[#f9fafb] px-3 py-2.5 text-[10px] uppercase text-[#6b7280]">Total</td>
+                                        {colunasVisiveis.map(c => (
+                                            <td
+                                                key={c.id}
+                                                style={estiloCongelada(c.id)}
+                                                className={`px-3 py-2.5 whitespace-nowrap text-right ${CONGELADA[c.id] ? 'z-10 bg-[#f9fafb] shadow-[1px_0_0_#e5e7eb]' : ''}`}
+                                            >
+                                                {c.id in totais ? formatar(c.formato, totais[c.id]) : ''}
+                                            </td>
+                                        ))}
+                                        <td className="px-3 py-2.5 text-[9px] font-normal text-[#6b7280]">Só linhas com preço · markup e margem ponderados</td>
+                                    </tr>
+                                </tfoot>
+                            )}
                         </table>
                     </div>
                 </div>
