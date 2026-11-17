@@ -15,7 +15,7 @@ import { calcularPreco } from './motorPreco.ts';
 import {
     prepararLinha, calcularLinhaBid, montarLinhasBid, lerNumeroPlanilha,
     validarAdicionalPiso, aplicarAdicionalLinhas, adicionalEditavel,
-    COLUNAS_ABERTURA, totaisAbertura, montarPlanilhaBid, NORMA_PISO_ANTT,
+    COLUNAS_ABERTURA, totaisAbertura, montarPlanilhaBid, TAXA_CUSTO_DDR_PADRAO,
 } from './bidLote.ts';
 
 let pass = 0, fail = 0;
@@ -64,18 +64,18 @@ console.log('\n--- 2. RODADA ANTIGA REABERTA: valores idênticos ---');
     }
     eq(`${GOLDEN.bid.linhas.length} linhas antigas sem os campos novos: idênticas`, iguais, GOLDEN.bid.linhas.length);
 
-    // Defaults EXPLÍCITOS (icms incluso, adicional 0, seguro não definido):
-    // mesmos números — o default é o comportamento anterior, não "parecido".
+    // Defaults da TELA (icms incluso, adicional 0, ad valorem com % cobrado
+    // vazio) sobre linhas sem valor de NF: mesmos números de antes.
     let iguaisExplicito = 0;
     for (const g of GOLDEN.bid.linhas) {
         const p = {
             ...PARAMS, profitMargin: g.margem,
             icmsIncluso: true, adicionalPisoPadraoPct: 0, adicionalPorLinha: {},
-            seguroModo: 'nao_definido', seguroPct: 0.2, valorMercadoriaPadrao: 500000,
+            seguroModo: 'ad_valorem', seguroPct: null,
         };
         if (JSON.stringify(pegar(linha(p, g.bruta, g.rota))) === JSON.stringify(g.saida)) iguaisExplicito++;
     }
-    eq('com os defaults explícitos (e seguro não definido ignorando % e valor): idênticas', iguaisExplicito, GOLDEN.bid.linhas.length);
+    eq('com os defaults da tela (ad valorem não definido, sem NF): idênticas', iguaisExplicito, GOLDEN.bid.linhas.length);
 
     const l = linha(PARAMS, GOLDEN.bid.linhas[3].bruta, GOLDEN.bid.linhas[3].rota);
     eq('preço ofertado = preço sugerido de antes', l.precoOfertado, l.precoSugerido);
@@ -160,20 +160,50 @@ console.log('\n--- 5. ADICIONAL NEGATIVO: BLOQUEADO ---');
     ok('com alerta na linha', l60.alertas.some(a => a.includes('60%')));
 }
 
-console.log('\n--- 6. SEGURO ---');
+console.log('\n--- 6. SEGURO: DDR E AD VALOREM ---');
 {
-    const ddr = linha({ ...PARAMS, seguroModo: 'ddr', seguroPct: 0.1, valorMercadoriaPadrao: 500000 }, BRUTA, ROTA_1000);
-    eq('DDR: seguro zero (cobrado e custo)', [ddr.seguroRS, ddr.seguroCustoRS, ddr.seguroPct], [0, 0, 0]);
-    const av = linha({ ...PARAMS, seguroModo: 'ad_valorem', seguroPct: 0.1, valorMercadoriaPadrao: 500000 }, BRUTA, ROTA_1000);
-    eq('ad valorem 0,10% sobre 500.000 = R$ 500', cent(av.seguroRS), 500);
-    // A regra é a do motor: cobrado = goodsValue × %, custo = goodsValue × taxa da apólice.
-    const motor = calcularPreco({
-        baseFreight: 1000, tolls: 200, extraCosts: 0, otherCosts: [], goodsValue: 500000, insurancePercent: 0.1,
-        profitMargin: PARAMS.profitMargin, icmsPercent: 12, fedTaxes: PARAMS.fedTaxes, modoTabelado: false, valorFinalTabelado: 0,
+    const motor = (goodsValue, insurancePercent, insurancePolicyRate) => calcularPreco({
+        baseFreight: 1000, tolls: 200, extraCosts: 0, otherCosts: [], goodsValue, insurancePercent,
+        profitMargin: PARAMS.profitMargin, icmsPercent: 12, fedTaxes: { ...PARAMS.fedTaxes, insurancePolicyRate }, modoTabelado: false, valorFinalTabelado: 0,
     });
-    eq('mesmo preço que a calculadora daria com seguro 0,10% e carga de 500.000', cent(av.precoOfertado), cent(motor.finalFreight));
-    eq('custo do seguro = taxa da apólice (0,035% × 500.000 = 175)', cent(av.seguroCustoRS), 175);
-    eq('nenhum alerta de valor de mercadoria', av.alertas.filter(a => a.includes('mercadoria')).length, 0);
+
+    // DDR: custo 0,004% da NF, cobrado começa em 0.
+    eq('taxa DDR padrão = 0,004%', TAXA_CUSTO_DDR_PADRAO, 0.004);
+    const ddr = linha({ ...PARAMS, seguroModo: 'ddr', seguroPct: 0, valorMercadoriaPadrao: 500000 }, BRUTA, ROTA_1000);
+    eq('DDR, NF de 500.000: custo do seguro R$ 20,00', cent(ddr.seguroCustoRS), 20);
+    eq('e cobrado 0', [ddr.seguroPct, ddr.seguroRS], [0, 0]);
+    eq('taxa de custo exposta na linha', ddr.seguroCustoPct, 0.004);
+    const base = linha(PARAMS, BRUTA, ROTA_1000);
+    eq('DDR cobrando 0 não mexe no preço', cent(ddr.precoOfertado), cent(base.precoOfertado));
+    ok('mas o custo de R$ 20 sai da margem bruta', perto(base.margemBrutaRS - ddr.margemBrutaRS, 20));
+    const ddrEditado = linha({ ...PARAMS, seguroModo: 'ddr', seguroPct: 0, taxaCustoDdrPct: 0.01, valorMercadoriaPadrao: 500000 }, BRUTA, ROTA_1000);
+    eq('taxa DDR editável: 0,01% sobre 500.000 = R$ 50', cent(ddrEditado.seguroCustoRS), 50);
+
+    // DDR com % cobrado digitado: entra no preço, pela regra do motor.
+    const ddrCobra = linha({ ...PARAMS, seguroModo: 'ddr', seguroPct: 0.05, valorMercadoriaPadrao: 500000 }, BRUTA, ROTA_1000);
+    eq('DDR cobrando 0,05% sobre 500.000: cobrado R$ 250', cent(ddrCobra.seguroRS), 250);
+    ok('e entra no preço', ddrCobra.precoOfertado > ddr.precoOfertado);
+    eq('= o preço da calculadora com seguro 0,05% e custo 0,004%', cent(ddrCobra.precoOfertado), cent(motor(500000, 0.05, 0.004).finalFreight));
+    eq('custo continua R$ 20', cent(ddrCobra.seguroCustoRS), 20);
+
+    // Ad valorem: custo = taxa da apólice das Configurações; cobrado editável.
+    const av = linha({ ...PARAMS, seguroModo: 'ad_valorem', seguroPct: 0.1, valorMercadoriaPadrao: 500000 }, BRUTA, ROTA_1000);
+    eq('ad valorem 0,10% sobre 500.000: cobrado R$ 500', cent(av.seguroRS), 500);
+    eq('custo = apólice (0,035% × 500.000 = R$ 175)', cent(av.seguroCustoRS), 175);
+    eq('mesmo preço da calculadora', cent(av.precoOfertado), cent(motor(500000, 0.1, PARAMS.fedTaxes.insurancePolicyRate).finalFreight));
+    const avVazio = linha({ ...PARAMS, seguroModo: 'ad_valorem', seguroPct: null, valorMercadoriaPadrao: 500000 }, BRUTA, ROTA_1000);
+    eq('ad valorem com % cobrado vazio: cobra 0', avVazio.seguroRS, 0);
+    eq('mas o custo da apólice existe (R$ 175)', cent(avVazio.seguroCustoRS), 175);
+
+    // Sem valor de NF: zerado e aviso, nos dois modos.
+    for (const modo of ['ddr', 'ad_valorem']) {
+        const semNf = linha({ ...PARAMS, seguroModo: modo, seguroPct: 0.1 }, BRUTA, ROTA_1000);
+        eq(`${modo} sem NF: custo e cobrança zerados`, [semNf.seguroRS, semNf.seguroCustoRS, semNf.seguroPct], [0, 0, 0]);
+        ok(`${modo} sem NF: aviso "sem valor de NF" na linha`, semNf.alertas.some(a => a.includes('sem valor de NF')));
+        eq(`${modo} sem NF: linha não bloqueia`, semNf.status, 'ok');
+    }
+    const comNf = linha({ ...PARAMS, seguroModo: 'ddr', seguroPct: 0 }, { ...BRUTA, valorMercadoria: 500000 }, ROTA_1000);
+    eq('NF na linha: nenhum aviso de NF', comNf.alertas.filter(a => a.includes('NF')).length, 0);
 
     // Valor da planilha vence o padrão; o editado na tela vence os dois.
     const daLinha = linha({ ...PARAMS, seguroModo: 'ad_valorem', seguroPct: 0.1, valorMercadoriaPadrao: 500000 }, { ...BRUTA, valorMercadoria: 200000 }, ROTA_1000);
@@ -181,11 +211,10 @@ console.log('\n--- 6. SEGURO ---');
     const editado = linha({ ...PARAMS, seguroModo: 'ad_valorem', seguroPct: 0.1, valorMercadoriaPadrao: 500000, valorMercadoriaPorLinha: { 2: 100000 } }, { ...BRUTA, valorMercadoria: 200000 }, ROTA_1000);
     eq('valor editado na tela (100.000) vence a planilha', cent(editado.seguroRS), 100);
 
-    const semValor = linha({ ...PARAMS, seguroModo: 'ad_valorem', seguroPct: 0.1 }, BRUTA, ROTA_1000);
-    ok('ad valorem sem valor de mercadoria: aviso na linha', semValor.alertas.some(a => a.includes('sem valor de mercadoria')));
-    eq('sem bloquear (linha ok, seguro 0)', [semValor.status, semValor.seguroRS], ['ok', 0]);
-    const nd = linha({ ...PARAMS, seguroModo: 'nao_definido', seguroPct: 0.1, valorMercadoriaPadrao: 500000 }, BRUTA, ROTA_1000);
-    eq('não definido: seguro zero', [nd.seguroRS, nd.seguroCustoRS], [0, 0]);
+    // Rodada de antes (sem modo de seguro): nada de seguro, nenhum aviso.
+    const antiga = linha({ ...PARAMS, valorMercadoriaPadrao: 500000 }, BRUTA, ROTA_1000);
+    eq('sem modo de seguro: zero, como era', [antiga.seguroRS, antiga.seguroCustoRS], [0, 0]);
+    eq('e sem aviso', antiga.alertas.length, 0);
 
     // Importação: coluna de valor de NF mapeada quando existe.
     const brutas = montarLinhasBid(
@@ -207,7 +236,7 @@ console.log('\n--- 7. SOMA DOS COMPONENTES + MARGEM LÍQUIDA = PREÇO OFERTADO -
     const falhas = [];
     for (const icmsIncluso of [true, false])
     for (const adicionalPisoPadraoPct of [0, 10, 55])
-    for (const [seguroModo, seguroPct, valorMercadoriaPadrao] of [['nao_definido', 0, null], ['ddr', 0, null], ['ad_valorem', 0.1, 500000], ['ad_valorem', 0.25, null]])
+    for (const [seguroModo, seguroPct, valorMercadoriaPadrao] of [[undefined, null, null], ['ddr', 0, 500000], ['ddr', 0.2, 500000], ['ddr', 0.2, null], ['ad_valorem', 0.1, 500000], ['ad_valorem', null, 500000], ['ad_valorem', 0.25, null]])
     for (const profitMargin of [0, 15, 30])
     for (const g of GOLDEN.bid.linhas.slice(0, 4)) {
         const p = { ...PARAMS, profitMargin, icmsIncluso, adicionalPisoPadraoPct, seguroModo, seguroPct, valorMercadoriaPadrao };
@@ -238,27 +267,39 @@ console.log('\n--- TOTAIS ---');
 
 console.log('\n--- 8. EXCEL: TODAS AS COLUNAS + CABEÇALHO DE PARÂMETROS ---');
 {
-    const p = { ...PARAMS, icmsIncluso: false, adicionalPisoPadraoPct: 10, seguroModo: 'ad_valorem', seguroPct: 0.1, valorMercadoriaPadrao: 500000 };
-    const ls = GOLDEN.bid.linhas.slice(0, 4).map(g => linha(p, g.bruta, g.rota));
+    const p = { ...PARAMS, icmsIncluso: false, adicionalPisoPadraoPct: 10, seguroModo: 'ddr', seguroPct: 0.05, taxaCustoDdrPct: 0.004, valorMercadoriaPadrao: 500000 };
+    // Rotas consultadas em dois dias diferentes (ex.: de-para no dia seguinte).
+    const datas = ['2026-11-16T14:00:00', '2026-11-17T10:00:00', '2026-11-17T10:05:00', '2026-11-17T10:06:00'];
+    const ls = GOLDEN.bid.linhas.slice(0, 4).map((g, i) => linha(p, g.bruta, { ...g.rota, consultadoEm: new Date(datas[i]).toISOString() }));
     const data = new Date(2026, 10, 17, 9, 30);
     const aoa = montarPlanilhaBid(ls, p, data);
 
     // Ida e volta pelo SheetJS: é o que vai para o arquivo.
     const aba = XLSX.utils.aoa_to_sheet(aoa);
-    const lido = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '' });
+    const lido = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '', blankrows: true });
 
     eq('título do bloco', lido[0][0], 'Parâmetros da rodada');
-    const params = Object.fromEntries(lido.slice(1, 9).map(r => [r[0], r[1]]));
+    const iCab = lido.findIndex(r => r[0] === 'Linha');
+    const params = Object.fromEntries(lido.slice(1, iCab).filter(r => r[0]).map(r => [r[0], r[1]]));
     ok('ICMS não incluso', String(params['ICMS']).startsWith('NÃO incluso'), params['ICMS']);
     eq('adicional padrão', params['Adicional padrão sobre o piso'], '10,00%');
-    eq('modo e % do seguro', params['Seguro'], 'Ad valorem 0,100%');
+    eq('modo do seguro', params['Seguro'], 'DDR');
+    eq('% cobrado', params['Ad valorem cobrado'], '0,050%');
+    eq('taxa de custo', params['Taxa de custo do seguro'], '0,004% (DDR) sobre o valor da NF');
     ok('prazo de pagamento', String(params['Prazo de pagamento']).startsWith('45 dias'), params['Prazo de pagamento']);
-    eq('portaria ANTT vigente', params['Portaria ANTT vigente'], NORMA_PISO_ANTT);
+    eq('piso: Qualp com a data da consulta (intervalo)', params['Piso ANTT'], 'Qualp, consultado em 16/11/2026 a 17/11/2026');
+    ok('nenhuma citação de norma no cabeçalho', !Object.keys(params).some(k => /portaria|resolu/i.test(k)) && !Object.values(params).some(v => /resolu|portaria/i.test(String(v))));
     eq('data do cálculo', params['Data do cálculo'], '17/11/2026, 09:30');
 
-    const iCab = lido.findIndex(r => r[0] === 'Linha');
+    const umDia = montarPlanilhaBid(ls.slice(1), p, data);
+    eq('rotas do mesmo dia: data única', umDia.find(r => r[0] === 'Piso ANTT')[1], 'Qualp, consultado em 17/11/2026');
+    const av = montarPlanilhaBid(ls, { ...p, seguroModo: 'ad_valorem', seguroPct: null }, data);
+    eq('ad valorem não definido no cabeçalho', [av.find(r => r[0] === 'Seguro')[1], av.find(r => r[0] === 'Ad valorem cobrado')[1]], ['Ad valorem', 'Não definido']);
+    eq('taxa de custo da apólice no cabeçalho', av.find(r => r[0] === 'Taxa de custo do seguro')[1], '0,035% (apólice) sobre o valor da NF');
+
     const cab = lido[iCab];
     eq(`cabeçalho com TODAS as ${COLUNAS_ABERTURA.length} colunas da abertura, na ordem`, cab.slice(1, 1 + COLUNAS_ABERTURA.length), COLUNAS_ABERTURA.map(c => c.titulo));
+    ok('colunas "Ad valorem cobrado" e "Custo seguro"', cab.includes('Ad valorem cobrado R$') && cab.includes('Custo seguro R$'));
     const grupos = [...new Set(COLUNAS_ABERTURA.map(c => c.grupo))];
     eq('cobre os itens 1 a 16, em ordem', grupos, Array.from({ length: 16 }, (_, i) => i + 1));
     eq('uma linha por linha do bid + total', lido.length - iCab - 1, ls.length + 1);
@@ -266,6 +307,7 @@ console.log('\n--- 8. EXCEL: TODAS AS COLUNAS + CABEÇALHO DE PARÂMETROS ---');
     const v = (titulo) => l1[cab.indexOf(titulo)];
     ok('valores preenchidos (preço ofertado = frete sem ICMS)', perto(v('Preço ofertado R$'), ls[0].freteSemIcms));
     eq('custo motorista = piso × 1,10', cent(v('Custo motorista R$')), cent(ls[0].pisoAntt * 1.1));
+    eq('custo seguro DDR na linha = R$ 20', cent(v('Custo seguro R$')), 20);
     eq('linha de total', lido[lido.length - 1][0], 'Total');
 }
 

@@ -94,7 +94,9 @@ export const consultarRotaDoLote = async (
     if (falhouRota(r)) {
         return { ok: false, urbano: !!r.urbano, mensagem: r.mensagem || r.error };
     }
-    return { ok: true, rota: { km: r.km, pedagioCheio: r.estimatedTolls, pisoAntt: r.pisoAntt } };
+    // A qualp-rota consulta o Qualp na hora (não tem cache): a data da resposta
+    // é a data da consulta, que vai para o cabeçalho do Excel.
+    return { ok: true, rota: { km: r.km, pedagioCheio: r.estimatedTolls, pisoAntt: r.pisoAntt, consultadoEm: new Date().toISOString() } };
 };
 
 /**

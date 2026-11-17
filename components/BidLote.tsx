@@ -27,7 +27,7 @@ import {
     planejarLote, processarLoteBid, reaplicarLote, extrairCacheDeRotas,
     resumirBid, rotuloStatus, taxaAntecipacaoProporcional, TETO_ROTAS_DISTINTAS,
     COLUNAS_ABERTURA, totaisAbertura, validarAdicionalPiso, aplicarAdicionalLinhas, adicionalEditavel,
-    ADICIONAL_PISO_AVISO_PCT,
+    ADICIONAL_PISO_AVISO_PCT, TAXA_CUSTO_DDR_PADRAO,
     type LinhaBid, type LinhaBidBruta, type ParametrosBid, type PlanoLote, type SeguroModo,
     type ColunaAbertura, type FormatoColuna,
 } from '../utils/bidLote';
@@ -162,8 +162,11 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     const [adicionalPadrao, setAdicionalPadrao] = useState('0');
     /** Adicional próprio por linha (linhaExcel -> %). Ausente = segue o padrão. */
     const [adicionalPorLinha, setAdicionalPorLinha] = useState<Record<number, number>>({});
-    const [seguroModo, setSeguroModo] = useState<SeguroModo>('nao_definido');
+    // Ad valorem começa com o % cobrado VAZIO (não definido, com aviso); DDR
+    // começa cobrando 0 — trocar o modo reposiciona o campo nesse ponto de partida.
+    const [seguroModo, setSeguroModo] = useState<SeguroModo>('ad_valorem');
     const [seguroPct, setSeguroPct] = useState('');
+    const [taxaCustoDdr, setTaxaCustoDdr] = useState(String(TAXA_CUSTO_DDR_PADRAO).replace('.', ','));
     const [valorMercadoriaPadrao, setValorMercadoriaPadrao] = useState('');
     /** Valor de mercadoria editado na tela (linhaExcel -> R$). Vence o da planilha. */
     const [valorMercadoriaPorLinha, setValorMercadoriaPorLinha] = useState<Record<number, number>>({});
@@ -225,7 +228,8 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
         adicionalPisoPadraoPct: adicionalPadraoValido,
         adicionalPorLinha,
         seguroModo,
-        seguroPct: seguroModo === 'ad_valorem' ? (Number.isFinite(lerPercentual(seguroPct)) ? Math.max(0, lerPercentual(seguroPct)) : 0) : 0,
+        seguroPct: Number.isFinite(lerPercentual(seguroPct)) ? Math.max(0, lerPercentual(seguroPct)) : null,
+        taxaCustoDdrPct: Number.isFinite(lerPercentual(taxaCustoDdr)) ? Math.max(0, lerPercentual(taxaCustoDdr)) : TAXA_CUSTO_DDR_PADRAO,
         valorMercadoriaPadrao: lerReais(valorMercadoriaPadrao),
         valorMercadoriaPorLinha,
     });
@@ -245,7 +249,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [linhasBrutas, brutasArquivo, profitMargin, cargoType, jurosMensal, prazoDias,
         comissaoPercent, veiculoPadrao, deParaVeiculo, fedTaxes,
-        icmsIncluso, adicionalPadrao, adicionalPorLinha, seguroModo, seguroPct,
+        icmsIncluso, adicionalPadrao, adicionalPorLinha, seguroModo, seguroPct, taxaCustoDdr,
         valorMercadoriaPadrao, valorMercadoriaPorLinha]);
 
     const linhas = useMemo(() => (reaplicado ? ordenar(reaplicado.linhas) : null), [reaplicado]);
@@ -345,6 +349,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     const todasSelecionadas = editaveis.length > 0 && editaveis.every(n => selecionadas.has(n));
 
     const erro = (msg: string) => onFeedback?.(msg, 'error');
+    const seguroNaoDefinido = seguroModo === 'ad_valorem' && !Number.isFinite(lerPercentual(seguroPct));
 
     /** Edição de uma célula de adicional. Vazio = volta ao padrão da rodada. */
     const salvarAdicionalLinha = (linhaExcel: number, bruto: string): string | null => {
@@ -398,7 +403,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                 />
             );
         }
-        if (c.id === 'valorMercadoria' && seguroModo === 'ad_valorem') {
+        if (c.id === 'valorMercadoria') {
             const proprio = valorMercadoriaPorLinha[l.linhaExcel] != null;
             return (
                 <CelulaEditavel
@@ -407,7 +412,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                     proprio={proprio}
                     desabilitado={l.status !== 'ok'}
                     aviso={l.valorMercadoriaEfetivo == null}
-                    titulo="Valor da mercadoria desta linha (vazio = planilha ou padrão)"
+                    titulo="Valor da NF desta linha (vazio = planilha ou padrão)"
                     onSalvar={b => salvarValorMercadoriaLinha(l.linhaExcel, b)}
                     onErro={erro}
                 />
@@ -444,7 +449,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
     return (
         <div className="space-y-6">
             {/* Selos da rodada: fixos no topo enquanto a tabela rola. */}
-            {(!icmsIncluso || seguroModo === 'nao_definido') && (
+            {(!icmsIncluso || seguroNaoDefinido) && (
                 <div className="sticky top-0 z-30 space-y-2">
                     {!icmsIncluso && (
                         <div className="flex items-center gap-2 px-4 py-2.5 bg-[#1d6fb8] text-white rounded-xl shadow-sm">
@@ -452,10 +457,10 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                             <p className="text-xs font-medium">Preço SEM ICMS. ICMS por fora ou por conta do embarcador.</p>
                         </div>
                     )}
-                    {seguroModo === 'nao_definido' && (
+                    {seguroNaoDefinido && (
                         <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl">
                             <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" strokeWidth={1.75} />
-                            <p className="text-xs font-medium">Seguro não definido. Preços sem custo de seguro.</p>
+                            <p className="text-xs font-medium">Seguro não definido. Ad valorem cobrado do cliente ainda vazio.</p>
                         </div>
                     )}
                 </div>
@@ -554,7 +559,7 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
 
                 {/* Ajustes de custo da rodada */}
                 <h4 className="text-[10px] font-medium text-[#6b7280] uppercase tracking-widest mt-6 mb-4 pt-5 border-t border-[#f3f4f6]">Ajustes de custo</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <div>
                         <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">ICMS no preço</label>
                         <select
@@ -587,36 +592,62 @@ export const BidLote: React.FC<Props> = ({ fedTaxes, vehicleConfigs, tiposDeCarg
                         <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Seguro</label>
                         <select
                             value={seguroModo}
-                            onChange={e => setSeguroModo(e.target.value as SeguroModo)}
-                            className="w-full px-3 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors"
+                            onChange={e => {
+                                const modo = e.target.value as SeguroModo;
+                                setSeguroModo(modo);
+                                setSeguroPct(modo === 'ddr' ? '0' : '');
+                            }}
+                            className="w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors bg-[#f9fafb] border-[#e5e7eb]"
                         >
-                            <option value="nao_definido">Não definido</option>
-                            <option value="ddr">DDR (embarcador)</option>
                             <option value="ad_valorem">Ad valorem</option>
+                            <option value="ddr">DDR</option>
                         </select>
                     </div>
                     <div>
-                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Ad valorem (%)</label>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Ad valorem cobrado (%)</label>
                         <input
                             type="text"
                             inputMode="decimal"
                             value={seguroPct}
-                            disabled={seguroModo !== 'ad_valorem'}
                             onChange={e => { if (!e.target.value.includes('-')) setSeguroPct(e.target.value); }}
                             placeholder="Ex.: 0,10"
-                            className="w-full px-3 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors disabled:opacity-40"
+                            className={`w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors ${seguroNaoDefinido ? 'bg-amber-50 border-amber-300' : 'bg-[#f9fafb] border-[#e5e7eb]'}`}
                         />
+                        <p className={`text-[9px] font-medium mt-1.5 uppercase tracking-tight ${seguroNaoDefinido ? 'text-amber-700' : 'text-[#9ca3af]'}`}>
+                            {seguroNaoDefinido ? 'Seguro não definido' : 'Cobrado do cliente, entra no preço.'}
+                        </p>
                     </div>
                     <div>
-                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Valor mercadoria padrão (R$)</label>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Custo do seguro (%)</label>
+                        {seguroModo === 'ddr' ? (
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                value={taxaCustoDdr}
+                                onChange={e => { if (!e.target.value.includes('-')) setTaxaCustoDdr(e.target.value); }}
+                                className="w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors bg-[#f9fafb] border-[#e5e7eb]"
+                            />
+                        ) : (
+                            <input
+                                type="text"
+                                value={fedTaxes.insurancePolicyRate.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}
+                                disabled
+                                className="w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors bg-[#f9fafb] border-[#e5e7eb] disabled:opacity-60"
+                            />
+                        )}
+                        <p className="text-[9px] font-medium text-[#9ca3af] mt-1.5 uppercase tracking-tight">
+                            {seguroModo === 'ddr' ? 'Taxa DDR sobre a NF.' : 'Taxa da apólice (Configurações).'}
+                        </p>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tighter block mb-1.5">Valor NF padrão (R$)</label>
                         <input
                             type="text"
                             inputMode="decimal"
                             value={valorMercadoriaPadrao}
-                            disabled={seguroModo !== 'ad_valorem'}
                             onChange={e => { if (!e.target.value.includes('-')) setValorMercadoriaPadrao(e.target.value); }}
                             placeholder="Ex.: 500.000,00"
-                            className="w-full px-3 py-2.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors disabled:opacity-40"
+                            className="w-full px-3 py-2.5 border rounded-lg text-sm font-normal text-[#111827] outline-none focus:border-[#1d6fb8] transition-colors bg-[#f9fafb] border-[#e5e7eb]"
                         />
                         <p className="text-[9px] font-medium text-[#9ca3af] mt-1.5 uppercase tracking-tight">Para linhas sem valor de NF.</p>
                     </div>
