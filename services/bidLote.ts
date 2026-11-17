@@ -11,7 +11,7 @@ import { mapearColunas } from './fastDelivery';
 import { estimateDistance, falhouRota } from './geminiService';
 import {
     COLUNAS_BID, COLUNAS_BID_OPCIONAIS, montarLinhasBid, montarPlanilhaBid,
-    type LinhaBidBruta, type LinhaBid, type ParametrosBid, type RespostaRota,
+    type LinhaBidBruta, type LinhaBid, type ParametrosBid, type RespostaRota, type OpcoesPlanilhaBid,
 } from '../utils/bidLote';
 
 /**
@@ -103,11 +103,17 @@ export const consultarRotaDoLote = async (
  * Gera e baixa o .xlsx do resultado. O `xlsx` já estava no projeto (era usado
  * só para LER) — escrever não acrescenta dependência nenhuma.
  */
-export const exportarBidExcel = (linhas: LinhaBid[], parametros: ParametrosBid, nomeArquivo?: string): void => {
-    const data = new Date();
+export const exportarBidExcel = (
+    linhas: LinhaBid[],
+    parametros: ParametrosBid,
+    nomeArquivo?: string,
+    opcoes?: OpcoesPlanilhaBid,
+    dataCalculo?: Date,
+): void => {
+    const data = dataCalculo ?? new Date();
     // Bloco de parâmetros da rodada no topo e TODAS as colunas da abertura,
     // na ordem da tela — a mesma definição (COLUNAS_ABERTURA) alimenta as duas.
-    const aba = XLSX.utils.aoa_to_sheet(montarPlanilhaBid(linhas, parametros, data));
+    const aba = XLSX.utils.aoa_to_sheet(montarPlanilhaBid(linhas, parametros, data, opcoes));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, aba, 'Bid');
     const stamp = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;

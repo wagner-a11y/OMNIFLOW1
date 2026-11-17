@@ -1094,28 +1094,57 @@ const ROTULO_ROTA: Record<LinhaBid['fonteRota'], string> = {
     qualp: 'Consultada no Qualp', cache: 'Reusada (dedup)', 'nao-consultada': 'Não consultada',
 };
 
+/** O que o histórico de bids acrescenta à planilha. Tudo opcional. */
+export interface OpcoesPlanilhaBid {
+    /** Linhas antes dos parâmetros: nome do bid, cliente, rodada, status. */
+    cabecalho?: [string, string][];
+    /**
+     * Preço ofertado da rodada anterior por linhaExcel (Rodada 2 em diante).
+     * Presente = entram "Preço rodada anterior R$" e "Variação %" logo depois
+     * de "Preço ofertado R$". Ausente = a planilha é a de sempre.
+     */
+    precoAnterior?: Record<number, number | null> | null;
+}
+
 /**
  * A planilha inteira como matriz (`XLSX.utils.aoa_to_sheet`): bloco de
  * parâmetros da rodada, linha em branco, cabeçalho e as linhas com TODAS as
  * colunas da abertura, na mesma ordem da tela, e a linha de totais.
  */
-export const montarPlanilhaBid = (linhas: LinhaBid[], p: ParametrosBid, dataCalculo: Date): (string | number)[][] => {
+export const montarPlanilhaBid = (linhas: LinhaBid[], p: ParametrosBid, dataCalculo: Date, opcoes: OpcoesPlanilhaBid = {}): (string | number)[][] => {
     const vazio = (v: number | string | null) => (v == null ? '' : v);
     const tot = totaisAbertura(linhas);
+    const anterior = opcoes.precoAnterior;
+    // Ponto de inserção da comparação: logo depois do preço ofertado.
+    const iOfertado = COLUNAS_ABERTURA.findIndex(c => c.id === 'precoOfertado') + 1;
+    const comComparacao = <T>(colunas: T[], extra: (() => T[]) | null): T[] =>
+        anterior && extra ? [...colunas.slice(0, iOfertado), ...extra(), ...colunas.slice(iOfertado)] : colunas;
+    const totalAnterior = anterior
+        ? linhas.filter(l => l.status === 'ok').reduce((a, l) => a + (anterior[l.linhaExcel] ?? 0), 0)
+        : 0;
     return [
+        ...(opcoes.cabecalho?.length ? [...opcoes.cabecalho, []] : []),
         ['Parâmetros da rodada'],
         ...parametrosRodadaExcel(p, dataCalculo, linhas),
         [],
-        ['Linha', ...COLUNAS_ABERTURA.map(c => c.titulo), 'Adicional próprio', 'Status', 'Rota', 'Observações'],
-        ...linhas.map(l => [
-            l.linhaExcel,
-            ...COLUNAS_ABERTURA.map(c => vazio(c.valor(l))),
-            l.adicionalProprio ? 'Sim' : '',
-            rotuloStatus(l),
-            ROTULO_ROTA[l.fonteRota],
-            [...l.pendencias, ...l.alertas].join(' | '),
-        ]),
-        ['Total', ...COLUNAS_ABERTURA.map(c => vazio(tot[c.id] ?? null)), '', '', '', ''],
+        ['Linha', ...comComparacao(COLUNAS_ABERTURA.map(c => c.titulo), () => ['Preço rodada anterior R$', 'Variação %']),
+            'Adicional próprio', 'Status', 'Rota', 'Observações'],
+        ...linhas.map(l => {
+            const ant = anterior?.[l.linhaExcel] ?? null;
+            const variacao = ant != null && ant !== 0 && l.precoOfertado != null ? (l.precoOfertado / ant - 1) * 100 : null;
+            return [
+                l.linhaExcel,
+                ...comComparacao(COLUNAS_ABERTURA.map(c => vazio(c.valor(l))), () => [vazio(ant), vazio(variacao)]),
+                l.adicionalProprio ? 'Sim' : '',
+                rotuloStatus(l),
+                ROTULO_ROTA[l.fonteRota],
+                [...l.pendencias, ...l.alertas].join(' | '),
+            ];
+        }),
+        ['Total', ...comComparacao(COLUNAS_ABERTURA.map(c => vazio(tot[c.id] ?? null)), () => [
+            totalAnterior || '',
+            totalAnterior && tot.precoOfertado ? (tot.precoOfertado / totalAnterior - 1) * 100 : '',
+        ]), '', '', '', ''],
     ];
 };
 
