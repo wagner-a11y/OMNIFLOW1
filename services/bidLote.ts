@@ -10,8 +10,8 @@ import * as XLSX from 'xlsx';
 import { mapearColunas } from './fastDelivery';
 import { estimateDistance, falhouRota } from './geminiService';
 import {
-    COLUNAS_BID, montarLinhasBid, linhasParaExcel,
-    type LinhaBidBruta, type LinhaBid, type RespostaRota,
+    COLUNAS_BID, COLUNAS_BID_OPCIONAIS, montarLinhasBid, montarPlanilhaBid,
+    type LinhaBidBruta, type LinhaBid, type ParametrosBid, type RespostaRota,
 } from '../utils/bidLote';
 
 /**
@@ -65,8 +65,12 @@ export const lerPlanilhaBid = (buffer: ArrayBuffer): {
         bruto = primeiraComDados.bruto; mapa = primeiraComDados.mapa; faltando = primeiraComDados.faltando;
     }
 
+    // Valor de mercadoria / NF e tabela de compra: lidos se existirem, e a falta
+    // deles não entra no aviso de coluna não encontrada.
+    const opcionais = bruto.length ? mapearColunas(Object.keys(bruto[0]), COLUNAS_BID_OPCIONAIS).mapa : {};
+
     return {
-        linhas: montarLinhasBid(bruto, mapa),
+        linhas: montarLinhasBid(bruto, { ...mapa, ...opcionais }),
         faltando,
         totalLinhas: bruto.length,
         abaUsada: escolhida || (abas[0] ?? ''),
@@ -97,11 +101,13 @@ export const consultarRotaDoLote = async (
  * Gera e baixa o .xlsx do resultado. O `xlsx` já estava no projeto (era usado
  * só para LER) — escrever não acrescenta dependência nenhuma.
  */
-export const exportarBidExcel = (linhas: LinhaBid[], nomeArquivo?: string): void => {
-    const aba = XLSX.utils.json_to_sheet(linhasParaExcel(linhas));
+export const exportarBidExcel = (linhas: LinhaBid[], parametros: ParametrosBid, nomeArquivo?: string): void => {
+    const data = new Date();
+    // Bloco de parâmetros da rodada no topo e TODAS as colunas da abertura,
+    // na ordem da tela — a mesma definição (COLUNAS_ABERTURA) alimenta as duas.
+    const aba = XLSX.utils.aoa_to_sheet(montarPlanilhaBid(linhas, parametros, data));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, aba, 'Bid');
-    const data = new Date();
     const stamp = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
     XLSX.writeFile(wb, nomeArquivo || `bid-em-lote-${stamp}.xlsx`);
 };

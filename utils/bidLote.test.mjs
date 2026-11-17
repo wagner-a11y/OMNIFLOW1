@@ -263,10 +263,10 @@ console.log('\n--- EXPORT ---');
     const rows = linhasParaExcel(r.linhas);
     eq('uma linha por linha do lote', rows.length, 8);
     const cols = Object.keys(rows[0]);
-    ok('tem as colunas do resultado', ['Origem', 'Destino', 'Veículo', 'KM', 'Pedágio', 'Piso ANTT', 'Custo base (piso + pedágio)', 'Preço sugerido', 'Margem líquida %', 'Status'].every(c => cols.includes(c)), `colunas: ${cols.join(', ')}`);
+    ok('tem as colunas do resultado', ['Origem', 'Destino', 'Veículo', 'Km', 'Pedágio R$', 'Piso ANTT R$', 'Custo direto R$', 'Preço ofertado R$', 'Margem líquida %', 'Status'].every(c => cols.includes(c)), `colunas: ${cols.join(', ')}`);
     const urbana = rows.find(x => x['Linha'] === 5);
     eq('linha urbana sai com status legivel', urbana['Status'], 'Frete urbano');
-    eq('e sem numero inventado', [urbana['Preço sugerido'], urbana['Piso ANTT']], ['', '']);
+    eq('e sem numero inventado', [urbana['Preço ofertado R$'], urbana['Piso ANTT R$']], ['', '']);
     ok('observacao carrega o motivo', String(rows.find(x => x['Linha'] === 6)['Observações']).includes('QUALP_TIMEOUT'));
 }
 
@@ -512,12 +512,12 @@ console.log('\n--- EXPORT: ICMS e federais vao pro Excel ---');
     const r7 = await processarLoteBid(AMOSTRA, PARAMS, { consultarRota: s7.consultarRota, concorrencia: 3 });
     const rows = linhasParaExcel(r7.linhas);
     const cols = Object.keys(rows[0]);
-    ok('tem ICMS % e R$', cols.includes('ICMS %') && cols.includes('ICMS R$'), cols.join(', '));
-    ok('tem Federais R$', cols.includes('Federais R$'));
-    ok('tem a taxa de antecipacao', cols.includes('Taxa antecipação %'));
+    ok('tem ICMS % e R$', cols.includes('Alíquota ICMS %') && cols.includes('ICMS R$'), cols.join(', '));
+    ok('tem Federais R$', cols.includes('Impostos federais R$'));
+    ok('tem a taxa de antecipacao', cols.includes('Custo financeiro %'));
     ok('tem as UFs', cols.includes('UF origem') && cols.includes('UF destino'));
     const boa = rows.find(x => x['Linha'] === 2);
-    ok('e os valores estao preenchidos na linha boa', boa['ICMS R$'] > 0 && boa['Federais R$'] > 0);
+    ok('e os valores estao preenchidos na linha boa', boa['ICMS R$'] > 0 && boa['Impostos federais R$'] > 0);
 }
 
 console.log('\n--- DE-PARA RESOLVE DE VERDADE (regressao do bug) ---');
