@@ -36,6 +36,8 @@ export interface ParametrosTela {
     comissaoPercent: string;
     deParaVeiculo: Record<string, string>;
     icmsIncluso: boolean;
+    /** false = pedágio por VPO, por conta do cliente. Ausente em rodada antiga = true. */
+    pedagioIncluso: boolean;
     adicionalPadrao: string;
     seguroModo: SeguroModo;
     seguroPct: string;
@@ -54,6 +56,7 @@ export const parametrosTelaPadrao = (cargoType: string): ParametrosTela => ({
     comissaoPercent: '',
     deParaVeiculo: {},
     icmsIncluso: true,
+    pedagioIncluso: true,
     adicionalPadrao: '0',
     seguroModo: 'ad_valorem',
     seguroPct: '',
@@ -333,7 +336,13 @@ export interface RepositorioBid {
     substituirLinhas(rodadaId: string, versao: number, parametros: ParametrosRodada | null, linhas: RegistroLinha[]): Promise<RespostaGravacao>;
     mudarStatus(rodadaId: string, versao: number, status: StatusRodada): Promise<RespostaGravacao>;
     novaRodada(bidId: string): Promise<{ rodadaId: string; numero: number }>;
+    /** Exclusão LÓGICA (deleted_at). Só master — o banco recusa os demais. */
+    excluirBid(bidId: string): Promise<void>;
 }
+
+/** Confirmação de exclusão: digitar o nome do bid (espaços nas pontas não contam). */
+export const confirmacaoExclusaoOk = (digitado: string, nomeBid: string): boolean =>
+    digitado.trim() !== '' && digitado.trim() === nomeBid.trim();
 
 // ---------------------------------------------------------------------------
 // Salvamento
@@ -451,3 +460,11 @@ export class SalvadorRodada {
     /** Depois de fechar/reabrir a rodada: a versão andou por uma ação que não é gravação de linhas. */
     definirVersao(v: number) { this.versao = v; }
 }
+
+/**
+ * Texto da tela salvo numa rodada, completado com os padrões: rodada salva
+ * antes de um parâmetro existir (ex.: pedágio por VPO) abre com o padrão
+ * dele, que é o comportamento da época.
+ */
+export const completarTela = (salva: Partial<ParametrosTela> | null | undefined, cargoType: string): ParametrosTela =>
+    ({ ...parametrosTelaPadrao(cargoType), ...(salva ?? {}) });

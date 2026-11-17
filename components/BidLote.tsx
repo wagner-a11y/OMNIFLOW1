@@ -134,6 +134,7 @@ const calcularParametros = (
         comissaoPercent: t.comissaoPercent,
         comissaoPadrao: fedTaxes.commissionPercent,
         icmsIncluso: t.icmsIncluso,
+        pedagioIncluso: t.pedagioIncluso,
         adicionalPisoPadraoPct: Number.isFinite(adicional) ? Math.max(0, adicional) : 0,
         adicionalPorLinha,
         seguroModo: t.seguroModo,
@@ -507,7 +508,15 @@ export const BidLote: React.FC<Props> = ({
             total: parTotal(totais?.adicionalPisoRS),
         },
         { id: 'motorista', titulo: 'Custo motorista R$', largura: 72, celula: l => n2(l.custoMotorista), total: parTotal(totais?.custoMotorista) },
-        { id: 'pedagio', titulo: 'Pedágio R$', largura: 60, celula: l => n2(l.pedagio), total: parTotal(totais?.pedagio) },
+        tela.pedagioIncluso
+            ? { id: 'pedagio', titulo: 'Pedágio R$', largura: 60, celula: l => n2(l.pedagio), total: parTotal(totais?.pedagio), copiar: l => l.pedagio }
+            : {
+                id: 'pedagio', titulo: 'Pedágio VPO (fora do preço) R$', largura: 70,
+                // Só referência: o cliente paga por VPO, não entra no preço nem no custo.
+                celula: l => <span className="text-[#6b7280] italic">{n2(l.pedagio)}</span>,
+                total: <span className="text-[#6b7280] italic">{parTotal(totais?.pedagio)}</span>,
+                copiar: l => l.pedagio,
+            },
         { id: 'direto', titulo: 'Custo direto R$', largura: 72, custo: true, celula: l => n2(l.custoBase), total: parTotal(totais?.custoDireto) },
         {
             id: 'nf', titulo: 'Valor NF R$', largura: 80, custo: true,
@@ -642,12 +651,18 @@ export const BidLote: React.FC<Props> = ({
             </div>
 
             {/* Selos da rodada */}
-            {(!tela.icmsIncluso || seguroNaoDefinido) && (
+            {(!tela.icmsIncluso || !tela.pedagioIncluso || seguroNaoDefinido) && (
                 <div className="flex flex-wrap gap-2">
                     {!tela.icmsIncluso && (
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1d6fb8] text-white rounded-md">
                             <Info className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
                             <p className="text-[12px] font-medium">Preço SEM ICMS. ICMS por fora ou por conta do embarcador.</p>
+                        </div>
+                    )}
+                    {!tela.pedagioIncluso && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1d6fb8] text-white rounded-md">
+                            <Info className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+                            <p className="text-[12px] font-medium">Pedágio por VPO, por conta do cliente. Fora do preço.</p>
                         </div>
                     )}
                     {seguroNaoDefinido && (
@@ -671,14 +686,14 @@ export const BidLote: React.FC<Props> = ({
                             Parâmetros e ajustes de custo
                         </span>
                         <span className="text-[11px] text-[#6b7280] truncate ml-4">
-                            Margem {tela.profitMargin}% · ICMS {tela.icmsIncluso ? 'incluso' : 'por fora'} · Adicional {tela.adicionalPadrao || 0}% ·{' '}
+                            Margem {tela.profitMargin}% · ICMS {tela.icmsIncluso ? 'incluso' : 'por fora'} · Pedágio {tela.pedagioIncluso ? 'incluso' : 'VPO'} · Adicional {tela.adicionalPadrao || 0}% ·{' '}
                             {tela.seguroModo === 'ddr' ? 'DDR' : 'Ad valorem'} · Prazo {tela.prazoDias} dias
                             {somenteLeitura && ' · somente leitura'}
                         </span>
                     </button>
                     {ajustesAbertos && (
                         <fieldset disabled={somenteLeitura} className="px-4 pb-4 pt-1 border-t border-[#f3f4f6]">
-                            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-12 gap-3 mt-3">
+                            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 2xl:grid-cols-[repeat(13,minmax(0,1fr))] gap-3 mt-3">
                                 <div>
                                     <label className={rotulo}>Veículo padrão</label>
                                     <select value={tela.veiculoPadrao} onChange={e => alterar('veiculoPadrao', e.target.value)} className={campo}>
@@ -719,6 +734,13 @@ export const BidLote: React.FC<Props> = ({
                                     <select value={tela.icmsIncluso ? 'sim' : 'nao'} onChange={e => alterar('icmsIncluso', e.target.value === 'sim')} className={campo}>
                                         <option value="sim">Incluso</option>
                                         <option value="nao">Por fora</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={rotulo}>Pedágio no preço</label>
+                                    <select value={tela.pedagioIncluso ? 'sim' : 'vpo'} onChange={e => alterar('pedagioIncluso', e.target.value === 'sim')} className={campo}>
+                                        <option value="sim">Incluso no frete</option>
+                                        <option value="vpo">VPO (cliente)</option>
                                     </select>
                                 </div>
                                 <div>
@@ -932,6 +954,7 @@ export const BidLote: React.FC<Props> = ({
                         { rot: 'Com alerta', val: String(resumo.comAlerta), cor: resumo.comAlerta > 0 ? 'text-red-600' : 'text-[#9ca3af]' },
                         { rot: 'Margem líq. média', val: p2(resumo.margemLiquidaMedia), cor: 'text-[#111827]' },
                         { rot: 'Preço ofertado total R$', val: n2(resumo.totalPrecoSugerido), cor: 'text-[#1d6fb8]' },
+                        ...(!tela.pedagioIncluso ? [{ rot: 'Pedágio VPO total R$ (fora do preço)', val: n2(totais?.pedagio ?? null), cor: 'text-[#6b7280]' }] : []),
                     ].map(c => (
                         <div key={c.rot} className="bg-white border border-[#e5e7eb] rounded-lg px-3 py-1.5 flex items-baseline gap-2">
                             <span className="text-[10px] font-medium text-[#6b7280] uppercase tracking-tight">{c.rot}</span>

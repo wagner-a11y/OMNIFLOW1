@@ -21,7 +21,7 @@ import {
 import {
     SalvadorRodada, montarRegistros, cacheDasEntradas, assinaturaRegistro, diferencaRegistros, precoPorChave,
     textoCopiaColuna, formatarValorCopia, validarNomeBid, classificarErro, nomeArquivoRodada, jsonCanonico,
-    parametrosTelaPadrao, variacaoPercentual,
+    parametrosTelaPadrao, variacaoPercentual, confirmacaoExclusaoOk,
 } from './bidHistorico.ts';
 import { RepositorioBidMemoria } from './bidHistoricoMemoria.ts';
 import { BidLote } from '../components/BidLote.tsx';
@@ -351,6 +351,22 @@ console.log('\n--- REABRIR: SÓ MASTER E SÓ A ÚLTIMA ---');
     c = await repo.carregarRodada(rod2);
     eq('master reabre a última', (await repo.mudarStatus(rod2, c.rodada.versao, 'rascunho')).ok, true);
     eq('nova rodada com a última em rascunho: recusada', await repo.novaRodada(bidId).then(() => 'criou', e => classificarErro(e).tipo), 'rodada_aberta');
+}
+
+console.log('\n--- EXCLUIR BID (só master, lógica) ---');
+{
+    eq('confirmação: nome exato', confirmacaoExclusaoOk(' Bid Suzano 2027 ', 'Bid Suzano 2027'), true);
+    eq('confirmação: nome diferente não libera', confirmacaoExclusaoOk('bid suzano', 'Bid Suzano 2027'), false);
+    eq('confirmação: vazio não libera', confirmacaoExclusaoOk('', 'Bid Suzano 2027'), false);
+    repo.comoUsuario(ANA);
+    eq('operador não exclui', await repo.excluirBid(bidId).then(() => 'excluiu', e => classificarErro(e).tipo), 'so_master');
+    ok('e o bid continua na lista', (await repo.listarBids()).some(b => b.id === bidId));
+    repo.comoUsuario(MARIA);
+    await repo.excluirBid(bidId);
+    ok('master exclui: some da lista', !(await repo.listarBids()).some(b => b.id === bidId));
+    const novo = await repo.criarBid('Bid Suzano 2027', 'Suzano', '');
+    ok('e o nome fica livre para um bid novo', !!novo.bidId && novo.bidId !== bidId);
+    ok('as rodadas do excluído continuam no repositório (exclusão lógica)', (await repo.carregarRodada(rod1)).registros.length > 0);
 }
 
 console.log('\n--- COPIAR VALOR DO FRETE ---');

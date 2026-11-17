@@ -189,6 +189,15 @@ export const repositorioBidSupabase: RepositorioBid = {
         return lerResposta(data);
     },
 
+    async excluirBid(bidId) {
+        // Exclusão lógica: o trigger grava deleted_by e recusa quem não é master.
+        const { data, error } = await supabase.from('bid')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', bidId).is('deleted_at', null).select('id');
+        if (error) throw error;
+        if (!data?.length) throw new Error('BID_INEXISTENTE: bid não encontrado ou já excluído.');
+    },
+
     async novaRodada(bidId) {
         const { data, error } = await supabase.rpc('bid_nova_rodada', { p_bid_id: bidId });
         if (error) throw error;

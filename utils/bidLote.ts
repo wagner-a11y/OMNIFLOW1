@@ -228,7 +228,7 @@ export interface LinhaBid extends LinhaBidBruta {
     km: number | null;
     pedagio: number | null;
     pisoAntt: number | null;
-    /** Custo direto: custo motorista + pedágio. Sem adicional, = piso ANTT + pedágio. */
+    /** Custo direto: custo motorista + pedágio no preço (zero em VPO). Sem adicional, = piso ANTT + pedágio. */
     custoBase: number | null;
     icmsPercent: number | null;
     icmsRS: number | null;
@@ -270,6 +270,10 @@ export interface LinhaBid extends LinhaBidBruta {
     freteComIcms: number | null;
     /** Frete com ICMS se a rodada é com ICMS incluso; senão, frete sem ICMS. */
     precoOfertado: number | null;
+    /** Pedágio que está DENTRO do preço (0 quando o cliente paga por VPO). */
+    pedagioNoPrecoRS: number | null;
+    /** Pedágio do Qualp pago pelo cliente por VPO: só referência, fora do preço. */
+    pedagioVpoRS: number | null;
     /** ICMS que está DENTRO do preço ofertado (0 quando o ICMS vai por fora). */
     icmsNoPrecoRS: number | null;
     /** Frete sem ICMS / custo direto (formato 1,20). */
@@ -316,6 +320,11 @@ export interface ParametrosBid {
     // ---- Ajustes de custo. Todos opcionais; o default é o comportamento anterior ----
     /** false = preço ofertado SEM ICMS (ICMS por fora). Default true. */
     icmsIncluso?: boolean;
+    /**
+     * false = pedágio por VPO, por conta do cliente: sai da formação do preço
+     * e do custo da linha (o motor recebe pedágio zero). Default true.
+     */
+    pedagioIncluso?: boolean;
     /** Adicional sobre o piso ANTT (%) das linhas sem valor próprio. Default 0. */
     adicionalPisoPadraoPct?: number;
     /** Adicional próprio por linha: linhaExcel -> %. Ausente = segue o padrão. */
@@ -436,7 +445,7 @@ const ABERTURA_VAZIA = {
     adicionalPisoPct: null, adicionalProprio: false, adicionalPisoRS: null, custoMotorista: null,
     valorMercadoriaEfetivo: null, seguroPct: null, seguroRS: null, seguroCustoPct: null, seguroCustoRS: null,
     comissaoPct: null, federaisPct: null, freteSemIcms: null, freteComIcms: null,
-    precoOfertado: null, icmsNoPrecoRS: null, markup: null,
+    precoOfertado: null, pedagioNoPrecoRS: null, pedagioVpoRS: null, icmsNoPrecoRS: null, markup: null,
 } as const;
 
 /**
@@ -614,8 +623,13 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
     const tabelaCompra = linha.tabelaCompra ?? null;
     const custoMotorista = tabelaCompra != null ? Math.max(pisoComAdicional, tabelaCompra) : pisoComAdicional;
 
-    // Custo direto: custo motorista + pedágio.
-    const custoBase = custoMotorista + rota.pedagioCheio;
+    // Custo direto: custo motorista + pedágio que está no preço.
+    // PEDÁGIO: incluso (padrão) ou VPO por conta do cliente. Em VPO o motor
+    // recebe pedágio ZERO — sai do preço e do custo — e o valor do Qualp fica
+    // na linha só como referência. Incluso = exatamente a conta de antes.
+    const pedagioIncluso = p.pedagioIncluso ?? true;
+    const pedagioNoPreco = pedagioIncluso ? rota.pedagioCheio : 0;
+    const custoBase = custoMotorista + pedagioNoPreco;
 
     // ICMS pela UF da rota, com os overrides do master. Sem UF reconhecida o
     // getIcmsRate cai no seu próprio padrão (12%) — mesma regra da calculadora.
@@ -637,7 +651,7 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
 
     const entrada = {
         baseFreight: custoMotorista,    // o que se paga ao terceiro
-        tolls: rota.pedagioCheio,
+        tolls: pedagioNoPreco,
         extraCosts: 0,
         otherCosts: [],
         goodsValue: comSeguro ? valorMercadoriaEfetivo : 0,
@@ -716,6 +730,8 @@ export const calcularLinhaBid = (linha: LinhaBid, rota: RotaDoLote, p: Parametro
         freteSemIcms: semIcms.finalFreight,
         freteComIcms: comIcms.finalFreight,
         precoOfertado: preco.finalFreight,
+        pedagioNoPrecoRS: pedagioNoPreco,
+        pedagioVpoRS: pedagioIncluso ? 0 : rota.pedagioCheio,
         icmsNoPrecoRS: preco.icmsAmount,
         markup: custoBase > 0 ? semIcms.finalFreight / custoBase : null,
     };
@@ -1075,6 +1091,7 @@ export const parametrosRodadaExcel = (p: ParametrosBid, dataCalculo: Date, linha
     const taxaCusto = seguroModo === 'ddr' ? (p.taxaCustoDdrPct ?? TAXA_CUSTO_DDR_PADRAO) : p.fedTaxes.insurancePolicyRate;
     return [
         ['ICMS', (p.icmsIncluso ?? true) ? 'Incluso no preço' : 'NÃO incluso (ICMS por fora ou por conta do embarcador)'],
+        ['Pedágio', (p.pedagioIncluso ?? true) ? 'incluso no frete' : 'VPO por conta do cliente, fora do preço'],
         ['Adicional padrão sobre o piso', `${n(p.adicionalPisoPadraoPct ?? 0)}%`],
         ['Seguro', seguroModo ? ROTULO_SEGURO[seguroModo] : 'Sem seguro'],
         ['Ad valorem cobrado', p.seguroPct != null ? `${n(p.seguroPct, 3)}%` : 'Não definido'],

@@ -11,10 +11,10 @@
 // ============================================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, FileDown, FolderOpen, Lock, LockOpen, Plus, RotateCcw, Search } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, FileDown, FolderOpen, Lock, LockOpen, Plus, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { BidLote, type MudancaRodada } from './BidLote';
 import {
-    SalvadorRodada, classificarErro, nomeArquivoRodada, parametrosTelaPadrao, precoPorChave, validarNomeBid,
+    SalvadorRodada, classificarErro, completarTela, confirmacaoExclusaoOk, nomeArquivoRodada, precoPorChave, validarNomeBid,
     type BidResumo, type RepositorioBid, type RodadaCarregada, type RodadaResumo, type SituacaoSalvamento,
 } from '../utils/bidHistorico';
 import { exportarBidExcel } from '../services/bidLote';
@@ -22,6 +22,14 @@ import type { LinhaBid, ParametrosBid } from '../utils/bidLote';
 import type { ANTTCoefficients, FederalTaxes } from '../types';
 
 const ESPERA_SALVAR_MS = 2000;
+/**
+ * Preferência de tela cheia da planilha. Lista e pasta sempre abrem com o
+ * menu; a planilha volta como foi deixada. localStorage: é conveniência do
+ * navegador de quem usa, e a falta dele só faz a tela abrir normal.
+ */
+const CHAVE_TELA_CHEIA = 'bidLote.telaCheia';
+const lerTelaCheia = (): boolean => { try { return localStorage.getItem(CHAVE_TELA_CHEIA) === '1'; } catch { return false; } };
+const gravarTelaCheia = (v: boolean) => { try { localStorage.setItem(CHAVE_TELA_CHEIA, v ? '1' : '0'); } catch { /* sem armazenamento */ } };
 
 type Tela =
     | { tipo: 'lista' }
@@ -120,6 +128,7 @@ export const BidHistorico: React.FC<Props> = props => {
                 repositorio={repositorio}
                 ehMaster={props.ehMaster}
                 onVoltar={() => setTela({ tipo: 'lista' })}
+                onExcluido={() => setTela({ tipo: 'lista' })}
                 onAbrirRodada={rodadaId => setTela({ tipo: 'rodada', bidId: tela.bidId, rodadaId })}
                 onFeedback={onFeedback}
             />
@@ -269,10 +278,27 @@ const PastaBid: React.FC<{
     repositorio: RepositorioBid;
     ehMaster: boolean;
     onVoltar: () => void;
+    onExcluido: () => void;
     onAbrirRodada: (rodadaId: string) => void;
     onFeedback?: Props['onFeedback'];
-}> = ({ bid, bidId, repositorio, onVoltar, onAbrirRodada, onFeedback }) => {
+}> = ({ bid, bidId, repositorio, ehMaster, onVoltar, onExcluido, onAbrirRodada, onFeedback }) => {
     const [rodadas, setRodadas] = useState<RodadaResumo[] | null>(null);
+    const [excluindo, setExcluindo] = useState(false);
+    const [nomeDigitado, setNomeDigitado] = useState('');
+
+    const excluir = async () => {
+        if (!bid || !confirmacaoExclusaoOk(nomeDigitado, bid.nome)) return;
+        setOcupado(true);
+        try {
+            await repositorio.excluirBid(bidId);
+            onFeedback?.(`Bid "${bid.nome}" excluído. O nome fica livre para um bid novo.`, 'success');
+            onExcluido();
+        } catch (e) {
+            onFeedback?.(classificarErro(e).mensagem, 'error');
+        } finally {
+            setOcupado(false);
+        }
+    };
     const [erro, setErro] = useState<string | null>(null);
     const [ocupado, setOcupado] = useState(false);
 
@@ -321,12 +347,41 @@ const PastaBid: React.FC<{
                     <span className="font-medium text-[#111827]">{bid?.nome ?? '…'}</span>
                     {bid?.cliente && <span className="text-[#6b7280]">· {bid.cliente}</span>}
                 </div>
-                {ultima?.status === 'fechada' && (
-                    <button onClick={novaRodada} disabled={ocupado} className={botaoPrimario}>
-                        <Plus className="w-3.5 h-3.5" strokeWidth={1.75} /> Nova rodada
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {ehMaster && bid && (
+                        <button onClick={() => { setExcluindo(true); setNomeDigitado(''); }} className={`${botao} bg-white border border-red-200 text-red-600 hover:bg-red-50`}>
+                            <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} /> Excluir bid
+                        </button>
+                    )}
+                    {ultima?.status === 'fechada' && (
+                        <button onClick={novaRodada} disabled={ocupado} className={botaoPrimario}>
+                            <Plus className="w-3.5 h-3.5" strokeWidth={1.75} /> Nova rodada
+                        </button>
+                    )}
+                </div>
             </div>
+            {excluindo && bid && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2">
+                    <p className="text-[12px] text-red-900">
+                        Excluir o bid <strong>{bid.nome}</strong> e as {rodadas?.length ?? 0} rodada(s)? Ele some da lista e o nome fica livre.
+                        A exclusão é lógica: os dados continuam no banco. Para confirmar, digite o nome do bid.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <input
+                            autoFocus value={nomeDigitado} onChange={e => setNomeDigitado(e.target.value)} placeholder={bid.nome}
+                            className="w-80 px-2.5 py-1.5 bg-white border border-red-200 rounded-md text-[13px] outline-none focus:border-red-400"
+                        />
+                        <button
+                            onClick={excluir}
+                            disabled={ocupado || !confirmacaoExclusaoOk(nomeDigitado, bid.nome)}
+                            className={`${botao} bg-red-600 text-white hover:bg-red-700`}
+                        >
+                            Excluir bid
+                        </button>
+                        <button onClick={() => setExcluindo(false)} className={botaoSecundario}>Cancelar</button>
+                    </div>
+                </div>
+            )}
             {bid?.observacao && <p className="text-[12px] text-[#6b7280]">{bid.observacao}</p>}
             {erro && <p className="text-[12px] text-red-600">{erro}</p>}
 
@@ -393,6 +448,10 @@ const RodadaBid: React.FC<Props & {
     const [recarga, setRecarga] = useState(0);
     const salvadorRef = useRef<SalvadorRodada | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Abre como foi deixada da última vez; ligar/desligar aqui é o que fica lembrado.
+    useEffect(() => { onTelaCheia(lerTelaCheia()); }, [onTelaCheia]);
+    const definirTelaCheia = useCallback((v: boolean) => { gravarTelaCheia(v); onTelaCheia(v); }, [onTelaCheia]);
 
     useEffect(() => {
         let vivo = true;
@@ -555,7 +614,7 @@ const RodadaBid: React.FC<Props & {
             vehicleConfigs={vehicleConfigs}
             tiposDeCarga={tiposDeCarga}
             onFeedback={onFeedback}
-            inicial={{ tela: rodada.parametros?.tela ?? parametrosTelaPadrao(tiposDeCarga[0] || 'Carga geral'), registros }}
+            inicial={{ tela: completarTela(rodada.parametros?.tela, tiposDeCarga[0] || 'Carga geral'), registros }}
             somenteLeitura={fechada}
             calculoSalvo={rodada.parametros?.calculo ?? null}
             precoAnterior={anterior ? precoPorChave(anterior) : null}
@@ -567,7 +626,7 @@ const RodadaBid: React.FC<Props & {
             }}
             barraTopo={barraTopo}
             telaCheia={telaCheia}
-            onTelaCheia={onTelaCheia}
+            onTelaCheia={definirTelaCheia}
         />
     );
 };

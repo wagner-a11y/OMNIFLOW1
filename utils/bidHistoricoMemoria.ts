@@ -175,6 +175,14 @@ export class RepositorioBidMemoria implements RepositorioBid {
         return { ok: true, versao: r.versao };
     }
 
+    async excluirBid(bidId: string): Promise<void> {
+        this.talvezFalhar();
+        if (!this.usuario.master) throw new Error('SO_MASTER: só o master exclui ou restaura um bid.');
+        const b = this.bids.find(x => x.id === bidId && !x.deletedAt);
+        if (!b) throw new Error('BID_INEXISTENTE: bid não encontrado ou excluído.');
+        b.deletedAt = this.agora();
+    }
+
     async novaRodada(bidId: string) {
         this.talvezFalhar();
         const doBid = this.rodadas.filter(r => r.bidId === bidId).sort((a, b) => b.numero - a.numero);
