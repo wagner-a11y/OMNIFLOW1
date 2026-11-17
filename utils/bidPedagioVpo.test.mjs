@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { calcularPreco } from './motorPreco.ts';
 import {
     prepararLinha, calcularLinhaBid, reaplicarLote, processarLoteBid, planejarLote, extrairCacheDeRotas,
-    montarPlanilhaBid, totaisAbertura,
+    montarPlanilhaBid, totaisAbertura, COLUNAS_ABERTURA,
 } from './bidLote.ts';
 import { textoCopiaColuna, completarTela } from './bidHistorico.ts';
 
@@ -118,6 +118,16 @@ console.log('\n--- TOTAIS, CÓPIA E EXCEL ---');
     const cab = (p) => Object.fromEntries(montarPlanilhaBid(ls, p, new Date()).filter(r => r.length === 2).map(r => [r[0], r[1]]));
     eq('Excel com VPO', cab({ ...P, pedagioIncluso: false })['Pedágio'], 'VPO por conta do cliente, fora do preço');
     eq('Excel com pedágio incluso', cab(P)['Pedágio'], 'incluso no frete');
+
+    // Título da coluna de pedágio: muda com o modo, na MESMA posição.
+    const colunas = (p) => montarPlanilhaBid(ls, p, new Date()).find(r => r[0] === 'Linha');
+    const incl = colunas(P), vpoCab = colunas({ ...P, pedagioIncluso: false });
+    const pos = COLUNAS_ABERTURA.findIndex(c => c.id === 'pedagio') + 1;
+    eq('incluso: "Pedágio R$"', incl[pos], 'Pedágio R$');
+    eq('VPO: "Pedágio VPO (fora do preço) R$" na mesma posição', vpoCab[pos], 'Pedágio VPO (fora do preço) R$');
+    eq('incluso: cabeçalho = títulos de sempre', incl, ['Linha', ...COLUNAS_ABERTURA.map(c => c.titulo), 'Adicional próprio', 'Status', 'Rota', 'Observações']);
+    eq('VPO: só o título do pedágio difere', incl.filter((t, i) => t !== vpoCab[i]), ['Pedágio R$']);
+    eq('mesmo número de colunas nos dois modos', vpoCab.length, incl.length);
 
     // Rodada salva antes da chave existir abre com pedágio incluso.
     eq('tela de rodada antiga sem o campo: pedágio incluso', completarTela({ profitMargin: '15' }, 'Carga geral').pedagioIncluso, true);

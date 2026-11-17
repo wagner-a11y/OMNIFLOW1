@@ -1111,6 +1111,13 @@ const ROTULO_ROTA: Record<LinhaBid['fonteRota'], string> = {
     qualp: 'Consultada no Qualp', cache: 'Reusada (dedup)', 'nao-consultada': 'Não consultada',
 };
 
+/**
+ * Título da coluna no Excel. Só o pedágio muda com a rodada: em VPO ele está
+ * fora do preço, e o título diz isso na mesma posição da coluna.
+ */
+export const tituloColunaExcel = (c: ColunaAbertura, p: ParametrosBid): string =>
+    c.id === 'pedagio' && p.pedagioIncluso === false ? 'Pedágio VPO (fora do preço) R$' : c.titulo;
+
 /** O que o histórico de bids acrescenta à planilha. Tudo opcional. */
 export interface OpcoesPlanilhaBid {
     /** Linhas antes dos parâmetros: nome do bid, cliente, rodada, status. */
@@ -1144,7 +1151,7 @@ export const montarPlanilhaBid = (linhas: LinhaBid[], p: ParametrosBid, dataCalc
         ['Parâmetros da rodada'],
         ...parametrosRodadaExcel(p, dataCalculo, linhas),
         [],
-        ['Linha', ...comComparacao(COLUNAS_ABERTURA.map(c => c.titulo), () => ['Preço rodada anterior R$', 'Variação %']),
+        ['Linha', ...comComparacao(COLUNAS_ABERTURA.map(c => tituloColunaExcel(c, p)), () => ['Preço rodada anterior R$', 'Variação %']),
             'Adicional próprio', 'Status', 'Rota', 'Observações'],
         ...linhas.map(l => {
             const ant = anterior?.[l.linhaExcel] ?? null;
