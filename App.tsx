@@ -8,7 +8,8 @@ import {
 import { calcularCustosOcultos } from './utils/custosOcultos';
 import { calcularPreco } from './utils/motorPreco';
 import { criarCoalescedor } from './utils/coalescer';
-import { BidLote } from './components/BidLote';
+import { BidHistorico } from './components/BidHistorico';
+import { repositorioBidSupabase } from './services/bidHistorico';
 import { CRMBoard } from './components/CRMBoard';
 import { GmailIntakeBoard } from './components/GmailIntakeBoard';
 import { ProspeccaoBoard } from './components/ProspeccaoBoard';
@@ -368,6 +369,9 @@ const App: React.FC = () => {
     const [qualpVoltou, setQualpVoltou] = useState(false);
     const emergenciaLigada = emergencia.ligada;
     const ehMaster = currentUser?.role === 'master';
+    // "Tela cheia" do Bid em Lote: esconde menu lateral e cabeçalho só nessa aba.
+    const [bidTelaCheia, setBidTelaCheia] = useState(false);
+    const telaCheiaBid = activeTab === 'bid-lote' && bidTelaCheia;
     // Frete urbano (origem == destino): mensagem de orientação, não de erro.
     // Enquanto está preenchido, distância/pedágio/piso são manuais e a cotação fecha.
     const [freteUrbano, setFreteUrbano] = useState<string | null>(null);
@@ -2827,7 +2831,7 @@ Disponibilidade: ${disponibilidade}`;
 
     return (
         <div className="min-h-screen flex flex-col md:flex-row bg-[#f8f9fa]">
-            <aside className="w-full md:w-64 bg-white border-r border-[#e5e7eb] text-[#111827] flex flex-col sticky top-0 md:h-screen z-10">
+            <aside className={`w-full md:w-64 bg-white border-r border-[#e5e7eb] text-[#111827] flex flex-col sticky top-0 md:h-screen z-10 ${telaCheiaBid ? 'hidden' : ''}`}>
                 <div className="p-6 flex items-center gap-3">
                     <div className="w-10 h-10 bg-[#f9fafb] border border-[#e5e7eb] p-1.5 rounded-lg flex items-center justify-center overflow-hidden">
                         {appLogo ? <img src={appLogo} alt="Logo" className="w-full h-full object-contain" /> : <DefaultLogo className="w-full h-full" />}
@@ -2952,8 +2956,8 @@ Disponibilidade: ${disponibilidade}`;
                 </div>
             </aside>
 
-            <main className="flex-1 overflow-y-auto pb-20 relative z-0">
-                <header className="bg-white border-b border-[#e5e7eb] px-8 py-5 sticky top-0 z-40 flex justify-between items-center">
+            <main className={`flex-1 overflow-y-auto relative z-0 ${activeTab === 'bid-lote' ? 'md:h-screen' : 'pb-20'}`}>
+                <header className={`bg-white border-b border-[#e5e7eb] px-8 py-5 sticky top-0 z-40 flex justify-between items-center ${telaCheiaBid ? 'hidden' : ''}`}>
                     <h2 className="text-base font-medium text-[#111827]">
                         {editingId ? 'Editando Registro' :
                             activeTab === 'dashboard' ? 'Visão Geral Executiva' :
@@ -2984,7 +2988,9 @@ Disponibilidade: ${disponibilidade}`;
                 {/* O funil precisa da tela inteira: seis colunas em max-w-7xl (1280px)
                     dariam ~200px cada e voltariam a pedir rolagem lateral. Só o CRM
                     escapa do limite; todas as outras abas seguem centralizadas. */}
-                <div className={`p-8 ${activeTab === 'crm' ? 'max-w-none' : 'max-w-7xl'} mx-auto space-y-8`}>
+                {/* O Bid em Lote também: a planilha de custos abertos precisa da largura
+                    toda (16px de respiro lateral) e da altura da janela. */}
+                <div className={`${activeTab === 'bid-lote' ? 'px-4 py-4' : 'p-8'} ${activeTab === 'crm' || activeTab === 'bid-lote' ? 'max-w-none' : 'max-w-7xl'} mx-auto space-y-8`}>
                     {/* FUNIL DE FATURAMENTO — religado em 28/09/2026, para substituir o controle
                         que o comercial fazia no Ramper. Ficou desativado enquanto o comercial
                         usou o Ramper; o componente e os dados sempre estiveram aqui.
@@ -3010,11 +3016,15 @@ Disponibilidade: ${disponibilidade}`;
                     {activeTab === 'gmail-intake' && <GmailIntakeBoard />}
 
                     {activeTab === 'bid-lote' && (
-                        <BidLote
+                        <BidHistorico
+                            repositorio={repositorioBidSupabase}
                             fedTaxes={fedTaxes}
                             vehicleConfigs={vehicleConfigs}
                             tiposDeCarga={[...ANTT_CARGO_TYPES]}
+                            ehMaster={ehMaster}
                             onFeedback={showFeedback}
+                            telaCheia={bidTelaCheia}
+                            onTelaCheia={setBidTelaCheia}
                         />
                     )}
 
